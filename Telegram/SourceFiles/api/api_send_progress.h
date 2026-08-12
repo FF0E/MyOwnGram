@@ -87,6 +87,7 @@ private:
 		}
 	};
 
+	[[nodiscard]] bool suppressTyping(const Key &key, bool doing) const;
 	bool updated(const Key &key, bool doing);
 
 	void send(const Key &key, int progress);

@@ -14,9 +14,12 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/unixtime.h"
 #include "data/data_peer_values.h"
 #include "apiwrap.h"
+#include "myowngram/activity_reporting_settings.h"
 
 namespace Api {
 namespace {
+
+namespace ActivityReporting = ::MyOwnGram::ActivityReporting;
 
 constexpr auto kCancelTypingActionTimeout = crl::time(5000);
 constexpr auto kSendMySpeakingInterval = 3 * crl::time(1000);
@@ -74,12 +77,23 @@ void SendProgressManager::update(
 
 	const auto doing = (progress >= 0);
 	const auto key = Key{ history, topMsgId, type };
+	if (suppressTyping(key, doing)) {
+		return;
+	}
 	if (updated(key, doing)) {
 		cancel(history, topMsgId, type);
 		if (doing) {
 			send(key, progress);
 		}
 	}
+}
+
+bool SendProgressManager::suppressTyping(
+		const Key &key,
+		bool doing) const {
+	return doing
+		&& key.type == SendProgressType::Typing
+		&& !ActivityReporting::SendTypingStatus();
 }
 
 bool SendProgressManager::updated(const Key &key, bool doing) {

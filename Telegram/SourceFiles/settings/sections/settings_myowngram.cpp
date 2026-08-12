@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/application.h"
 #include "core/core_settings.h"
 #include "lang/lang_keys.h"
+#include "myowngram/activity_reporting_settings.h"
 #include "settings/sections/settings_main.h"
 #include "settings/settings_builder.h"
 #include "settings/settings_common_session.h"
@@ -20,6 +21,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 namespace Settings {
 namespace {
+
+namespace ActivityReporting = ::MyOwnGram::ActivityReporting;
 
 class MyOwnGram final : public Section<MyOwnGram> {
 public:
@@ -34,7 +37,7 @@ private:
 
 };
 
-void BuildMyOwnGramSection(SectionBuilder &builder) {
+void BuildGeneralSection(SectionBuilder &builder) {
 	const auto settings = &Core::App().settings();
 
 	builder.addSkip();
@@ -62,6 +65,38 @@ void BuildMyOwnGramSection(SectionBuilder &builder) {
 	builder.addSkip();
 	builder.addDividerText(
 		tr::lng_myowngram_keep_preferences_on_last_logout_about());
+}
+
+void BuildActivityReportingSection(SectionBuilder &builder) {
+	builder.addSkip();
+	builder.addSubsectionTitle({
+		.id = u"myowngram/activity_reporting"_q,
+		.title = tr::lng_myowngram_activity_reporting(),
+		.keywords = { u"activity"_q, u"reporting"_q, u"privacy"_q },
+	});
+
+	const auto sendTypingStatus = builder.addCheckbox({
+		.id = u"myowngram/activity_reporting/send_typing_status"_q,
+		.title = tr::lng_myowngram_send_typing_status(),
+		.checked = ActivityReporting::SendTypingStatus(),
+		.keywords = { u"typing"_q, u"status"_q, u"activity"_q },
+	});
+	if (sendTypingStatus) {
+		sendTypingStatus->checkedChanges(
+		) | rpl::filter([](bool checked) {
+			return checked != ActivityReporting::SendTypingStatus();
+		}) | rpl::on_next([](bool checked) {
+			ActivityReporting::SetSendTypingStatus(checked);
+		}, sendTypingStatus->lifetime());
+	}
+
+	builder.addSkip();
+	builder.addDividerText(tr::lng_myowngram_send_typing_status_about());
+}
+
+void BuildMyOwnGramSection(SectionBuilder &builder) {
+	BuildGeneralSection(builder);
+	BuildActivityReportingSection(builder);
 }
 
 const auto kMeta = BuildHelper({

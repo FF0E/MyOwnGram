@@ -1573,6 +1573,8 @@ PRIVATE
     mtproto/special_config_request.cpp
     mtproto/special_config_request.h
     mtproto/type_utils.h
+    myowngram/activity_reporting_settings.cpp
+    myowngram/activity_reporting_settings.h
     overview/overview_checkbox.cpp
     overview/overview_checkbox.h
     overview/overview_layout.cpp
