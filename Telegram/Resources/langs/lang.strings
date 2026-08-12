@@ -898,6 +898,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_settings_top_peers_title" = "Frequent contacts";
 "lng_settings_top_peers_suggest" = "Suggest frequent contacts";
 "lng_settings_top_peers_about" = "Display people you message frequently at the top of the search section for quick access.";
+"lng_myowngram_settings" = "MyOwnGram Settings";
+"lng_myowngram_settings_about" = "Settings on this page apply to every account on this device.";
 "lng_settings_sensitive_title" = "Sensitive content";
 "lng_settings_sensitive_disable_filtering" = "Show 18+ Content";
 "lng_settings_sensitive_about" = "Do not hide media that contains content suitable only for adults.";

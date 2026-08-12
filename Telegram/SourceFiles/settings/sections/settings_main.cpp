@@ -54,6 +54,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/sections/settings_credits.h"
 #include "settings/sections/settings_folders.h"
 #include "settings/sections/settings_information.h"
+#include "settings/sections/settings_myowngram.h"
 #include "settings/sections/settings_notifications.h"
 #include "settings/settings_power_saving.h"
 #include "settings/sections/settings_premium.h"
@@ -362,6 +363,16 @@ void BuildSectionButtons(SectionBuilder &builder) {
 	const auto session = builder.session();
 	const auto controller = builder.controller();
 	const auto showOther = builder.showOther();
+
+	builder.addSectionButton({
+		.title = tr::lng_myowngram_settings(),
+		.targetSection = MyOwnGramId(),
+		.icon = { &st::menuIconSettings },
+		.keywords = { u"myowngram"_q, u"custom"_q },
+	});
+	builder.addSkip();
+	builder.addDivider();
+	builder.addSkip();
 
 	if (!session->supportMode()) {
 		builder.addSectionButton({
