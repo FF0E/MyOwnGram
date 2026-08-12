@@ -900,6 +900,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_settings_top_peers_about" = "Display people you message frequently at the top of the search section for quick access.";
 "lng_myowngram_settings" = "MyOwnGram Settings";
 "lng_myowngram_settings_about" = "Settings on this page apply to every account on this device.";
+"lng_myowngram_general" = "General";
+"lng_myowngram_keep_preferences_on_last_logout" = "Keep app preferences after final logout";
+"lng_myowngram_keep_preferences_on_last_logout_about" = "Keep device-wide Telegram and MyOwnGram preferences, including your theme and wallpaper, when the last account is removed. Account data and the local passcode are still removed.";
 "lng_settings_sensitive_title" = "Sensitive content";
 "lng_settings_sensitive_disable_filtering" = "Show 18+ Content";
 "lng_settings_sensitive_about" = "Do not hide media that contains content suitable only for adults.";

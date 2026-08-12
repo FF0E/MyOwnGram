@@ -1044,6 +1044,9 @@ public:
 		_mediaGridZoomStep = value;
 	}
 
+	[[nodiscard]] bool keepPreferencesOnLastLogout();
+	void setKeepPreferencesOnLastLogout(bool value);
+
 	template <typename Type, typename Other>
 	void writePref(std::string_view key, Other &&value) {
 		writePrefImpl<Type>(key, std::forward<Other>(value));

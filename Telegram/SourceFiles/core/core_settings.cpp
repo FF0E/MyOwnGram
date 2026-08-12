@@ -26,6 +26,8 @@ namespace {
 constexpr auto kInitialVideoQuality = 480; // Start with SD.
 constexpr auto kMinIvZoom = 25;
 constexpr auto kMaxIvZoom = 400;
+constexpr auto kKeepPreferencesOnLastLogoutKey
+	= "myowngram.keep_preferences_on_last_logout";
 
 [[nodiscard]] int DefaultIvZoom() {
 	const auto exact = cScale() * 100 / cScreenScale();
@@ -1305,6 +1307,14 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 	_notificationsVolume = notificationsVolume;
 }
 
+bool Settings::keepPreferencesOnLastLogout() {
+	return readPref<bool>(kKeepPreferencesOnLastLogoutKey, false);
+}
+
+void Settings::setKeepPreferencesOnLastLogout(bool value) {
+	writePref<bool>(kKeepPreferencesOnLastLogoutKey, value);
+}
+
 void Settings::clearPref(std::string_view key) {
 	const auto i = _prefs.find(QByteArray(key.data(), key.size()));
 	if (i == end(_prefs)) {
@@ -1656,6 +1666,11 @@ void Settings::setLegacyEmojiVariants(QMap<QString, int> data) {
 }
 
 void Settings::resetOnLastLogout() {
+	if (keepPreferencesOnLastLogout()) {
+		_accountsOrder.clear();
+		return;
+	}
+
 	_adaptiveForWide = true;
 	_moderateModeEnabled = false;
 

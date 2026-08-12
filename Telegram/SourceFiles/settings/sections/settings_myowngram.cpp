@@ -7,12 +7,15 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "settings/sections/settings_myowngram.h"
 
+#include "core/application.h"
+#include "core/core_settings.h"
 #include "lang/lang_keys.h"
 #include "settings/sections/settings_main.h"
 #include "settings/settings_builder.h"
 #include "settings/settings_common_session.h"
-#include "ui/vertical_list.h"
+#include "ui/widgets/checkbox.h"
 #include "ui/wrap/vertical_layout.h"
+#include "ui/vertical_list.h"
 #include "styles/style_menu_icons.h"
 
 namespace Settings {
@@ -32,8 +35,33 @@ private:
 };
 
 void BuildMyOwnGramSection(SectionBuilder &builder) {
+	const auto settings = &Core::App().settings();
+
 	builder.addSkip();
-	builder.addDividerText(tr::lng_myowngram_settings_about());
+	builder.addSubsectionTitle({
+		.id = u"myowngram/general"_q,
+		.title = tr::lng_myowngram_general(),
+		.keywords = { u"general"_q, u"logout"_q, u"preferences"_q },
+	});
+
+	const auto keepPreferences = builder.addCheckbox({
+		.id = u"myowngram/keep_preferences_on_last_logout"_q,
+		.title = tr::lng_myowngram_keep_preferences_on_last_logout(),
+		.checked = settings->keepPreferencesOnLastLogout(),
+		.keywords = { u"logout"_q, u"preferences"_q, u"settings"_q },
+	});
+	if (keepPreferences) {
+		keepPreferences->checkedChanges(
+		) | rpl::filter([=](bool checked) {
+			return checked != settings->keepPreferencesOnLastLogout();
+		}) | rpl::on_next([=](bool checked) {
+			settings->setKeepPreferencesOnLastLogout(checked);
+		}, keepPreferences->lifetime());
+	}
+
+	builder.addSkip();
+	builder.addDividerText(
+		tr::lng_myowngram_keep_preferences_on_last_logout_about());
 }
 
 const auto kMeta = BuildHelper({

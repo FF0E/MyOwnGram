@@ -794,7 +794,9 @@ void reset() {
 		_localLoader->stop();
 	}
 
-	Window::Theme::Background()->reset();
+	if (!Core::App().settings().keepPreferencesOnLastLogout()) {
+		Window::Theme::Background()->reset();
+	}
 	_oldSettingsVersion = 0;
 	Core::App().settings().resetOnLastLogout();
 	writeSettings();
