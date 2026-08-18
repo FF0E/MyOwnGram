@@ -30,6 +30,9 @@ Setting SendMusicListenReportsState = {
 Setting SendPremiumPromoAnalyticsState = {
 	.key = "myowngram.activity_reporting.send_premium_promo_analytics",
 };
+Setting UploadCallDiagnosticsState = {
+	.key = "myowngram.activity_reporting.upload_call_diagnostics",
+};
 
 bool Read(const Setting &setting) {
 	return Core::App().settings().readPref<bool>(setting.key, true);
@@ -91,6 +94,14 @@ bool SendPremiumPromoAnalytics() {
 
 void SetSendPremiumPromoAnalytics(bool enabled) {
 	Write(SendPremiumPromoAnalyticsState, enabled);
+}
+
+bool UploadCallDiagnostics() {
+	return Read(UploadCallDiagnosticsState);
+}
+
+void SetUploadCallDiagnostics(bool enabled) {
+	Write(UploadCallDiagnosticsState, enabled);
 }
 
 } // namespace MyOwnGram::ActivityReporting

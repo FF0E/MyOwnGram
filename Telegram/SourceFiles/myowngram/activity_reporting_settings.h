@@ -24,4 +24,7 @@ void SetSendMusicListenReports(bool enabled);
 [[nodiscard]] bool SendPremiumPromoAnalytics();
 void SetSendPremiumPromoAnalytics(bool enabled);
 
+[[nodiscard]] bool UploadCallDiagnostics();
+void SetUploadCallDiagnostics(bool enabled);
+
 } // namespace MyOwnGram::ActivityReporting

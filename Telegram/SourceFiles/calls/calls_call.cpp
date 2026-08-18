@@ -26,6 +26,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "media/audio/media_audio_track.h"
 #include "mtproto/mtproto_config.h"
 #include "mtproto/mtproto_dh_utils.h"
+#include "myowngram/activity_reporting_settings.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/boxes/rate_call_box.h"
 #include "webrtc/webrtc_create_adm.h"
@@ -793,7 +794,8 @@ bool Call::handleUpdate(const MTPPhoneCall &call) {
 		if (data.vid().v != _id) {
 			return false;
 		}
-		if (data.is_need_debug()) {
+		if (data.is_need_debug()
+			&& MyOwnGram::ActivityReporting::UploadCallDiagnostics()) {
 			const auto debugLog = _instance
 				? _instance->getDebugInfo()
 				: std::string();

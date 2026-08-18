@@ -133,6 +133,14 @@ void BuildActivityReportingSection(SectionBuilder &builder) {
 		ActivityReporting::SendPremiumPromoAnalytics,
 		ActivityReporting::SetSendPremiumPromoAnalytics,
 		{ u"premium"_q, u"analytics"_q, u"activity"_q, u"privacy"_q });
+	AddActivityReportingCheckbox(
+		builder,
+		u"myowngram/activity_reporting/upload_call_diagnostics"_q,
+		tr::lng_myowngram_upload_call_diagnostics(),
+		tr::lng_myowngram_upload_call_diagnostics_about(),
+		ActivityReporting::UploadCallDiagnostics,
+		ActivityReporting::SetUploadCallDiagnostics,
+		{ u"call"_q, u"diagnostics"_q, u"activity"_q, u"privacy"_q });
 }
 
 void BuildMyOwnGramSection(SectionBuilder &builder) {
