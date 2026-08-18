@@ -1750,7 +1750,13 @@ void Settings::resetOnLastLogout() {
 	_storiesClickTooltipHidden = false;
 	_ttlVoiceClickTooltipHidden = false;
 	const auto srDisabled = readPref<bool>(kScreenReaderModeDisabledKey);
-	_prefs.clear();
+	for (auto i = begin(_prefs); i != end(_prefs);) {
+		if (i->first.startsWith("myowngram.activity_reporting.")) {
+			++i;
+		} else {
+			i = _prefs.erase(i);
+		}
+	}
 	if (srDisabled) {
 		writePref<bool>(kScreenReaderModeDisabledKey, true);
 	}
