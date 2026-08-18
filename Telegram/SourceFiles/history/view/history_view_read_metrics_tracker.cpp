@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_peer.h"
 #include "history/history_item.h"
 #include "main/main_session.h"
+#include "myowngram/activity_reporting_settings.h"
 
 namespace HistoryView {
 namespace {
@@ -27,6 +28,7 @@ constexpr auto kMinReportThreshold = crl::time(300);
 
 ReadMetricsTracker::ReadMetricsTracker(not_null<PeerData*> peer)
 : _peer(peer)
+, _enabled(MyOwnGram::ActivityReporting::SendReadMetrics())
 , _timer([=] { onTimeout(); }) {
 	Core::App().appDeactivatedValue(
 	) | rpl::on_next([=](bool deactivated) {
@@ -37,6 +39,13 @@ ReadMetricsTracker::ReadMetricsTracker(not_null<PeerData*> peer)
 		_appActive = appActive;
 		refreshPaused(crl::now());
 	}, _lifetime);
+	MyOwnGram::ActivityReporting::SendReadMetricsChanges(
+	) | rpl::on_next([=](bool enabled) {
+		_enabled = enabled;
+		if (!enabled) {
+			discard();
+		}
+	}, _lifetime);
 }
 
 ReadMetricsTracker::~ReadMetricsTracker() {
@@ -44,6 +53,10 @@ ReadMetricsTracker::~ReadMetricsTracker() {
 }
 
 void ReadMetricsTracker::startBatch(int visibleTop, int visibleBottom) {
+	if (!_enabled) {
+		discard();
+		return;
+	}
 	_batchNow = crl::now();
 	sync(_batchNow);
 	_batchViewportHeight = visibleBottom - visibleTop;
@@ -56,7 +69,7 @@ void ReadMetricsTracker::push(
 		not_null<HistoryItem*> item,
 		int itemTop,
 		int itemHeight) {
-	if (!ShouldTrack(item)) {
+	if (!_enabled || !ShouldTrack(item)) {
 		return;
 	}
 	const auto msgId = item->id;
@@ -102,6 +115,10 @@ void ReadMetricsTracker::push(
 }
 
 void ReadMetricsTracker::endBatch() {
+	if (!_enabled) {
+		discard();
+		return;
+	}
 	for (auto it = _tracked.begin(); it != _tracked.end();) {
 		if (_batchVisible.contains(it->first)) {
 			++it;
@@ -124,7 +141,7 @@ void ReadMetricsTracker::endBatch() {
 }
 
 void ReadMetricsTracker::registerActivity() {
-	if (!_appActive || !_screenActive) {
+	if (!_enabled || !_appActive || !_screenActive) {
 		return;
 	}
 	const auto now = crl::now();
@@ -152,7 +169,23 @@ void ReadMetricsTracker::resumeTracking() {
 	setScreenActive(true);
 }
 
+void ReadMetricsTracker::discard() {
+	_tracked.clear();
+	_currentlyVisible.clear();
+	_batchNow = 0;
+	_batchViewportHeight = 0;
+	_batchVisibleTop = 0;
+	_batchVisibleBottom = 0;
+	_batchVisible.clear();
+	_lastActivity = 0;
+	_timer.cancel();
+}
+
 void ReadMetricsTracker::onTimeout() {
+	if (!_enabled) {
+		discard();
+		return;
+	}
 	sync(crl::now());
 }
 
@@ -314,7 +347,9 @@ void ReadMetricsTracker::addElapsed(
 void ReadMetricsTracker::finalize(
 		MsgId msgId,
 		const TrackedItem &tracked) {
-	if (tracked.viewId == 0 || tracked.totalInView < kMinReportThreshold) {
+	if (!_enabled
+		|| tracked.viewId == 0
+		|| tracked.totalInView < kMinReportThreshold) {
 		return;
 	}
 	const auto heightRatio = (tracked.maxViewportHeight > 0)
@@ -338,6 +373,10 @@ void ReadMetricsTracker::finalize(
 }
 
 void ReadMetricsTracker::finalizeAll() {
+	if (!_enabled) {
+		discard();
+		return;
+	}
 	sync(crl::now());
 	for (const auto &[msgId, tracked] : _tracked) {
 		finalize(msgId, tracked);

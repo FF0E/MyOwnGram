@@ -21,6 +21,9 @@ struct Setting {
 Setting SendTypingStatusState = {
 	.key = "myowngram.activity_reporting.send_typing_status",
 };
+Setting SendReadMetricsState = {
+	.key = "myowngram.activity_reporting.send_read_metrics",
+};
 
 bool Read(const Setting &setting) {
 	return Core::App().settings().readPref<bool>(setting.key, true);
@@ -50,6 +53,18 @@ rpl::producer<bool> SendTypingStatusChanges() {
 
 void SetSendTypingStatus(bool enabled) {
 	Write(SendTypingStatusState, enabled);
+}
+
+bool SendReadMetrics() {
+	return Read(SendReadMetricsState);
+}
+
+rpl::producer<bool> SendReadMetricsChanges() {
+	return Changes(SendReadMetricsState);
+}
+
+void SetSendReadMetrics(bool enabled) {
+	Write(SendReadMetricsState, enabled);
 }
 
 } // namespace MyOwnGram::ActivityReporting

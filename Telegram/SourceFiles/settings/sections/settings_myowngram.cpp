@@ -37,6 +37,32 @@ private:
 
 };
 
+void AddActivityReportingCheckbox(
+		SectionBuilder &builder,
+		QString id,
+		rpl::producer<QString> title,
+		rpl::producer<QString> about,
+		bool (*getter)(),
+		void (*setter)(bool),
+		QStringList keywords) {
+	const auto checkbox = builder.addCheckbox({
+		.id = std::move(id),
+		.title = std::move(title),
+		.checked = getter(),
+		.keywords = std::move(keywords),
+	});
+	if (checkbox) {
+		checkbox->checkedChanges(
+		) | rpl::filter([=](bool checked) {
+			return checked != getter();
+		}) | rpl::on_next([=](bool checked) {
+			setter(checked);
+		}, checkbox->lifetime());
+	}
+	builder.addSkip();
+	builder.addDividerText(std::move(about));
+}
+
 void BuildGeneralSection(SectionBuilder &builder) {
 	const auto settings = &Core::App().settings();
 
@@ -75,23 +101,22 @@ void BuildActivityReportingSection(SectionBuilder &builder) {
 		.keywords = { u"activity"_q, u"reporting"_q, u"privacy"_q },
 	});
 
-	const auto sendTypingStatus = builder.addCheckbox({
-		.id = u"myowngram/activity_reporting/send_typing_status"_q,
-		.title = tr::lng_myowngram_send_typing_status(),
-		.checked = ActivityReporting::SendTypingStatus(),
-		.keywords = { u"typing"_q, u"status"_q, u"activity"_q },
-	});
-	if (sendTypingStatus) {
-		sendTypingStatus->checkedChanges(
-		) | rpl::filter([](bool checked) {
-			return checked != ActivityReporting::SendTypingStatus();
-		}) | rpl::on_next([](bool checked) {
-			ActivityReporting::SetSendTypingStatus(checked);
-		}, sendTypingStatus->lifetime());
-	}
-
-	builder.addSkip();
-	builder.addDividerText(tr::lng_myowngram_send_typing_status_about());
+	AddActivityReportingCheckbox(
+		builder,
+		u"myowngram/activity_reporting/send_typing_status"_q,
+		tr::lng_myowngram_send_typing_status(),
+		tr::lng_myowngram_send_typing_status_about(),
+		ActivityReporting::SendTypingStatus,
+		ActivityReporting::SetSendTypingStatus,
+		{ u"typing"_q, u"status"_q, u"activity"_q });
+	AddActivityReportingCheckbox(
+		builder,
+		u"myowngram/activity_reporting/send_read_metrics"_q,
+		tr::lng_myowngram_send_read_metrics(),
+		tr::lng_myowngram_send_read_metrics_about(),
+		ActivityReporting::SendReadMetrics,
+		ActivityReporting::SetSendReadMetrics,
+		{ u"view"_q, u"metrics"_q, u"activity"_q, u"privacy"_q });
 }
 
 void BuildMyOwnGramSection(SectionBuilder &builder) {

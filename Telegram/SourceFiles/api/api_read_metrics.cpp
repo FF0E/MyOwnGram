@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "apiwrap.h"
 #include "data/data_peer.h"
+#include "myowngram/activity_reporting_settings.h"
 
 namespace Api {
 namespace {
@@ -20,18 +21,40 @@ constexpr auto kSendTimeout = crl::time(5000);
 ReadMetrics::ReadMetrics(not_null<ApiWrap*> api)
 : _api(&api->instance())
 , _timer([=] { send(); }) {
+	MyOwnGram::ActivityReporting::SendReadMetricsChanges(
+	) | rpl::filter([](bool enabled) {
+		return !enabled;
+	}) | rpl::on_next([=] {
+		clear();
+	}, _lifetime);
 }
 
 void ReadMetrics::add(
 		not_null<PeerData*> peer,
 		FinalizedReadMetric metric) {
+	if (!MyOwnGram::ActivityReporting::SendReadMetrics()) {
+		return;
+	}
 	_pending[peer].push_back(metric);
 	if (!_timer.isActive()) {
 		_timer.callOnce(kSendTimeout);
 	}
 }
 
+void ReadMetrics::clear() {
+	_timer.cancel();
+	_pending.clear();
+	const auto requests = base::take(_requests);
+	for (const auto &request : requests) {
+		_api.request(request.second).cancel();
+	}
+}
+
 void ReadMetrics::send() {
+	if (!MyOwnGram::ActivityReporting::SendReadMetrics()) {
+		clear();
+		return;
+	}
 	for (auto i = _pending.begin(); i != _pending.end();) {
 		if (_requests.contains(i->first)) {
 			++i;
