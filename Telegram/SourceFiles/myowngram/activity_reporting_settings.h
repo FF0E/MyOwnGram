@@ -17,4 +17,8 @@ void SetSendTypingStatus(bool enabled);
 [[nodiscard]] rpl::producer<bool> SendReadMetricsChanges();
 void SetSendReadMetrics(bool enabled);
 
+[[nodiscard]] bool SendMusicListenReports();
+[[nodiscard]] rpl::producer<bool> SendMusicListenReportsChanges();
+void SetSendMusicListenReports(bool enabled);
+
 } // namespace MyOwnGram::ActivityReporting

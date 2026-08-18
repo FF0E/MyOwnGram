@@ -24,6 +24,9 @@ Setting SendTypingStatusState = {
 Setting SendReadMetricsState = {
 	.key = "myowngram.activity_reporting.send_read_metrics",
 };
+Setting SendMusicListenReportsState = {
+	.key = "myowngram.activity_reporting.send_music_listen_reports",
+};
 
 bool Read(const Setting &setting) {
 	return Core::App().settings().readPref<bool>(setting.key, true);
@@ -65,6 +68,18 @@ rpl::producer<bool> SendReadMetricsChanges() {
 
 void SetSendReadMetrics(bool enabled) {
 	Write(SendReadMetricsState, enabled);
+}
+
+bool SendMusicListenReports() {
+	return Read(SendMusicListenReportsState);
+}
+
+rpl::producer<bool> SendMusicListenReportsChanges() {
+	return Changes(SendMusicListenReportsState);
+}
+
+void SetSendMusicListenReports(bool enabled) {
+	Write(SendMusicListenReportsState, enabled);
 }
 
 } // namespace MyOwnGram::ActivityReporting

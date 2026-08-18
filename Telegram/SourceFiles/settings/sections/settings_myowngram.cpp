@@ -117,6 +117,14 @@ void BuildActivityReportingSection(SectionBuilder &builder) {
 		ActivityReporting::SendReadMetrics,
 		ActivityReporting::SetSendReadMetrics,
 		{ u"view"_q, u"metrics"_q, u"activity"_q, u"privacy"_q });
+	AddActivityReportingCheckbox(
+		builder,
+		u"myowngram/activity_reporting/send_music_listen_reports"_q,
+		tr::lng_myowngram_send_music_listen_reports(),
+		tr::lng_myowngram_send_music_listen_reports_about(),
+		ActivityReporting::SendMusicListenReports,
+		ActivityReporting::SetSendMusicListenReports,
+		{ u"music"_q, u"listening"_q, u"activity"_q, u"privacy"_q });
 }
 
 void BuildMyOwnGramSection(SectionBuilder &builder) {

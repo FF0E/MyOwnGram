@@ -25,6 +25,7 @@ public:
 	void finalize();
 
 private:
+	void discard();
 	void report();
 	void pauseTimedOut();
 
@@ -34,6 +35,7 @@ private:
 	crl::time _playStartedAt = 0;
 	bool _playing = false;
 	base::Timer _pauseTimer;
+	rpl::lifetime _lifetime;
 
 };
 

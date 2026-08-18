@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_file_origin.h"
 #include "main/main_session.h"
 #include "media/audio/media_audio.h"
+#include "myowngram/activity_reporting_settings.h"
 
 namespace Media::Player {
 namespace {
@@ -22,9 +23,19 @@ constexpr auto kReportDurationSecondsMin = TimeId(3);
 
 MusicListenTracker::MusicListenTracker()
 : _pauseTimer([=] { pauseTimedOut(); }) {
+	MyOwnGram::ActivityReporting::SendMusicListenReportsChanges(
+	) | rpl::filter([](bool enabled) {
+		return !enabled;
+	}) | rpl::on_next([=] {
+		discard();
+	}, _lifetime);
 }
 
 void MusicListenTracker::update(const TrackState &state) {
+	if (!MyOwnGram::ActivityReporting::SendMusicListenReports()) {
+		discard();
+		return;
+	}
 	const auto document = state.id.audio();
 	if (!document || !document->isSong()) {
 		finalize();
@@ -57,6 +68,10 @@ void MusicListenTracker::update(const TrackState &state) {
 }
 
 void MusicListenTracker::finalize() {
+	if (!MyOwnGram::ActivityReporting::SendMusicListenReports()) {
+		discard();
+		return;
+	}
 	if (base::take(_playing)) {
 		_listenedMs += crl::now() - _playStartedAt;
 	}
@@ -64,7 +79,20 @@ void MusicListenTracker::finalize() {
 	report();
 }
 
+void MusicListenTracker::discard() {
+	_document = nullptr;
+	_contextId = {};
+	_listenedMs = 0;
+	_playStartedAt = 0;
+	_playing = false;
+	_pauseTimer.cancel();
+}
+
 void MusicListenTracker::report() {
+	if (!MyOwnGram::ActivityReporting::SendMusicListenReports()) {
+		discard();
+		return;
+	}
 	const auto document = base::take(_document);
 	const auto contextId = base::take(_contextId);
 	const auto duration = static_cast<int>(base::take(_listenedMs) / 1000);
@@ -75,6 +103,9 @@ void MusicListenTracker::report() {
 	const auto origin = Data::FileOrigin(
 		Data::FileOriginMessage(contextId));
 	const auto send = [=](auto resend) -> void {
+		if (!MyOwnGram::ActivityReporting::SendMusicListenReports()) {
+			return;
+		}
 		const auto usedFileReference = document->fileReference();
 		document->session().api().request(MTPmessages_ReportMusicListen(
 			document->mtpInput(),
