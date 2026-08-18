@@ -125,6 +125,14 @@ void BuildActivityReportingSection(SectionBuilder &builder) {
 		ActivityReporting::SendMusicListenReports,
 		ActivityReporting::SetSendMusicListenReports,
 		{ u"music"_q, u"listening"_q, u"activity"_q, u"privacy"_q });
+	AddActivityReportingCheckbox(
+		builder,
+		u"myowngram/activity_reporting/send_premium_promo_analytics"_q,
+		tr::lng_myowngram_send_premium_promo_analytics(),
+		tr::lng_myowngram_send_premium_promo_analytics_about(),
+		ActivityReporting::SendPremiumPromoAnalytics,
+		ActivityReporting::SetSendPremiumPromoAnalytics,
+		{ u"premium"_q, u"analytics"_q, u"activity"_q, u"privacy"_q });
 }
 
 void BuildMyOwnGramSection(SectionBuilder &builder) {

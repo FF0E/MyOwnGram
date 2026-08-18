@@ -27,6 +27,9 @@ Setting SendReadMetricsState = {
 Setting SendMusicListenReportsState = {
 	.key = "myowngram.activity_reporting.send_music_listen_reports",
 };
+Setting SendPremiumPromoAnalyticsState = {
+	.key = "myowngram.activity_reporting.send_premium_promo_analytics",
+};
 
 bool Read(const Setting &setting) {
 	return Core::App().settings().readPref<bool>(setting.key, true);
@@ -80,6 +83,14 @@ rpl::producer<bool> SendMusicListenReportsChanges() {
 
 void SetSendMusicListenReports(bool enabled) {
 	Write(SendMusicListenReportsState, enabled);
+}
+
+bool SendPremiumPromoAnalytics() {
+	return Read(SendPremiumPromoAnalyticsState);
+}
+
+void SetSendPremiumPromoAnalytics(bool enabled) {
+	Write(SendPremiumPromoAnalyticsState, enabled);
 }
 
 } // namespace MyOwnGram::ActivityReporting

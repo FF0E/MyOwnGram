@@ -21,4 +21,7 @@ void SetSendReadMetrics(bool enabled);
 [[nodiscard]] rpl::producer<bool> SendMusicListenReportsChanges();
 void SetSendMusicListenReports(bool enabled);
 
+[[nodiscard]] bool SendPremiumPromoAnalytics();
+void SetSendPremiumPromoAnalytics(bool enabled);
+
 } // namespace MyOwnGram::ActivityReporting

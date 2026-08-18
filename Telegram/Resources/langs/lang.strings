@@ -8631,5 +8631,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_send_read_metrics_about" = "Send Telegram detailed channel post metrics, including time in view, active viewing time, and visible proportions. This setting applies to every account on this device.";
 "lng_myowngram_send_music_listen_reports" = "Send music listening duration";
 "lng_myowngram_send_music_listen_reports_about" = "Send Telegram the number of seconds you listen to songs in the app. This setting applies to every account on this device.";
+"lng_myowngram_send_premium_promo_analytics" = "Send Premium promotion analytics";
+"lng_myowngram_send_premium_promo_analytics_about" = "Send Telegram events when you view or accept an offer on the Premium promotion screen. This setting applies to every account on this device.";
 
 // Keys finished

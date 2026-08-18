@@ -29,6 +29,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "main/main_app_config.h"
 #include "main/main_session.h"
+#include "myowngram/activity_reporting_settings.h"
 #include "settings/sections/settings_main.h"
 #include "settings/settings_builder.h"
 #include "settings/settings_common_session.h"
@@ -499,6 +500,9 @@ void SendAppLog(
 		not_null<::Main::Session*> session,
 		const QString &type,
 		const MTPJSONValue &data) {
+	if (!MyOwnGram::ActivityReporting::SendPremiumPromoAnalytics()) {
+		return;
+	}
 	const auto now = double(base::unixtime::now())
 		+ (QTime::currentTime().msec() / 1000.);
 	session->api().request(MTPhelp_SaveAppLog(
