@@ -87,6 +87,7 @@ private:
 		}
 	};
 
+	void clearTyping();
 	[[nodiscard]] bool suppressTyping(const Key &key, bool doing) const;
 	bool updated(const Key &key, bool doing);
 
@@ -100,6 +101,7 @@ private:
 	base::flat_map<Key, crl::time> _updated;
 	base::Timer _stopTypingTimer;
 	History *_stopTypingHistory = nullptr;
+	rpl::lifetime _lifetime;
 
 };
 

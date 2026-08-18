@@ -13,17 +13,43 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 namespace MyOwnGram::ActivityReporting {
 namespace {
 
-constexpr auto kSendTypingStatusKey
-	= "myowngram.activity_reporting.send_typing_status";
+struct Setting {
+	std::string_view key;
+	rpl::event_stream<bool> changes;
+};
+
+Setting SendTypingStatusState = {
+	.key = "myowngram.activity_reporting.send_typing_status",
+};
+
+bool Read(const Setting &setting) {
+	return Core::App().settings().readPref<bool>(setting.key, true);
+}
+
+rpl::producer<bool> Changes(Setting &setting) {
+	return setting.changes.events();
+}
+
+void Write(Setting &setting, bool enabled) {
+	if (Read(setting) == enabled) {
+		return;
+	}
+	Core::App().settings().writePref<bool>(setting.key, enabled);
+	setting.changes.fire_copy(enabled);
+}
 
 } // namespace
 
 bool SendTypingStatus() {
-	return Core::App().settings().readPref<bool>(kSendTypingStatusKey, true);
+	return Read(SendTypingStatusState);
+}
+
+rpl::producer<bool> SendTypingStatusChanges() {
+	return Changes(SendTypingStatusState);
 }
 
 void SetSendTypingStatus(bool enabled) {
-	Core::App().settings().writePref<bool>(kSendTypingStatusKey, enabled);
+	Write(SendTypingStatusState, enabled);
 }
 
 } // namespace MyOwnGram::ActivityReporting

@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 namespace MyOwnGram::ActivityReporting {
 
 [[nodiscard]] bool SendTypingStatus();
+[[nodiscard]] rpl::producer<bool> SendTypingStatusChanges();
 void SetSendTypingStatus(bool enabled);
 
 } // namespace MyOwnGram::ActivityReporting
