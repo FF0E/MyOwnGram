@@ -33,6 +33,9 @@ Setting SendPremiumPromoAnalyticsState = {
 Setting UploadCallDiagnosticsState = {
 	.key = "myowngram.activity_reporting.upload_call_diagnostics",
 };
+Setting SendGatewayDeliveryReportsState = {
+	.key = "myowngram.activity_reporting.send_gateway_delivery_reports",
+};
 
 bool Read(const Setting &setting) {
 	return Core::App().settings().readPref<bool>(setting.key, true);
@@ -102,6 +105,18 @@ bool UploadCallDiagnostics() {
 
 void SetUploadCallDiagnostics(bool enabled) {
 	Write(UploadCallDiagnosticsState, enabled);
+}
+
+bool SendGatewayDeliveryReports() {
+	return Read(SendGatewayDeliveryReportsState);
+}
+
+rpl::producer<bool> SendGatewayDeliveryReportsChanges() {
+	return Changes(SendGatewayDeliveryReportsState);
+}
+
+void SetSendGatewayDeliveryReports(bool enabled) {
+	Write(SendGatewayDeliveryReportsState, enabled);
 }
 
 } // namespace MyOwnGram::ActivityReporting

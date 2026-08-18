@@ -24,6 +24,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/unixtime.h"
 #include "base/random.h"
 #include "main/main_session.h"
+#include "myowngram/activity_reporting_settings.h"
 #include "window/notifications_manager.h"
 #include "history/history.h"
 #include "history/history_item.h"
@@ -133,6 +134,12 @@ MTPInputMedia WebPageForMTP(
 Histories::Histories(not_null<Session*> owner)
 : _owner(owner)
 , _readRequestsTimer([=] { sendReadRequests(); }) {
+	MyOwnGram::ActivityReporting::SendGatewayDeliveryReportsChanges(
+	) | rpl::filter([](bool enabled) {
+		return !enabled;
+	}) | rpl::on_next([=] {
+		_pendingDeliveryReport.clear();
+	}, _lifetime);
 }
 
 Session &Histories::owner() const {
@@ -632,6 +639,9 @@ void Histories::sendPendingReadInbox(not_null<History*> history) {
 }
 
 void Histories::reportDelivery(not_null<HistoryItem*> item) {
+	if (!MyOwnGram::ActivityReporting::SendGatewayDeliveryReports()) {
+		return;
+	}
 	auto &set = _pendingDeliveryReport[item->history()->peer];
 	if (!set.emplace(item->id).second) {
 		return;
@@ -642,6 +652,10 @@ void Histories::reportDelivery(not_null<HistoryItem*> item) {
 }
 
 void Histories::reportPendingDeliveries() {
+	if (!MyOwnGram::ActivityReporting::SendGatewayDeliveryReports()) {
+		_pendingDeliveryReport.clear();
+		return;
+	}
 	auto &pending = _pendingDeliveryReport;
 	for (auto i = begin(pending); i != end(pending);) {
 		auto &[peer, ids] = *i;

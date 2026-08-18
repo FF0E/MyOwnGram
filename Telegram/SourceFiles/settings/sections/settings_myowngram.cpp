@@ -141,6 +141,14 @@ void BuildActivityReportingSection(SectionBuilder &builder) {
 		ActivityReporting::UploadCallDiagnostics,
 		ActivityReporting::SetUploadCallDiagnostics,
 		{ u"call"_q, u"diagnostics"_q, u"activity"_q, u"privacy"_q });
+	AddActivityReportingCheckbox(
+		builder,
+		u"myowngram/activity_reporting/send_gateway_delivery_reports"_q,
+		tr::lng_myowngram_send_gateway_delivery_reports(),
+		tr::lng_myowngram_send_gateway_delivery_reports_about(),
+		ActivityReporting::SendGatewayDeliveryReports,
+		ActivityReporting::SetSendGatewayDeliveryReports,
+		{ u"gateway"_q, u"delivery"_q, u"activity"_q, u"privacy"_q });
 }
 
 void BuildMyOwnGramSection(SectionBuilder &builder) {

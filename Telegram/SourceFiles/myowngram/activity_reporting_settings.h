@@ -27,4 +27,8 @@ void SetSendPremiumPromoAnalytics(bool enabled);
 [[nodiscard]] bool UploadCallDiagnostics();
 void SetUploadCallDiagnostics(bool enabled);
 
+[[nodiscard]] bool SendGatewayDeliveryReports();
+[[nodiscard]] rpl::producer<bool> SendGatewayDeliveryReportsChanges();
+void SetSendGatewayDeliveryReports(bool enabled);
+
 } // namespace MyOwnGram::ActivityReporting

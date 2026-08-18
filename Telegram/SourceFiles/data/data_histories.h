@@ -247,6 +247,7 @@ private:
 		not_null<PeerData*>,
 		base::flat_set<MsgId>> _pendingDeliveryReport;
 	base::flat_set<not_null<PeerData*>> _deliveryReportSent;
+	rpl::lifetime _lifetime;
 
 };
 

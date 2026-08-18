@@ -8635,5 +8635,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_send_premium_promo_analytics_about" = "Send Telegram events when you view or accept an offer on the Premium promotion screen. This setting applies to every account on this device.";
 "lng_myowngram_upload_call_diagnostics" = "Upload requested call diagnostics";
 "lng_myowngram_upload_call_diagnostics_about" = "Upload call engine diagnostics when Telegram requests them after a call. This setting applies to every account on this device.";
+"lng_myowngram_send_gateway_delivery_reports" = "Send verification delivery reports";
+"lng_myowngram_send_gateway_delivery_reports_about" = "Acknowledge supported Telegram Gateway verification messages delivered to this app. Turning this off may affect delivery confirmation. This setting applies to every account on this device.";
 
 // Keys finished
