@@ -22,6 +22,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 namespace Settings {
 namespace {
 
+using namespace Builder;
+
 namespace ActivityReporting = ::MyOwnGram::ActivityReporting;
 
 class MyOwnGram final : public Section<MyOwnGram> {
