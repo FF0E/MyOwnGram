@@ -14,10 +14,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/sections/settings_main.h"
 #include "settings/settings_builder.h"
 #include "settings/settings_common_session.h"
-#include "ui/widgets/checkbox.h"
 #include "ui/wrap/vertical_layout.h"
 #include "ui/vertical_list.h"
+
 #include "styles/style_menu_icons.h"
+#include "styles/style_settings.h"
 
 namespace Settings {
 namespace {
@@ -39,27 +40,54 @@ private:
 
 };
 
-void AddActivityReportingCheckbox(
+class MyOwnGramGeneral final : public Section<MyOwnGramGeneral> {
+public:
+	MyOwnGramGeneral(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+private:
+	void setupContent();
+
+};
+
+class MyOwnGramReporting final : public Section<MyOwnGramReporting> {
+public:
+	MyOwnGramReporting(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+private:
+	void setupContent();
+
+};
+
+void AddMyOwnGramToggle(
 		SectionBuilder &builder,
 		QString id,
 		rpl::producer<QString> title,
 		rpl::producer<QString> about,
-		bool (*getter)(),
-		void (*setter)(bool),
+		Fn<bool()> getter,
+		Fn<void(bool)> setter,
 		QStringList keywords) {
-	const auto checkbox = builder.addCheckbox({
+	const auto button = builder.addButton({
 		.id = std::move(id),
 		.title = std::move(title),
-		.checked = getter(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = rpl::single(getter()),
 		.keywords = std::move(keywords),
 	});
-	if (checkbox) {
-		checkbox->checkedChanges(
-		) | rpl::filter([=](bool checked) {
-			return checked != getter();
-		}) | rpl::on_next([=](bool checked) {
-			setter(checked);
-		}, checkbox->lifetime());
+	if (button) {
+		button->toggledValue(
+		) | rpl::filter([=](bool enabled) {
+			return enabled != getter();
+		}) | rpl::on_next([=](bool enabled) {
+			setter(enabled);
+		}, button->lifetime());
 	}
 	builder.addSkip();
 	builder.addDividerText(std::move(about));
@@ -69,41 +97,21 @@ void BuildGeneralSection(SectionBuilder &builder) {
 	const auto settings = &Core::App().settings();
 
 	builder.addSkip();
-	builder.addSubsectionTitle({
-		.id = u"myowngram/general"_q,
-		.title = tr::lng_myowngram_general(),
-		.keywords = { u"general"_q, u"logout"_q, u"preferences"_q },
-	});
-
-	const auto keepPreferences = builder.addCheckbox({
-		.id = u"myowngram/keep_preferences_on_last_logout"_q,
-		.title = tr::lng_myowngram_keep_preferences_on_last_logout(),
-		.checked = settings->keepPreferencesOnLastLogout(),
-		.keywords = { u"logout"_q, u"preferences"_q, u"settings"_q },
-	});
-	if (keepPreferences) {
-		keepPreferences->checkedChanges(
-		) | rpl::filter([=](bool checked) {
-			return checked != settings->keepPreferencesOnLastLogout();
-		}) | rpl::on_next([=](bool checked) {
-			settings->setKeepPreferencesOnLastLogout(checked);
-		}, keepPreferences->lifetime());
-	}
-
-	builder.addSkip();
-	builder.addDividerText(
-		tr::lng_myowngram_keep_preferences_on_last_logout_about());
+	AddMyOwnGramToggle(
+		builder,
+		u"myowngram/keep_preferences_on_last_logout"_q,
+		tr::lng_myowngram_keep_preferences_on_last_logout(),
+		tr::lng_myowngram_keep_preferences_on_last_logout_about(),
+		[=] { return settings->keepPreferencesOnLastLogout(); },
+		[=](bool enabled) {
+			settings->setKeepPreferencesOnLastLogout(enabled);
+		},
+		{ u"logout"_q, u"preferences"_q, u"settings"_q });
 }
 
 void BuildActivityReportingSection(SectionBuilder &builder) {
 	builder.addSkip();
-	builder.addSubsectionTitle({
-		.id = u"myowngram/activity_reporting"_q,
-		.title = tr::lng_myowngram_activity_reporting(),
-		.keywords = { u"activity"_q, u"reporting"_q, u"privacy"_q },
-	});
-
-	AddActivityReportingCheckbox(
+	AddMyOwnGramToggle(
 		builder,
 		u"myowngram/activity_reporting/send_typing_status"_q,
 		tr::lng_myowngram_send_typing_status(),
@@ -111,7 +119,7 @@ void BuildActivityReportingSection(SectionBuilder &builder) {
 		ActivityReporting::SendTypingStatus,
 		ActivityReporting::SetSendTypingStatus,
 		{ u"typing"_q, u"status"_q, u"activity"_q });
-	AddActivityReportingCheckbox(
+	AddMyOwnGramToggle(
 		builder,
 		u"myowngram/activity_reporting/send_read_metrics"_q,
 		tr::lng_myowngram_send_read_metrics(),
@@ -119,7 +127,7 @@ void BuildActivityReportingSection(SectionBuilder &builder) {
 		ActivityReporting::SendReadMetrics,
 		ActivityReporting::SetSendReadMetrics,
 		{ u"view"_q, u"metrics"_q, u"activity"_q, u"privacy"_q });
-	AddActivityReportingCheckbox(
+	AddMyOwnGramToggle(
 		builder,
 		u"myowngram/activity_reporting/send_music_listen_reports"_q,
 		tr::lng_myowngram_send_music_listen_reports(),
@@ -127,7 +135,7 @@ void BuildActivityReportingSection(SectionBuilder &builder) {
 		ActivityReporting::SendMusicListenReports,
 		ActivityReporting::SetSendMusicListenReports,
 		{ u"music"_q, u"listening"_q, u"activity"_q, u"privacy"_q });
-	AddActivityReportingCheckbox(
+	AddMyOwnGramToggle(
 		builder,
 		u"myowngram/activity_reporting/send_premium_promo_analytics"_q,
 		tr::lng_myowngram_send_premium_promo_analytics(),
@@ -135,7 +143,7 @@ void BuildActivityReportingSection(SectionBuilder &builder) {
 		ActivityReporting::SendPremiumPromoAnalytics,
 		ActivityReporting::SetSendPremiumPromoAnalytics,
 		{ u"premium"_q, u"analytics"_q, u"activity"_q, u"privacy"_q });
-	AddActivityReportingCheckbox(
+	AddMyOwnGramToggle(
 		builder,
 		u"myowngram/activity_reporting/upload_call_diagnostics"_q,
 		tr::lng_myowngram_upload_call_diagnostics(),
@@ -143,7 +151,7 @@ void BuildActivityReportingSection(SectionBuilder &builder) {
 		ActivityReporting::UploadCallDiagnostics,
 		ActivityReporting::SetUploadCallDiagnostics,
 		{ u"call"_q, u"diagnostics"_q, u"activity"_q, u"privacy"_q });
-	AddActivityReportingCheckbox(
+	AddMyOwnGramToggle(
 		builder,
 		u"myowngram/activity_reporting/send_gateway_delivery_reports"_q,
 		tr::lng_myowngram_send_gateway_delivery_reports(),
@@ -153,10 +161,46 @@ void BuildActivityReportingSection(SectionBuilder &builder) {
 		{ u"gateway"_q, u"delivery"_q, u"activity"_q, u"privacy"_q });
 }
 
-void BuildMyOwnGramSection(SectionBuilder &builder) {
-	BuildGeneralSection(builder);
-	BuildActivityReportingSection(builder);
+void BuildMyOwnGramMenu(SectionBuilder &builder) {
+	builder.addSkip();
+	builder.addSubsectionTitle({
+		.id = u"myowngram/categories"_q,
+		.title = tr::lng_myowngram_categories(),
+		.keywords = { u"categories"_q, u"settings"_q },
+	});
+
+	builder.addSectionButton({
+		.title = tr::lng_myowngram_general(),
+		.targetSection = MyOwnGramGeneral::Id(),
+		.icon = { &st::menuIconSettings },
+		.keywords = { u"general"_q, u"logout"_q, u"preferences"_q },
+	});
+	builder.addSectionButton({
+		.title = tr::lng_myowngram_activity_reporting(),
+		.targetSection = MyOwnGramReporting::Id(),
+		.icon = { &st::menuIconStats },
+		.keywords = { u"activity"_q, u"reporting"_q, u"privacy"_q },
+	});
+	builder.addSkip();
 }
+
+const auto kGeneralMeta = BuildHelper({
+	.id = MyOwnGramGeneral::Id(),
+	.parentId = MyOwnGram::Id(),
+	.title = &tr::lng_myowngram_general,
+	.icon = &st::menuIconSettings,
+}, [](SectionBuilder &builder) {
+	BuildGeneralSection(builder);
+});
+
+const auto kActivityReportingMeta = BuildHelper({
+	.id = MyOwnGramReporting::Id(),
+	.parentId = MyOwnGram::Id(),
+	.title = &tr::lng_myowngram_activity_reporting,
+	.icon = &st::menuIconStats,
+}, [](SectionBuilder &builder) {
+	BuildActivityReportingSection(builder);
+});
 
 const auto kMeta = BuildHelper({
 	.id = MyOwnGram::Id(),
@@ -164,9 +208,12 @@ const auto kMeta = BuildHelper({
 	.title = &tr::lng_myowngram_settings,
 	.icon = &st::menuIconSettings,
 }, [](SectionBuilder &builder) {
-	BuildMyOwnGramSection(builder);
+	BuildMyOwnGramMenu(builder);
 });
 
+const SectionBuildMethod kGeneralSection = kGeneralMeta.build;
+const SectionBuildMethod kActivityReportingSection
+	= kActivityReportingMeta.build;
 const SectionBuildMethod kMyOwnGramSection = kMeta.build;
 
 MyOwnGram::MyOwnGram(
@@ -183,6 +230,40 @@ rpl::producer<QString> MyOwnGram::title() {
 void MyOwnGram::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
 	build(content, kMyOwnGramSection);
+	Ui::ResizeFitChild(this, content);
+}
+
+MyOwnGramGeneral::MyOwnGramGeneral(
+	QWidget *parent,
+	not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	setupContent();
+}
+
+rpl::producer<QString> MyOwnGramGeneral::title() {
+	return tr::lng_myowngram_general();
+}
+
+void MyOwnGramGeneral::setupContent() {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	build(content, kGeneralSection);
+	Ui::ResizeFitChild(this, content);
+}
+
+MyOwnGramReporting::MyOwnGramReporting(
+	QWidget *parent,
+	not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	setupContent();
+}
+
+rpl::producer<QString> MyOwnGramReporting::title() {
+	return tr::lng_myowngram_activity_reporting();
+}
+
+void MyOwnGramReporting::setupContent() {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	build(content, kActivityReportingSection);
 	Ui::ResizeFitChild(this, content);
 }
 

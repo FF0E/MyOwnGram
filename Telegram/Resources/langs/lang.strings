@@ -8621,6 +8621,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 // MyOwnGram
 
 "lng_myowngram_settings" = "MyOwnGram Settings";
+"lng_myowngram_categories" = "Categories";
 "lng_myowngram_general" = "General";
 "lng_myowngram_keep_preferences_on_last_logout" = "Keep app preferences after final logout";
 "lng_myowngram_keep_preferences_on_last_logout_about" = "Keep device-wide Telegram preferences, including your theme and wallpaper, when the last account is removed. Account data and the local passcode are still removed. MyOwnGram activity reporting choices are kept either way.";
