@@ -15,12 +15,25 @@ namespace {
 
 struct Setting {
 	std::string_view key;
+	bool fallback = true;
 	rpl::event_stream<bool> changes;
 };
 
 Setting SendTypingStatusState = {
 	.key = "myowngram.activity_reporting.send_typing_status",
 };
+Setting SendStoryViewReportsState = {
+	.key = "myowngram.activity_reporting.send_story_view_reports",
+};
+Setting AskStoryViewReportsState = {
+	.key = "myowngram.activity_reporting.ask_story_view_reports",
+	.fallback = false,
+};
+Setting RememberWatchedStoriesState = {
+	.key = "myowngram.activity_reporting.remember_watched_stories",
+	.fallback = false,
+};
+rpl::event_stream<StoryViewPolicy> StoryViewReportsChangesStream;
 Setting SendReadMetricsState = {
 	.key = "myowngram.activity_reporting.send_read_metrics",
 };
@@ -38,7 +51,9 @@ Setting SendGatewayDeliveryReportsState = {
 };
 
 bool Read(const Setting &setting) {
-	return Core::App().settings().readPref<bool>(setting.key, true);
+	return Core::App().settings().readPref<bool>(
+		setting.key,
+		setting.fallback);
 }
 
 rpl::producer<bool> Changes(Setting &setting) {
@@ -59,12 +74,53 @@ bool SendTypingStatus() {
 	return Read(SendTypingStatusState);
 }
 
-rpl::producer<bool> SendTypingStatusChanges() {
-	return Changes(SendTypingStatusState);
-}
-
 void SetSendTypingStatus(bool enabled) {
 	Write(SendTypingStatusState, enabled);
+}
+
+StoryViewPolicy StoryViewReports() {
+	return !Read(SendStoryViewReportsState)
+		? StoryViewPolicy::Block
+		: Read(AskStoryViewReportsState)
+		? StoryViewPolicy::Ask
+		: StoryViewPolicy::Allow;
+}
+
+rpl::producer<StoryViewPolicy> StoryViewReportsChanges() {
+	return StoryViewReportsChangesStream.events();
+}
+
+void SetStoryViewReports(StoryViewPolicy policy) {
+	if (StoryViewReports() == policy) {
+		return;
+	}
+	switch (policy) {
+	case StoryViewPolicy::Allow:
+		Write(AskStoryViewReportsState, false);
+		Write(SendStoryViewReportsState, true);
+		break;
+	case StoryViewPolicy::Ask:
+		Write(AskStoryViewReportsState, true);
+		Write(SendStoryViewReportsState, true);
+		break;
+	case StoryViewPolicy::Block:
+		Write(SendStoryViewReportsState, false);
+		Write(AskStoryViewReportsState, false);
+		break;
+	}
+	StoryViewReportsChangesStream.fire_copy(policy);
+}
+
+bool RememberWatchedStories() {
+	return Read(RememberWatchedStoriesState);
+}
+
+rpl::producer<bool> RememberWatchedStoriesChanges() {
+	return Changes(RememberWatchedStoriesState);
+}
+
+void SetRememberWatchedStories(bool enabled) {
+	Write(RememberWatchedStoriesState, enabled);
 }
 
 bool SendReadMetrics() {

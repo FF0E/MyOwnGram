@@ -31,12 +31,6 @@ constexpr auto kSendTypingsToOfflineFor = TimeId(30);
 SendProgressManager::SendProgressManager(not_null<Main::Session*> session)
 : _session(session)
 , _stopTypingTimer([=] { cancelTyping(base::take(_stopTypingHistory)); }) {
-	ActivityReporting::SendTypingStatusChanges(
-	) | rpl::filter([](bool enabled) {
-		return !enabled;
-	}) | rpl::on_next([=] {
-		clearTyping();
-	}, _lifetime);
 }
 
 void SendProgressManager::cancel(
@@ -59,30 +53,6 @@ void SendProgressManager::cancel(
 void SendProgressManager::cancelTyping(not_null<History*> history) {
 	_stopTypingTimer.cancel();
 	cancel(history, SendProgressType::Typing);
-}
-
-void SendProgressManager::clearTyping() {
-	_stopTypingTimer.cancel();
-	_stopTypingHistory = nullptr;
-	auto requests = std::vector<mtpRequestId>();
-	for (auto i = begin(_requests); i != end(_requests);) {
-		if (i->first.type == SendProgressType::Typing) {
-			requests.push_back(i->second);
-			i = _requests.erase(i);
-		} else {
-			++i;
-		}
-	}
-	for (const auto requestId : requests) {
-		_session->api().request(requestId).cancel();
-	}
-	for (auto i = begin(_updated); i != end(_updated);) {
-		if (i->first.type == SendProgressType::Typing) {
-			i = _updated.erase(i);
-		} else {
-			++i;
-		}
-	}
 }
 
 void SendProgressManager::update(

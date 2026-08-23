@@ -81,6 +81,12 @@ enum class NoStory : uchar {
 	Deleted,
 };
 
+enum class StoryViewReport : uchar {
+	Default,
+	Allowed,
+	Blocked,
+};
+
 enum class StorySourcesList : uchar {
 	NotHidden,
 	Hidden,
@@ -196,7 +202,10 @@ public:
 		not_null<Story*> story);
 
 	[[nodiscard]] bool isQuitPrevent();
-	void markAsRead(FullStoryId id, bool viewed);
+	void markAsRead(
+		FullStoryId id,
+		bool viewed,
+		StoryViewReport report = StoryViewReport::Default);
 
 	void toggleHidden(
 		PeerId peerId,
@@ -363,7 +372,16 @@ private:
 	void removeDependencyStory(not_null<Story*> story);
 	void sort(StorySourcesList list);
 	bool bumpReadTill(PeerId peerId, StoryId maxReadTill);
+	void bumpLocalReadTill(
+		PeerId peerId,
+		StoryId maxReadTill,
+		TimeId expires);
 	void requestReadTills();
+	void clearPendingViewReports();
+	void readLocalReadTills();
+	void writeLocalReadTills();
+	void scheduleWriteLocalReadTills();
+	void pruneLocalReadTill(PeerId peerId);
 
 	void sendMarkAsReadRequests();
 	void sendMarkAsReadRequest(not_null<PeerData*> peer, StoryId tillId);
@@ -445,7 +463,7 @@ private:
 	rpl::event_stream<StoryAlbumUpdate> _albumUpdates;
 	rpl::event_stream<StoryAlbumIdsKey> _albumIdsChanged;
 
-	base::flat_set<PeerId> _markReadPending;
+	base::flat_map<PeerId, TimeId> _markReadPending;
 	base::Timer _markReadTimer;
 	base::flat_set<PeerId> _markReadRequests;
 	base::flat_map<
@@ -475,7 +493,13 @@ private:
 	int _preloadingHiddenSourcesCounter = 0;
 	int _preloadingMainSourcesCounter = 0;
 
+	struct LocalReadTill {
+		StoryId storyId = 0;
+		TimeId expires = 0;
+	};
 	base::flat_map<PeerId, StoryId> _readTill;
+	base::flat_map<PeerId, LocalReadTill> _localReadTill;
+	base::Timer _writeLocalReadTillTimer;
 	base::flat_set<FullStoryId> _pendingReadTillItems;
 	base::flat_map<not_null<PeerData*>, RecentState> _pendingPeerRecentState;
 	mtpRequestId _readTillsRequestId = 0;

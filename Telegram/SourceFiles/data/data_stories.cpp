@@ -24,8 +24,12 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "main/main_app_config.h"
 #include "main/main_session.h"
+#include "myowngram/activity_reporting_settings.h"
+#include "storage/storage_account.h"
 #include "ui/layers/show.h"
 #include "ui/text/text_utilities.h"
+
+#include <QtCore/QDataStream>
 
 namespace Data {
 namespace {
@@ -35,6 +39,10 @@ constexpr auto kIgnorePreloadAroundIfLoaded = 15;
 constexpr auto kPreloadAroundCount = 30;
 constexpr auto kMarkAsReadDelay = 3 * crl::time(1000);
 constexpr auto kIncrementViewsDelay = 5 * crl::time(1000);
+constexpr auto kWriteLocalReadTillDelay = crl::time(1000);
+constexpr auto kLocalReadTillVersion = 1;
+constexpr auto kMaxLocalReadTillEntries = 100'000U;
+constexpr auto kLocalReadTillKey = "myowngram.stories.local_read_till";
 constexpr auto kArchiveFirstPerPage = 30;
 constexpr auto kArchivePerPage = 100;
 constexpr auto kSavedFirstPerPage = 30;
@@ -48,6 +56,21 @@ constexpr auto kPollViewsInterval = 10 * crl::time(1000);
 constexpr auto kPollingViewsPerPage = Story::kRecentViewersMax;
 
 using UpdateFlag = StoryUpdate::Flag;
+
+[[nodiscard]] bool ShouldSendStoryViewReport(
+		::MyOwnGram::ActivityReporting::StoryViewPolicy policy,
+		StoryViewReport report) {
+	using Policy = ::MyOwnGram::ActivityReporting::StoryViewPolicy;
+	switch (report) {
+	case StoryViewReport::Default:
+		return policy == Policy::Allow;
+	case StoryViewReport::Allowed:
+		return policy != Policy::Block;
+	case StoryViewReport::Blocked:
+		return false;
+	}
+	Unexpected("StoryViewReport value.");
+}
 
 [[nodiscard]] std::optional<StoryMedia> ParseMedia(
 		not_null<PeerData*> peer,
@@ -188,8 +211,26 @@ Stories::Stories(not_null<Session*> owner)
 , _expireTimer([=] { processExpired(); })
 , _markReadTimer([=] { sendMarkAsReadRequests(); })
 , _incrementViewsTimer([=] { sendIncrementViewsRequests(); })
+, _writeLocalReadTillTimer([=] { writeLocalReadTills(); })
 , _pollingTimer([=] { sendPollingRequests(); })
 , _pollingViewsTimer([=] { sendPollingViewsRequests(); }) {
+	namespace ActivityReporting = ::MyOwnGram::ActivityReporting;
+	readLocalReadTills();
+	ActivityReporting::StoryViewReportsChanges(
+	) | rpl::on_next([=](ActivityReporting::StoryViewPolicy policy) {
+		if (policy != ActivityReporting::StoryViewPolicy::Allow) {
+			clearPendingViewReports();
+		}
+	}, _lifetime);
+	ActivityReporting::RememberWatchedStoriesChanges(
+	) | rpl::on_next([=](bool enabled) {
+		if (enabled) {
+			writeLocalReadTills();
+		} else {
+			_writeLocalReadTillTimer.cancel();
+			session().local().clearPref(kLocalReadTillKey);
+		}
+	}, _lifetime);
 	crl::on_main(this, [=] {
 		session().changes().peerUpdates(
 			Data::PeerUpdate::Flag::Rights
@@ -218,6 +259,9 @@ Stories::Stories(not_null<Session*> owner)
 }
 
 Stories::~Stories() {
+	if (_writeLocalReadTillTimer.isActive()) {
+		writeLocalReadTills();
+	}
 	Expects(_pollingSettings.empty());
 	Expects(_pollingViews.empty());
 }
@@ -287,7 +331,14 @@ void Stories::apply(const MTPDupdateStory &data) {
 }
 
 void Stories::apply(const MTPDupdateReadStories &data) {
-	bumpReadTill(peerFromMTP(data.vpeer()), data.vmax_id().v);
+	const auto peerId = peerFromMTP(data.vpeer());
+	const auto maxId = data.vmax_id().v;
+	bumpReadTill(peerId, maxId);
+	const auto i = _localReadTill.find(peerId);
+	if (i != end(_localReadTill) && i->second.storyId <= maxId) {
+		_localReadTill.erase(i);
+		scheduleWriteLocalReadTills();
+	}
 }
 
 void Stories::apply(const MTPStoriesStealthMode &stealthMode) {
@@ -303,6 +354,7 @@ void Stories::apply(not_null<PeerData*> peer, const MTPPeerStories *data) {
 		applyDeletedFromSources(peer->id, StorySourcesList::NotHidden);
 		applyDeletedFromSources(peer->id, StorySourcesList::Hidden);
 		_all.erase(peer->id);
+		pruneLocalReadTill(peer->id);
 		_sourceChanged.fire_copy(peer->id);
 		updatePeerStoriesState(peer);
 	} else {
@@ -435,9 +487,16 @@ void Stories::parseAndApply(
 		ParseSource source) {
 	const auto &data = stories.data();
 	const auto peerId = peerFromMTP(data.vpeer());
+	const auto serverReadTill = data.vmax_read_id().value_or_empty();
+	const auto local = _localReadTill.find(peerId);
+	if (local != end(_localReadTill)
+		&& local->second.storyId <= serverReadTill) {
+		_localReadTill.erase(local);
+		scheduleWriteLocalReadTills();
+	}
 	const auto already = _readTill.find(peerId);
 	const auto readTill = std::max(
-		data.vmax_read_id().value_or_empty(),
+		serverReadTill,
 		(already != end(_readTill) ? already->second : 0));
 	const auto peer = _owner->peer(peerId);
 	auto result = StoriesSource{
@@ -463,6 +522,7 @@ void Stories::parseAndApply(
 	if (result.ids.empty()) {
 		applyDeletedFromSources(peerId, StorySourcesList::NotHidden);
 		applyDeletedFromSources(peerId, StorySourcesList::Hidden);
+		pruneLocalReadTill(peerId);
 		peer->setStoriesState(PeerData::StoriesState::None);
 		return;
 	} else if (peer->isSelf()) {
@@ -974,6 +1034,11 @@ void Stories::applyDeleted(not_null<PeerData*> peer, StoryId id) {
 }
 
 void Stories::applyExpired(FullStoryId id) {
+	const auto local = _localReadTill.find(id.peer);
+	if (local != end(_localReadTill)
+		&& local->second.expires <= base::unixtime::now()) {
+		pruneLocalReadTill(id.peer);
+	}
 	if (const auto maybeStory = lookup(id)) {
 		const auto story = *maybeStory;
 		if (!hasArchive(story->peer()) && !story->inProfile()) {
@@ -1005,6 +1070,7 @@ void Stories::applyRemovedFromActive(FullStoryId id) {
 			const auto peer = i->second.peer;
 			if (i->second.ids.empty()) {
 				_all.erase(i);
+				pruneLocalReadTill(id.peer);
 				removeFromList(StorySourcesList::NotHidden);
 				removeFromList(StorySourcesList::Hidden);
 			}
@@ -1232,7 +1298,10 @@ void Stories::loadAround(FullStoryId id, StoriesContext context) {
 	}
 }
 
-void Stories::markAsRead(FullStoryId id, bool viewed) {
+void Stories::markAsRead(
+		FullStoryId id,
+		bool viewed,
+		StoryViewReport report) {
 	if (id.peer == _owner->session().userPeerId()) {
 		return;
 	}
@@ -1240,20 +1309,37 @@ void Stories::markAsRead(FullStoryId id, bool viewed) {
 	if (!maybeStory) {
 		return;
 	}
+	namespace ActivityReporting = ::MyOwnGram::ActivityReporting;
+	const auto shouldSend = ShouldSendStoryViewReport(
+		ActivityReporting::StoryViewReports(),
+		report);
 	const auto story = *maybeStory;
-	if (story->expired() && story->inProfile()) {
-		_incrementViewsPending[id.peer].emplace(id.story);
-		if (!_incrementViewsTimer.isActive()) {
-			_incrementViewsTimer.callOnce(kIncrementViewsDelay);
+	const auto expiredInProfile = story->expired() && story->inProfile();
+	if (expiredInProfile) {
+		if (shouldSend) {
+			_incrementViewsPending[id.peer].emplace(id.story);
+			if (!_incrementViewsTimer.isActive()) {
+				_incrementViewsTimer.callOnce(kIncrementViewsDelay);
+			}
 		}
 	}
-	if (!bumpReadTill(id.peer, id.story)) {
+	const auto changed = bumpReadTill(id.peer, id.story);
+	if (!shouldSend) {
+		if (!expiredInProfile
+			&& (changed || !_all.contains(id.peer))) {
+			bumpLocalReadTill(id.peer, id.story, story->expires());
+		}
+		return;
+	} else if (!changed
+		&& (report != StoryViewReport::Allowed
+			|| !_all.contains(id.peer))) {
 		return;
 	}
 	if (!_markReadPending.contains(id.peer)) {
 		sendMarkAsReadRequests();
 	}
-	_markReadPending.emplace(id.peer);
+	auto &expires = _markReadPending[id.peer];
+	expires = std::max(expires, story->expires());
 	_markReadTimer.callOnce(kMarkAsReadDelay);
 }
 
@@ -1305,6 +1391,149 @@ bool Stories::bumpReadTill(PeerId peerId, StoryId maxReadTill) {
 		refreshInList(StorySourcesList::Hidden);
 	}
 	return true;
+}
+
+void Stories::bumpLocalReadTill(
+		PeerId peerId,
+		StoryId maxReadTill,
+		TimeId expires) {
+	if (expires <= base::unixtime::now()) {
+		return;
+	}
+	const auto i = _localReadTill.find(peerId);
+	if (i == end(_localReadTill)) {
+		if (_localReadTill.size() >= kMaxLocalReadTillEntries) {
+			return;
+		}
+		_localReadTill.emplace(peerId, LocalReadTill{
+			.storyId = maxReadTill,
+			.expires = expires,
+		});
+	} else {
+		const auto storyId = std::max(i->second.storyId, maxReadTill);
+		const auto expiration = std::max(i->second.expires, expires);
+		if (i->second.storyId == storyId
+			&& i->second.expires == expiration) {
+			return;
+		}
+		i->second = {
+			.storyId = storyId,
+			.expires = expiration,
+		};
+	}
+	scheduleWriteLocalReadTills();
+}
+
+void Stories::clearPendingViewReports() {
+	for (const auto &[peerId, expires] : _markReadPending) {
+		const auto i = _all.find(peerId);
+		if (i != end(_all)) {
+			bumpLocalReadTill(peerId, i->second.readTill, expires);
+		}
+	}
+	_markReadTimer.cancel();
+	_incrementViewsTimer.cancel();
+	_markReadPending.clear();
+	_incrementViewsPending.clear();
+}
+
+void Stories::readLocalReadTills() {
+	if (!::MyOwnGram::ActivityReporting::RememberWatchedStories()) {
+		session().local().clearPref(kLocalReadTillKey);
+		return;
+	}
+	const auto serialized = session().local().readPref<QByteArray>(
+		kLocalReadTillKey,
+		QByteArray());
+	if (serialized.isEmpty()) {
+		return;
+	}
+	auto stream = QDataStream(serialized);
+	stream.setVersion(QDataStream::Qt_5_1);
+	auto version = qint32();
+	auto count = quint32();
+	stream >> version >> count;
+	if (version != kLocalReadTillVersion
+		|| count > kMaxLocalReadTillEntries) {
+		session().local().clearPref(kLocalReadTillKey);
+		return;
+	}
+	auto local = base::flat_map<PeerId, LocalReadTill>();
+	const auto now = base::unixtime::now();
+	auto needsRewrite = (count == 0);
+	for (auto index = 0U; index != count; ++index) {
+		auto rawPeerId = quint64();
+		auto storyId = qint32();
+		auto expires = qint32();
+		stream >> rawPeerId >> storyId >> expires;
+		const auto peerId = DeserializePeerId(rawPeerId);
+		if (!peerId
+			|| (!peerIsUser(peerId)
+				&& !peerIsChat(peerId)
+				&& !peerIsChannel(peerId))
+			|| storyId <= 0
+			|| expires <= 0) {
+			stream.setStatus(QDataStream::ReadCorruptData);
+			break;
+		} else if (expires <= now) {
+			needsRewrite = true;
+			continue;
+		}
+		auto &till = local[peerId];
+		till.storyId = std::max(till.storyId, StoryId(storyId));
+		till.expires = std::max(till.expires, TimeId(expires));
+	}
+	if (stream.status() != QDataStream::Ok || !stream.atEnd()) {
+		session().local().clearPref(kLocalReadTillKey);
+		return;
+	}
+	needsRewrite = needsRewrite || (local.size() != count);
+	_localReadTill = std::move(local);
+	for (const auto &[peerId, localReadTill] : _localReadTill) {
+		auto &till = _readTill[peerId];
+		till = std::max(till, localReadTill.storyId);
+	}
+	if (needsRewrite) {
+		scheduleWriteLocalReadTills();
+	}
+}
+
+void Stories::writeLocalReadTills() {
+	_writeLocalReadTillTimer.cancel();
+	if (!::MyOwnGram::ActivityReporting::RememberWatchedStories()) {
+		return;
+	} else if (_localReadTill.empty()) {
+		session().local().clearPref(kLocalReadTillKey);
+		return;
+	}
+	auto serialized = QByteArray();
+	auto stream = QDataStream(&serialized, QIODevice::WriteOnly);
+	stream.setVersion(QDataStream::Qt_5_1);
+	stream << qint32(kLocalReadTillVersion)
+		<< quint32(_localReadTill.size());
+	for (const auto &[peerId, localReadTill] : _localReadTill) {
+		stream
+			<< SerializePeerId(peerId)
+			<< qint32(localReadTill.storyId)
+			<< qint32(localReadTill.expires);
+	}
+	session().local().writePref<QByteArray>(
+		kLocalReadTillKey,
+		std::move(serialized));
+}
+
+void Stories::scheduleWriteLocalReadTills() {
+	if (::MyOwnGram::ActivityReporting::RememberWatchedStories()) {
+		_writeLocalReadTillTimer.callOnce(kWriteLocalReadTillDelay);
+	}
+}
+
+void Stories::pruneLocalReadTill(PeerId peerId) {
+	const auto i = _localReadTill.find(peerId);
+	if (i != end(_localReadTill)) {
+		_localReadTill.erase(i);
+		scheduleWriteLocalReadTills();
+	}
 }
 
 void Stories::toggleHidden(
@@ -1424,7 +1653,7 @@ void Stories::checkQuitPreventFinished() {
 void Stories::sendMarkAsReadRequests() {
 	_markReadTimer.cancel();
 	for (auto i = begin(_markReadPending); i != end(_markReadPending);) {
-		const auto peerId = *i;
+		const auto peerId = i->first;
 		if (_markReadRequests.contains(peerId)) {
 			++i;
 			continue;

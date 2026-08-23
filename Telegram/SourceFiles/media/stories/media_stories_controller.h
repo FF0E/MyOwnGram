@@ -249,6 +249,15 @@ private:
 		AllRead,
 		WithUnread,
 	};
+	enum class ViewReportDecision : uchar {
+		Pending,
+		Allow,
+		Block,
+	};
+	struct PendingViewReport {
+		FullStoryId id;
+		bool viewed = false;
+	};
 
 	void initLayout();
 	bool changeShown(Data::Story *story);
@@ -258,6 +267,12 @@ private:
 	void updatePowerSaveBlocker(const Player::TrackState &state);
 	void maybeMarkAsRead(const Player::TrackState &state);
 	void markAsRead();
+	void askForStoryViewReport(FullStoryId id, bool viewed);
+	void resolveStoryViewReport(
+		PeerId peerId,
+		uint64 generation,
+		bool allow);
+	void clearStoryViewReportDecisions();
 
 	void updateContentFaded();
 	void updatePlayingAllowed();
@@ -372,6 +387,10 @@ private:
 	std::unique_ptr<Sibling> _siblingRight;
 
 	std::unique_ptr<base::PowerSaveBlocker> _powerSaveBlocker;
+
+	base::flat_map<PeerId, ViewReportDecision> _viewReportDecisions;
+	base::flat_map<PeerId, std::vector<PendingViewReport>> _pendingViewReports;
+	uint64 _viewReportDecisionGeneration = 0;
 
 	Main::Session *_session = nullptr;
 	rpl::lifetime _sessionLifetime;

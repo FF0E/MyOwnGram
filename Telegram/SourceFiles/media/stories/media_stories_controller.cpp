@@ -46,6 +46,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "media/stories/media_stories_stealth.h"
 #include "media/stories/media_stories_view.h"
 #include "media/audio/media_audio.h"
+#include "myowngram/activity_reporting_settings.h"
 #include "info/stories/info_stories_common.h"
 #include "payments/payments_reaction_process.h"
 #include "settings/settings_credits_graphics.h"
@@ -67,6 +68,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 namespace Media::Stories {
 namespace {
+
+namespace ActivityReporting = ::MyOwnGram::ActivityReporting;
 
 constexpr auto kPhotoProgressInterval = crl::time(100);
 constexpr auto kPhotoDuration = 5 * crl::time(1000);
@@ -312,6 +315,11 @@ Controller::Controller(not_null<Delegate*> delegate)
 	}))
 , _weatherInCelsius(ResolveWeatherInCelsius()){
 	initLayout();
+
+	ActivityReporting::StoryViewReportsChanges(
+	) | rpl::on_next([=](ActivityReporting::StoryViewPolicy) {
+		clearStoryViewReportDecisions();
+	}, _lifetime);
 
 	using namespace rpl::mappers;
 
@@ -995,6 +1003,7 @@ bool Controller::changeShown(Data::Story *story) {
 	}
 	if (sessionChanged) {
 		_sessionLifetime.destroy();
+		clearStoryViewReportDecisions();
 	}
 	_shown = id;
 	_session = session;
@@ -1359,7 +1368,101 @@ void Controller::markAsRead() {
 		return;
 	}
 	_viewed = true;
-	shownPeer()->owner().stories().markAsRead(_shown, _started);
+	const auto policy = ActivityReporting::StoryViewReports();
+	if (!shownPeer()->isSelf()
+		&& policy == ActivityReporting::StoryViewPolicy::Ask) {
+		askForStoryViewReport(_shown, _started);
+	} else {
+		shownPeer()->owner().stories().markAsRead(_shown, _started);
+	}
+}
+
+void Controller::askForStoryViewReport(FullStoryId id, bool viewed) {
+	Assert(_session != nullptr);
+	const auto stories = &_session->data().stories();
+	const auto peerId = id.peer;
+	const auto i = _viewReportDecisions.find(peerId);
+	if (i != end(_viewReportDecisions)) {
+		if (i->second == ViewReportDecision::Pending) {
+			stories->markAsRead(
+				id,
+				viewed,
+				Data::StoryViewReport::Blocked);
+			_pendingViewReports[peerId].push_back({ id, viewed });
+		} else {
+			stories->markAsRead(
+				id,
+				viewed,
+				(i->second == ViewReportDecision::Allow)
+					? Data::StoryViewReport::Allowed
+					: Data::StoryViewReport::Blocked);
+		}
+		return;
+	}
+	_viewReportDecisions.emplace(peerId, ViewReportDecision::Pending);
+	stories->markAsRead(
+		id,
+		viewed,
+		Data::StoryViewReport::Blocked);
+	_pendingViewReports[peerId].push_back({ id, viewed });
+	const auto name = shownPeer()->shortName();
+	const auto weak = base::make_weak(this);
+	const auto generation = _viewReportDecisionGeneration;
+	const auto resolve = [=](bool allow) {
+		if (const auto strong = weak.get()) {
+			strong->resolveStoryViewReport(peerId, generation, allow);
+		}
+	};
+	uiShow()->show(Ui::MakeConfirmBox({
+		.text = tr::lng_myowngram_story_view_prompt(
+			lt_name,
+			rpl::single(tr::bold(name)),
+			tr::marked),
+		.confirmed = [=] { resolve(true); },
+		.cancelled = [=] { resolve(false); },
+		.confirmText = tr::lng_myowngram_story_view_prompt_allow(),
+		.cancelText = tr::lng_myowngram_story_view_prompt_block(),
+		.labelStyle = &st::storiesBoxLabel,
+		.title = tr::lng_myowngram_story_view_prompt_title(),
+	}));
+}
+
+void Controller::resolveStoryViewReport(
+		PeerId peerId,
+		uint64 generation,
+		bool allow) {
+	if (generation != _viewReportDecisionGeneration || !_session) {
+		return;
+	}
+	const auto i = _viewReportDecisions.find(peerId);
+	if (i == end(_viewReportDecisions)
+		|| i->second != ViewReportDecision::Pending) {
+		return;
+	}
+	i->second = allow
+		? ViewReportDecision::Allow
+		: ViewReportDecision::Block;
+	const auto j = _pendingViewReports.find(peerId);
+	if (j == end(_pendingViewReports)) {
+		return;
+	}
+	auto pending = std::move(j->second);
+	_pendingViewReports.erase(j);
+	if (!allow) {
+		return;
+	}
+	for (const auto &report : pending) {
+		_session->data().stories().markAsRead(
+			report.id,
+			report.viewed,
+			Data::StoryViewReport::Allowed);
+	}
+}
+
+void Controller::clearStoryViewReportDecisions() {
+	_viewReportDecisions.clear();
+	_pendingViewReports.clear();
+	++_viewReportDecisionGeneration;
 }
 
 bool Controller::subjumpAvailable(int delta) const {

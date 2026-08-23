@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/sections/settings_main.h"
 #include "settings/settings_builder.h"
 #include "settings/settings_common_session.h"
+#include "ui/boxes/single_choice_box.h"
 #include "ui/widgets/buttons.h"
 #include "ui/wrap/vertical_layout.h"
 #include "ui/vertical_list.h"
@@ -111,6 +112,77 @@ void AddMyOwnGramGroupFooter(
 	builder.addDividerText(std::move(text));
 }
 
+QString StoryViewPolicyText(ActivityReporting::StoryViewPolicy policy) {
+	switch (policy) {
+	case ActivityReporting::StoryViewPolicy::Allow:
+		return tr::lng_myowngram_story_view_policy_allow(tr::now);
+	case ActivityReporting::StoryViewPolicy::Ask:
+		return tr::lng_myowngram_story_view_policy_ask(tr::now);
+	case ActivityReporting::StoryViewPolicy::Block:
+		return tr::lng_myowngram_story_view_policy_block(tr::now);
+	}
+	Unexpected("StoryViewPolicy value.");
+}
+
+rpl::producer<QString> StoryViewPolicyTextValue(
+		ActivityReporting::StoryViewPolicy policy) {
+	switch (policy) {
+	case ActivityReporting::StoryViewPolicy::Allow:
+		return tr::lng_myowngram_story_view_policy_allow();
+	case ActivityReporting::StoryViewPolicy::Ask:
+		return tr::lng_myowngram_story_view_policy_ask();
+	case ActivityReporting::StoryViewPolicy::Block:
+		return tr::lng_myowngram_story_view_policy_block();
+	}
+	Unexpected("StoryViewPolicy value.");
+}
+
+rpl::producer<ActivityReporting::StoryViewPolicy> StoryViewPolicyValue() {
+	return rpl::single(ActivityReporting::StoryViewReports())
+		| rpl::then(ActivityReporting::StoryViewReportsChanges());
+}
+
+void AddStoryViewPolicy(SectionBuilder &builder) {
+	const auto controller = builder.controller();
+	if (!controller) {
+		return;
+	}
+	builder.addButton({
+		.id = u"myowngram/privacy/story_view_reports"_q,
+		.title = tr::lng_myowngram_story_view_reports(),
+		.st = &st::settingsButtonNoIcon,
+		.label = StoryViewPolicyValue(
+		) | rpl::map(StoryViewPolicyTextValue) | rpl::flatten_latest(),
+		.onClick = [=] {
+			const auto options = std::vector{
+				StoryViewPolicyText(ActivityReporting::StoryViewPolicy::Allow),
+				StoryViewPolicyText(ActivityReporting::StoryViewPolicy::Ask),
+				StoryViewPolicyText(ActivityReporting::StoryViewPolicy::Block),
+			};
+			controller->show(Box([=](not_null<Ui::GenericBox*> box) {
+				SingleChoiceBox(box, {
+					.title = tr::lng_myowngram_story_view_reports(),
+					.options = options,
+					.initialSelection = static_cast<int>(
+						ActivityReporting::StoryViewReports()),
+					.callback = [](int index) {
+						ActivityReporting::SetStoryViewReports(
+							static_cast<ActivityReporting::StoryViewPolicy>(
+								index));
+					},
+				});
+			}));
+		},
+		.keywords = {
+			u"stories"_q,
+			u"views"_q,
+			u"ask"_q,
+			u"activity"_q,
+			u"privacy"_q,
+		},
+	});
+}
+
 void BuildGeneralSection(SectionBuilder &builder) {
 	const auto settings = &Core::App().settings();
 
@@ -151,6 +223,44 @@ void BuildPrivacySection(SectionBuilder &builder) {
 	AddMyOwnGramGroupFooter(
 		builder,
 		tr::lng_myowngram_send_typing_status_about());
+
+	builder.addSkip();
+	builder.addSubsectionTitle({
+		.id = u"myowngram/privacy/story_activity"_q,
+		.title = tr::lng_myowngram_story_activity(),
+		.keywords = { u"stories"_q, u"views"_q, u"activity"_q },
+	});
+	AddStoryViewPolicy(builder);
+	const auto remember = builder.addButton({
+		.id = u"myowngram/privacy/remember_watched_stories"_q,
+		.title = tr::lng_myowngram_remember_watched_stories(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = rpl::single(
+			ActivityReporting::RememberWatchedStories()
+		) | rpl::then(ActivityReporting::RememberWatchedStoriesChanges()),
+		.keywords = {
+			u"stories"_q,
+			u"watched"_q,
+			u"remember"_q,
+			u"storage"_q,
+		},
+		.shown = StoryViewPolicyValue(
+		) | rpl::map([](ActivityReporting::StoryViewPolicy policy) {
+			return policy != ActivityReporting::StoryViewPolicy::Allow;
+		}),
+	});
+	if (remember) {
+		remember->toggledValue(
+		) | rpl::filter([](bool enabled) {
+			return enabled
+				!= ActivityReporting::RememberWatchedStories();
+		}) | rpl::on_next([](bool enabled) {
+			ActivityReporting::SetRememberWatchedStories(enabled);
+		}, remember->lifetime());
+	}
+	AddMyOwnGramGroupFooter(
+		builder,
+		tr::lng_myowngram_story_view_reports_about());
 }
 
 void BuildDataSharingSection(SectionBuilder &builder) {

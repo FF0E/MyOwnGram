@@ -8630,6 +8630,17 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_activity_visibility" = "Activity visibility";
 "lng_myowngram_send_typing_status" = "Share typing status";
 "lng_myowngram_send_typing_status_about" = "Allow people in chats to see when you are typing.";
+"lng_myowngram_story_activity" = "Story activity";
+"lng_myowngram_story_view_reports" = "Share story views";
+"lng_myowngram_story_view_policy_allow" = "Allow";
+"lng_myowngram_story_view_policy_ask" = "Ask";
+"lng_myowngram_story_view_policy_block" = "Block";
+"lng_myowngram_remember_watched_stories" = "Remember watched stories on this device";
+"lng_myowngram_story_view_reports_about" = "Story views are normally shared after you watch a story. Ask prompts once for each story source while the viewer is open. Blocked views stay watched until restart; optionally store compact watched markers separately in each account's encrypted local data. Markers expire with the stories, are not synchronized with other devices and are removed when local account data is cleared.";
+"lng_myowngram_story_view_prompt_title" = "Share story views?";
+"lng_myowngram_story_view_prompt" = "Telegram reports the highest story you viewed. Sharing with {name} may also mark earlier current stories as viewed. This choice applies to their stories until you close the viewer.";
+"lng_myowngram_story_view_prompt_allow" = "Share views";
+"lng_myowngram_story_view_prompt_block" = "Don't share";
 "lng_myowngram_usage_data" = "Usage data";
 "lng_myowngram_send_read_metrics" = "Share channel viewing data";
 "lng_myowngram_send_music_listen_reports" = "Share music listening activity";
