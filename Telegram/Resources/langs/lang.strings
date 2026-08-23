@@ -8638,8 +8638,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_send_premium_promo_analytics" = "Share Premium promotion analytics";
 "lng_myowngram_upload_call_diagnostics" = "Upload call diagnostics";
 "lng_myowngram_analytics_diagnostics_about" = "Premium promotion analytics include events when you view or accept an offer. Call diagnostics include technical call data uploaded when Telegram requests it after a call.";
-"lng_myowngram_service_confirmations" = "Service confirmations";
-"lng_myowngram_send_gateway_delivery_reports" = "Send verification delivery confirmations";
-"lng_myowngram_send_gateway_delivery_reports_about" = "Confirm when supported Telegram Gateway verification messages reach this app. Disabling this may affect delivery confirmation.";
+"lng_myowngram_verification_messages" = "Verification messages";
+"lng_myowngram_send_gateway_delivery_reports" = "Confirm verification code delivery";
+"lng_myowngram_send_gateway_delivery_reports_about" = "Notify services using Telegram Gateway when their verification messages reach this app.";
 
 // Keys finished

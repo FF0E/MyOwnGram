@@ -204,9 +204,9 @@ void BuildDataSharingSection(SectionBuilder &builder) {
 
 	builder.addSkip();
 	builder.addSubsectionTitle({
-		.id = u"myowngram/data_sharing/service_confirmations"_q,
-		.title = tr::lng_myowngram_service_confirmations(),
-		.keywords = { u"service"_q, u"confirmations"_q, u"delivery"_q },
+		.id = u"myowngram/data_sharing/verification_messages"_q,
+		.title = tr::lng_myowngram_verification_messages(),
+		.keywords = { u"verification"_q, u"messages"_q, u"delivery"_q },
 	});
 	AddMyOwnGramToggle(
 		builder,
