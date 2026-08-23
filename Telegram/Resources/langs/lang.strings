@@ -8621,22 +8621,25 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 // MyOwnGram
 
 "lng_myowngram_settings" = "MyOwnGram Settings";
-"lng_myowngram_categories" = "Categories";
+"lng_myowngram_privacy" = "Privacy";
+"lng_myowngram_data_sharing" = "Data sharing";
 "lng_myowngram_general" = "General";
-"lng_myowngram_keep_preferences_on_last_logout" = "Keep app preferences after final logout";
-"lng_myowngram_keep_preferences_on_last_logout_about" = "Keep device-wide Telegram preferences, including your theme and wallpaper, when the last account is removed. Account data and the local passcode are still removed. MyOwnGram activity reporting choices are kept either way.";
-"lng_myowngram_activity_reporting" = "Activity reporting";
-"lng_myowngram_send_typing_status" = "Send typing status";
-"lng_myowngram_send_typing_status_about" = "Send typing activity to Telegram so others can see when you are typing. This setting applies to every account on this device.";
-"lng_myowngram_send_read_metrics" = "Send channel post viewing metrics";
-"lng_myowngram_send_read_metrics_about" = "Send Telegram detailed channel post metrics, including time in view, active viewing time, and visible proportions. This setting applies to every account on this device.";
-"lng_myowngram_send_music_listen_reports" = "Send music listening duration";
-"lng_myowngram_send_music_listen_reports_about" = "Send Telegram the number of seconds you listen to songs in the app. This setting applies to every account on this device.";
-"lng_myowngram_send_premium_promo_analytics" = "Send Premium promotion analytics";
-"lng_myowngram_send_premium_promo_analytics_about" = "Send Telegram events when you view or accept an offer on the Premium promotion screen. This setting applies to every account on this device.";
-"lng_myowngram_upload_call_diagnostics" = "Upload requested call diagnostics";
-"lng_myowngram_upload_call_diagnostics_about" = "Upload call engine diagnostics when Telegram requests them after a call. This setting applies to every account on this device.";
-"lng_myowngram_send_gateway_delivery_reports" = "Send verification delivery reports";
-"lng_myowngram_send_gateway_delivery_reports_about" = "Acknowledge supported Telegram Gateway verification messages delivered to this app. Turning this off may affect delivery confirmation. This setting applies to every account on this device.";
+"lng_myowngram_app_data" = "App data";
+"lng_myowngram_keep_preferences_on_last_logout" = "Keep preferences after removing all accounts";
+"lng_myowngram_keep_preferences_on_last_logout_about" = "Preserve device-wide Telegram preferences, including your theme and wallpaper, when the last account is removed. Account data and the local passcode are still removed.";
+"lng_myowngram_activity_visibility" = "Activity visibility";
+"lng_myowngram_send_typing_status" = "Share typing status";
+"lng_myowngram_send_typing_status_about" = "Allow people in chats to see when you are typing.";
+"lng_myowngram_usage_data" = "Usage data";
+"lng_myowngram_send_read_metrics" = "Share channel viewing data";
+"lng_myowngram_send_music_listen_reports" = "Share music listening activity";
+"lng_myowngram_usage_data_about" = "Channel viewing data includes time in view, active viewing time, and visible proportions. Music listening activity includes the number of seconds you listen to songs in the app.";
+"lng_myowngram_analytics_diagnostics" = "Analytics and diagnostics";
+"lng_myowngram_send_premium_promo_analytics" = "Share Premium promotion analytics";
+"lng_myowngram_upload_call_diagnostics" = "Upload call diagnostics";
+"lng_myowngram_analytics_diagnostics_about" = "Premium promotion analytics include events when you view or accept an offer. Call diagnostics include technical call data uploaded when Telegram requests it after a call.";
+"lng_myowngram_service_confirmations" = "Service confirmations";
+"lng_myowngram_send_gateway_delivery_reports" = "Send verification delivery confirmations";
+"lng_myowngram_send_gateway_delivery_reports_about" = "Confirm when supported Telegram Gateway verification messages reach this app. Disabling this may affect delivery confirmation.";
 
 // Keys finished
