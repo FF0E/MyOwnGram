@@ -19,21 +19,91 @@ struct Setting {
 	rpl::event_stream<bool> changes;
 };
 
+struct StoryPolicySetting {
+	Setting allow;
+	Setting ask;
+	rpl::event_stream<StoryActionPolicy> changes;
+};
+
 Setting SendTypingStatusState = {
 	.key = "myowngram.activity_reporting.send_typing_status",
 };
-Setting SendStoryViewReportsState = {
-	.key = "myowngram.activity_reporting.send_story_view_reports",
+StoryPolicySetting StoryViewState = {
+	.allow = {
+		.key = "myowngram.activity_reporting.send_story_view_reports",
+	},
+	.ask = {
+		.key = "myowngram.activity_reporting.ask_story_view_reports",
+		.fallback = false,
+	},
 };
-Setting AskStoryViewReportsState = {
-	.key = "myowngram.activity_reporting.ask_story_view_reports",
-	.fallback = false,
+StoryPolicySetting StoryReactionState = {
+	.allow = {
+		.key = "myowngram.activity_reporting.send_story_reactions",
+	},
+	.ask = {
+		.key = "myowngram.activity_reporting.ask_story_reactions",
+		.fallback = false,
+	},
+};
+StoryPolicySetting StoryReplyState = {
+	.allow = {
+		.key = "myowngram.activity_reporting.send_story_replies",
+	},
+	.ask = {
+		.key = "myowngram.activity_reporting.ask_story_replies",
+		.fallback = false,
+	},
+};
+StoryPolicySetting StoryShareState = {
+	.allow = {
+		.key = "myowngram.activity_reporting.send_story_shares",
+	},
+	.ask = {
+		.key = "myowngram.activity_reporting.ask_story_shares",
+		.fallback = false,
+	},
+};
+StoryPolicySetting StoryLinkState = {
+	.allow = {
+		.key = "myowngram.activity_reporting.open_story_links",
+	},
+	.ask = {
+		.key = "myowngram.activity_reporting.ask_story_links",
+		.fallback = false,
+	},
+};
+StoryPolicySetting LiveStoryJoinState = {
+	.allow = {
+		.key = "myowngram.activity_reporting.join_live_stories",
+	},
+	.ask = {
+		.key = "myowngram.activity_reporting.ask_live_story_joins",
+		.fallback = false,
+	},
+};
+StoryPolicySetting LiveStoryReactionState = {
+	.allow = {
+		.key = "myowngram.activity_reporting.send_live_story_reactions",
+	},
+	.ask = {
+		.key = "myowngram.activity_reporting.ask_live_story_reactions",
+		.fallback = false,
+	},
+};
+StoryPolicySetting LiveStoryCommentState = {
+	.allow = {
+		.key = "myowngram.activity_reporting.send_live_story_comments",
+	},
+	.ask = {
+		.key = "myowngram.activity_reporting.ask_live_story_comments",
+		.fallback = false,
+	},
 };
 Setting RememberWatchedStoriesState = {
 	.key = "myowngram.activity_reporting.remember_watched_stories",
 	.fallback = false,
 };
-rpl::event_stream<StoryViewPolicy> StoryViewReportsChangesStream;
 Setting SendReadMetricsState = {
 	.key = "myowngram.activity_reporting.send_read_metrics",
 };
@@ -68,6 +138,28 @@ void Write(Setting &setting, bool enabled) {
 	setting.changes.fire_copy(enabled);
 }
 
+StoryPolicySetting &PolicySetting(StoryAction action) {
+	switch (action) {
+	case StoryAction::View:
+		return StoryViewState;
+	case StoryAction::Reaction:
+		return StoryReactionState;
+	case StoryAction::Reply:
+		return StoryReplyState;
+	case StoryAction::Share:
+		return StoryShareState;
+	case StoryAction::Link:
+		return StoryLinkState;
+	case StoryAction::LiveJoin:
+		return LiveStoryJoinState;
+	case StoryAction::LiveReaction:
+		return LiveStoryReactionState;
+	case StoryAction::LiveComment:
+		return LiveStoryCommentState;
+	}
+	Unexpected("StoryAction value.");
+}
+
 } // namespace
 
 bool SendTypingStatus() {
@@ -78,37 +170,39 @@ void SetSendTypingStatus(bool enabled) {
 	Write(SendTypingStatusState, enabled);
 }
 
-StoryViewPolicy StoryViewReports() {
-	return !Read(SendStoryViewReportsState)
-		? StoryViewPolicy::Block
-		: Read(AskStoryViewReportsState)
-		? StoryViewPolicy::Ask
-		: StoryViewPolicy::Allow;
+StoryActionPolicy StoryPolicy(StoryAction action) {
+	const auto &setting = PolicySetting(action);
+	return !Read(setting.allow)
+		? StoryActionPolicy::Block
+		: Read(setting.ask)
+		? StoryActionPolicy::Ask
+		: StoryActionPolicy::Allow;
 }
 
-rpl::producer<StoryViewPolicy> StoryViewReportsChanges() {
-	return StoryViewReportsChangesStream.events();
+rpl::producer<StoryActionPolicy> StoryPolicyChanges(StoryAction action) {
+	return PolicySetting(action).changes.events();
 }
 
-void SetStoryViewReports(StoryViewPolicy policy) {
-	if (StoryViewReports() == policy) {
+void SetStoryPolicy(StoryAction action, StoryActionPolicy policy) {
+	auto &setting = PolicySetting(action);
+	if (StoryPolicy(action) == policy) {
 		return;
 	}
 	switch (policy) {
-	case StoryViewPolicy::Allow:
-		Write(AskStoryViewReportsState, false);
-		Write(SendStoryViewReportsState, true);
+	case StoryActionPolicy::Allow:
+		Write(setting.ask, false);
+		Write(setting.allow, true);
 		break;
-	case StoryViewPolicy::Ask:
-		Write(AskStoryViewReportsState, true);
-		Write(SendStoryViewReportsState, true);
+	case StoryActionPolicy::Ask:
+		Write(setting.ask, true);
+		Write(setting.allow, true);
 		break;
-	case StoryViewPolicy::Block:
-		Write(SendStoryViewReportsState, false);
-		Write(AskStoryViewReportsState, false);
+	case StoryActionPolicy::Block:
+		Write(setting.allow, false);
+		Write(setting.ask, false);
 		break;
 	}
-	StoryViewReportsChangesStream.fire_copy(policy);
+	setting.changes.fire_copy(policy);
 }
 
 bool RememberWatchedStories() {

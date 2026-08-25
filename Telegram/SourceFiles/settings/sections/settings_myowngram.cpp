@@ -113,34 +113,35 @@ void AddMyOwnGramGroupFooter(
 	builder.addDividerText(std::move(text));
 }
 
-QString StoryViewPolicyText(ActivityReporting::StoryViewPolicy policy) {
+QString StoryViewPolicyText(ActivityReporting::StoryActionPolicy policy) {
 	switch (policy) {
-	case ActivityReporting::StoryViewPolicy::Allow:
+	case ActivityReporting::StoryActionPolicy::Allow:
 		return tr::lng_myowngram_story_view_policy_allow(tr::now);
-	case ActivityReporting::StoryViewPolicy::Ask:
+	case ActivityReporting::StoryActionPolicy::Ask:
 		return tr::lng_myowngram_story_view_policy_ask(tr::now);
-	case ActivityReporting::StoryViewPolicy::Block:
+	case ActivityReporting::StoryActionPolicy::Block:
 		return tr::lng_myowngram_story_view_policy_block(tr::now);
 	}
 	Unexpected("StoryViewPolicy value.");
 }
 
 rpl::producer<QString> StoryViewPolicyTextValue(
-		ActivityReporting::StoryViewPolicy policy) {
+		ActivityReporting::StoryActionPolicy policy) {
 	switch (policy) {
-	case ActivityReporting::StoryViewPolicy::Allow:
+	case ActivityReporting::StoryActionPolicy::Allow:
 		return tr::lng_myowngram_story_view_policy_allow();
-	case ActivityReporting::StoryViewPolicy::Ask:
+	case ActivityReporting::StoryActionPolicy::Ask:
 		return tr::lng_myowngram_story_view_policy_ask();
-	case ActivityReporting::StoryViewPolicy::Block:
+	case ActivityReporting::StoryActionPolicy::Block:
 		return tr::lng_myowngram_story_view_policy_block();
 	}
 	Unexpected("StoryViewPolicy value.");
 }
 
-rpl::producer<ActivityReporting::StoryViewPolicy> StoryViewPolicyValue() {
-	return rpl::single(ActivityReporting::StoryViewReports())
-		| rpl::then(ActivityReporting::StoryViewReportsChanges());
+rpl::producer<ActivityReporting::StoryActionPolicy> StoryViewPolicyValue() {
+	const auto action = ActivityReporting::StoryAction::View;
+	return rpl::single(ActivityReporting::StoryPolicy(action))
+		| rpl::then(ActivityReporting::StoryPolicyChanges(action));
 }
 
 void AddStoryViewPolicy(SectionBuilder &builder) {
@@ -156,19 +157,21 @@ void AddStoryViewPolicy(SectionBuilder &builder) {
 		) | rpl::map(StoryViewPolicyTextValue) | rpl::flatten_latest(),
 		.onClick = [=] {
 			const auto options = std::vector{
-				StoryViewPolicyText(ActivityReporting::StoryViewPolicy::Allow),
-				StoryViewPolicyText(ActivityReporting::StoryViewPolicy::Ask),
-				StoryViewPolicyText(ActivityReporting::StoryViewPolicy::Block),
+				StoryViewPolicyText(ActivityReporting::StoryActionPolicy::Allow),
+				StoryViewPolicyText(ActivityReporting::StoryActionPolicy::Ask),
+				StoryViewPolicyText(ActivityReporting::StoryActionPolicy::Block),
 			};
 			controller->show(Box([=](not_null<Ui::GenericBox*> box) {
 				SingleChoiceBox(box, {
 					.title = tr::lng_myowngram_story_view_reports(),
 					.options = options,
 					.initialSelection = static_cast<int>(
-						ActivityReporting::StoryViewReports()),
+						ActivityReporting::StoryPolicy(
+							ActivityReporting::StoryAction::View)),
 					.callback = [](int index) {
-						ActivityReporting::SetStoryViewReports(
-							static_cast<ActivityReporting::StoryViewPolicy>(
+						ActivityReporting::SetStoryPolicy(
+							ActivityReporting::StoryAction::View,
+							static_cast<ActivityReporting::StoryActionPolicy>(
 								index));
 					},
 				});
@@ -246,8 +249,8 @@ void BuildPrivacySection(SectionBuilder &builder) {
 			u"storage"_q,
 		},
 		.shown = StoryViewPolicyValue(
-		) | rpl::map([](ActivityReporting::StoryViewPolicy policy) {
-			return policy != ActivityReporting::StoryViewPolicy::Allow;
+		) | rpl::map([](ActivityReporting::StoryActionPolicy policy) {
+			return policy != ActivityReporting::StoryActionPolicy::Allow;
 		}),
 	});
 	if (remember) {

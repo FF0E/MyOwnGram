@@ -9,7 +9,18 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 namespace MyOwnGram::ActivityReporting {
 
-enum class StoryViewPolicy {
+enum class StoryAction {
+	View,
+	Reaction,
+	Reply,
+	Share,
+	Link,
+	LiveJoin,
+	LiveReaction,
+	LiveComment,
+};
+
+enum class StoryActionPolicy {
 	Allow,
 	Ask,
 	Block,
@@ -18,9 +29,10 @@ enum class StoryViewPolicy {
 [[nodiscard]] bool SendTypingStatus();
 void SetSendTypingStatus(bool enabled);
 
-[[nodiscard]] StoryViewPolicy StoryViewReports();
-[[nodiscard]] rpl::producer<StoryViewPolicy> StoryViewReportsChanges();
-void SetStoryViewReports(StoryViewPolicy policy);
+[[nodiscard]] StoryActionPolicy StoryPolicy(StoryAction action);
+[[nodiscard]] rpl::producer<StoryActionPolicy> StoryPolicyChanges(
+	StoryAction action);
+void SetStoryPolicy(StoryAction action, StoryActionPolicy policy);
 
 [[nodiscard]] bool RememberWatchedStories();
 [[nodiscard]] rpl::producer<bool> RememberWatchedStoriesChanges();

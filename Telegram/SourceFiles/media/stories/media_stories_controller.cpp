@@ -316,8 +316,9 @@ Controller::Controller(not_null<Delegate*> delegate)
 , _weatherInCelsius(ResolveWeatherInCelsius()){
 	initLayout();
 
-	ActivityReporting::StoryViewReportsChanges(
-	) | rpl::on_next([=](ActivityReporting::StoryViewPolicy) {
+	ActivityReporting::StoryPolicyChanges(
+		ActivityReporting::StoryAction::View
+	) | rpl::on_next([=](ActivityReporting::StoryActionPolicy) {
 		clearStoryViewReportDecisions();
 	}, _lifetime);
 
@@ -1368,9 +1369,10 @@ void Controller::markAsRead() {
 		return;
 	}
 	_viewed = true;
-	const auto policy = ActivityReporting::StoryViewReports();
+	const auto policy = ActivityReporting::StoryPolicy(
+		ActivityReporting::StoryAction::View);
 	if (!shownPeer()->isSelf()
-		&& policy == ActivityReporting::StoryViewPolicy::Ask) {
+		&& policy == ActivityReporting::StoryActionPolicy::Ask) {
 		askForStoryViewReport(_shown, _started);
 	} else {
 		shownPeer()->owner().stories().markAsRead(_shown, _started);

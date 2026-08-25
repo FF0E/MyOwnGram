@@ -58,9 +58,9 @@ constexpr auto kPollingViewsPerPage = Story::kRecentViewersMax;
 using UpdateFlag = StoryUpdate::Flag;
 
 [[nodiscard]] bool ShouldSendStoryViewReport(
-		::MyOwnGram::ActivityReporting::StoryViewPolicy policy,
+		::MyOwnGram::ActivityReporting::StoryActionPolicy policy,
 		StoryViewReport report) {
-	using Policy = ::MyOwnGram::ActivityReporting::StoryViewPolicy;
+	using Policy = ::MyOwnGram::ActivityReporting::StoryActionPolicy;
 	switch (report) {
 	case StoryViewReport::Default:
 		return policy == Policy::Allow;
@@ -216,9 +216,10 @@ Stories::Stories(not_null<Session*> owner)
 , _pollingViewsTimer([=] { sendPollingViewsRequests(); }) {
 	namespace ActivityReporting = ::MyOwnGram::ActivityReporting;
 	readLocalReadTills();
-	ActivityReporting::StoryViewReportsChanges(
-	) | rpl::on_next([=](ActivityReporting::StoryViewPolicy policy) {
-		if (policy != ActivityReporting::StoryViewPolicy::Allow) {
+	ActivityReporting::StoryPolicyChanges(
+		ActivityReporting::StoryAction::View
+	) | rpl::on_next([=](ActivityReporting::StoryActionPolicy policy) {
+		if (policy != ActivityReporting::StoryActionPolicy::Allow) {
 			clearPendingViewReports();
 		}
 	}, _lifetime);
@@ -1311,7 +1312,7 @@ void Stories::markAsRead(
 	}
 	namespace ActivityReporting = ::MyOwnGram::ActivityReporting;
 	const auto shouldSend = ShouldSendStoryViewReport(
-		ActivityReporting::StoryViewReports(),
+		ActivityReporting::StoryPolicy(ActivityReporting::StoryAction::View),
 		report);
 	const auto story = *maybeStory;
 	const auto expiredInProfile = story->expired() && story->inProfile();
