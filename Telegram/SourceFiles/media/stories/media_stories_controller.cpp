@@ -1418,8 +1418,14 @@ void Controller::askForStoryViewReport(FullStoryId id, bool viewed) {
 			lt_name,
 			rpl::single(tr::bold(name)),
 			tr::marked),
-		.confirmed = [=] { resolve(true); },
-		.cancelled = [=] { resolve(false); },
+		.confirmed = [=](Fn<void()> close) {
+			resolve(true);
+			close();
+		},
+		.cancelled = [=](Fn<void()> close) {
+			resolve(false);
+			close();
+		},
 		.confirmText = tr::lng_myowngram_story_view_prompt_allow(),
 		.cancelText = tr::lng_myowngram_story_view_prompt_block(),
 		.labelStyle = &st::storiesBoxLabel,
