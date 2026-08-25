@@ -27,6 +27,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_context_menu.h" // CopyStoryLink.
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
+#include "myowngram/story_action_permission.h"
 #include "settings/settings_credits_graphics.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/text/text_utilities.h"
@@ -54,13 +55,23 @@ namespace Media::Stories {
 
 	auto copyCallback = [=] {
 		const auto story = resolve();
-		if (!story) {
+		if (!story || !story->hasDirectLink()) {
 			return;
 		}
-		if (story->hasDirectLink()) {
-			using namespace HistoryView;
-			CopyStoryLink(show, story->fullId());
-		}
+		MyOwnGram::RequestInteractiveStoryAction(
+			show,
+			MyOwnGram::ActivityReporting::StoryAction::Share,
+			story->peer(),
+			[=] {
+				const auto story = resolve();
+				if (!story || !story->hasDirectLink()) {
+					return;
+				}
+				using namespace HistoryView;
+				CopyStoryLink(show, story->fullId());
+			},
+			nullptr,
+			viewerStyle);
 	};
 
 	struct State {
@@ -85,29 +96,41 @@ namespace Media::Stories {
 	auto countMessagesCallback = [=](const TextWithTags &comment) {
 		return (shareJustLink || comment.text.isEmpty()) ? 1 : 2;
 	};
-	auto submitCallback = [=](
+	auto checkStorySubmission = [=](
+			const std::vector<not_null<Data::Thread*>> &result,
+			const TextWithTags &comment,
+			Fn<bool()> &checkPaid) {
+		if (state->requests) {
+			return false;
+		}
+		const auto story = resolve();
+		if (!story) {
+			return false;
+		}
+		const auto error = GetErrorForSending(
+			result,
+			{ .story = shareJustLink ? nullptr : story, .text = &comment });
+		if (error.error) {
+			show->showBox(MakeSendErrorBox(error, result.size() > 1));
+			return false;
+		}
+		return checkPaid();
+	};
+	auto submitStory = [=](
 			std::vector<not_null<Data::Thread*>> &&result,
 			Fn<bool()> checkPaid,
 			TextWithTags &&comment,
 			Api::SendOptions options,
 			Data::ForwardOptions forwardOptions) {
-		if (state->requests) {
-			return; // Share clicked already.
+		if (!checkStorySubmission(result, comment, checkPaid)) {
+			return;
 		}
 		const auto story = resolve();
 		if (!story) {
 			return;
 		}
 		const auto peer = story->peer();
-		const auto error = GetErrorForSending(
-			result,
-			{ .story = shareJustLink ? nullptr : story, .text = &comment });
-		if (error.error) {
-			show->showBox(MakeSendErrorBox(error, result.size() > 1));
-			return;
-		} else if (!checkPaid()) {
-			return;
-		} else if (shareJustLink) {
+		if (shareJustLink) {
 			const auto url = session->api().exportDirectStoryLink(story);
 			if (!comment.text.isEmpty()) {
 				comment.text = url + "\n" + comment.text;
@@ -219,6 +242,45 @@ namespace Media::Stories {
 				});
 			++state->requests;
 		}
+	};
+	auto submitCallback = [=](
+			std::vector<not_null<Data::Thread*>> &&result,
+			Fn<bool()> checkPaid,
+			TextWithTags &&comment,
+			Api::SendOptions options,
+			Data::ForwardOptions forwardOptions) {
+		using Policy = MyOwnGram::ActivityReporting::StoryActionPolicy;
+		const auto paymentChecked = (
+			MyOwnGram::ActivityReporting::StoryPolicy(
+				MyOwnGram::ActivityReporting::StoryAction::Share)
+			== Policy::Ask);
+		if (paymentChecked
+			&& !checkStorySubmission(result, comment, checkPaid)) {
+			return;
+		}
+		const auto story = resolve();
+		if (!story || state->requests) {
+			return;
+		}
+		state->requests = -1;
+		MyOwnGram::RequestInteractiveStoryAction(
+			show,
+			MyOwnGram::ActivityReporting::StoryAction::Share,
+			story->peer(),
+			[=,
+				result = std::move(result),
+				checkPaid = std::move(checkPaid),
+				comment = std::move(comment)]() mutable {
+				state->requests = 0;
+				submitStory(
+					std::move(result),
+					std::move(checkPaid),
+					std::move(comment),
+					options,
+					forwardOptions);
+			},
+			[=] { state->requests = 0; },
+			viewerStyle);
 	};
 	const auto st = viewerStyle
 		? ::Settings::DarkCreditsEntryBoxStyle()
