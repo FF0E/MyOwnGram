@@ -103,6 +103,7 @@ private:
 
 	[[nodiscard]] Main::Session &session() const;
 	[[nodiscard]] not_null<History*> history() const;
+	void requestSend(Fn<void()> send);
 
 	bool send(
 		Api::MessageToSend message,

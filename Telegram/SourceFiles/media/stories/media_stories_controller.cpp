@@ -47,6 +47,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "media/stories/media_stories_view.h"
 #include "media/audio/media_audio.h"
 #include "myowngram/activity_reporting_settings.h"
+#include "myowngram/story_action_permission.h"
 #include "info/stories/info_stories_common.h"
 #include "payments/payments_reaction_process.h"
 #include "settings/settings_credits_graphics.h"
@@ -85,6 +86,27 @@ constexpr auto kPreloadNextMediaCount = 3;
 constexpr auto kPreloadPreviousMediaCount = 1;
 constexpr auto kMarkAsReadAfterSeconds = 0.2;
 constexpr auto kMarkAsReadAfterProgress = 0.;
+
+constexpr ActivityReporting::StoryAction StoryReactionAction(
+		ReactionsMode mode,
+		bool live) {
+	return (mode == ReactionsMode::Message)
+		? (live
+			? ActivityReporting::StoryAction::LiveComment
+			: ActivityReporting::StoryAction::Reply)
+		: (live
+			? ActivityReporting::StoryAction::LiveReaction
+			: ActivityReporting::StoryAction::Reaction);
+}
+
+static_assert(StoryReactionAction(ReactionsMode::Message, false)
+	== ActivityReporting::StoryAction::Reply);
+static_assert(StoryReactionAction(ReactionsMode::Reaction, false)
+	== ActivityReporting::StoryAction::Reaction);
+static_assert(StoryReactionAction(ReactionsMode::Message, true)
+	== ActivityReporting::StoryAction::LiveComment);
+static_assert(StoryReactionAction(ReactionsMode::Reaction, true)
+	== ActivityReporting::StoryAction::LiveReaction);
 
 struct SameDayRange {
 	int from = 0;
@@ -343,9 +365,23 @@ Controller::Controller(not_null<Delegate*> delegate)
 
 	_reactions->chosen(
 	) | rpl::on_next([=](Reactions::Chosen chosen) {
-		if (reactionChosen(chosen.mode, chosen.reaction)) {
-			_reactions->animateAndProcess(std::move(chosen));
-		}
+		const auto mode = chosen.mode;
+		const auto reaction = chosen.reaction;
+		requestReaction(
+			mode,
+			[=] {
+				if (mode == ReactionsMode::Message) {
+					return _replyArea->sendReaction(reaction.id);
+				} else if (const auto peer = shownPeer()) {
+					peer->owner().stories().sendReaction(_shown, reaction.id);
+					return true;
+				}
+				return false;
+			},
+			[=, chosen = std::move(chosen)]() mutable {
+				_reactions->animateAndProcess(std::move(chosen));
+			});
+		unfocusReply();
 	}, _lifetime);
 
 	_delegate->storiesLayerShown(
@@ -674,15 +710,29 @@ void Controller::toggleLiked() {
 	_reactions->toggleLiked();
 }
 
-bool Controller::reactionChosen(ReactionsMode mode, ChosenReaction chosen) {
-	auto result = true;
-	if (mode == ReactionsMode::Message) {
-		result = _replyArea->sendReaction(chosen.id);
-	} else if (const auto peer = shownPeer()) {
-		peer->owner().stories().sendReaction(_shown, chosen.id);
+void Controller::requestReaction(
+		ReactionsMode mode,
+		Fn<bool()> send,
+		Fn<void()> done) const {
+	const auto peer = shownPeer();
+	const auto current = story();
+	if (!peer || !current) {
+		return;
 	}
-	unfocusReply();
-	return result;
+	const auto weak = base::make_weak(this);
+	const auto id = current->fullId();
+	const auto action = StoryReactionAction(mode, current->call() != nullptr);
+	MyOwnGram::RequestInteractiveStoryAction(
+		uiShow(),
+		action,
+		peer,
+		[id, weak, send = std::move(send), done = std::move(done)]() mutable {
+			const auto strong = weak.get();
+			const auto now = strong ? strong->story() : nullptr;
+			if (now && now->fullId() == id && send()) {
+				done();
+			}
+		});
 }
 
 rpl::producer<int> Controller::paidReactionToastTopValue() const {
@@ -1277,18 +1327,35 @@ ClickHandlerPtr Controller::lookupAreaHandler(QPoint point) const {
 			auto widget = _reactions->makeSuggestedReactionWidget(
 				suggestedReaction);
 			const auto raw = widget.get();
+			const auto weakWidget = base::make_weak(raw);
 			_areas.push_back({
 				.original = suggestedReaction.area.geometry,
 				.rotation = suggestedReaction.area.rotation,
 				.handler = std::make_shared<LambdaClickHandler>([=] {
-					raw->playEffect();
-					if (const auto now = story()) {
-						if (now->sentReactionId() != id) {
+					const auto now = story();
+					if (!now || now->sentReactionId() == id) {
+						if (const auto strong = weakWidget.get()) {
+							strong->playEffect();
+						}
+						return;
+					}
+					requestReaction(
+						ReactionsMode::Reaction,
+						[=] {
+							const auto now = story();
+							if (!now || now->sentReactionId() == id) {
+								return false;
+							}
 							now->owner().stories().sendReaction(
 								now->fullId(),
 								id);
-						}
-					}
+							return true;
+						},
+						[=] {
+							if (const auto strong = weakWidget.get()) {
+								strong->playEffect();
+							}
+						});
 				}),
 				.view = std::move(widget),
 			});
@@ -1901,10 +1968,21 @@ void Controller::setStarsReactionIncrements(rpl::producer<int> increments) {
 	std::move(
 		increments
 	) | rpl::on_next([=](int count) {
-		if (const auto call = _videoStreamCall.get()) {
-			const auto show = _delegate->storiesShow();
-			Payments::TryAddingPaidReaction(call, count, show);
+		const auto peer = shownPeer();
+		if (!_videoStreamCall || !peer) {
+			return;
 		}
+		const auto call = _videoStreamCall;
+		const auto show = _delegate->storiesShow();
+		MyOwnGram::RequestInteractiveStoryAction(
+			show,
+			ActivityReporting::StoryAction::LiveReaction,
+			peer,
+			[=] {
+				if (const auto strong = call.get()) {
+					Payments::TryAddingPaidReaction(strong, count, show);
+				}
+			});
 	}, _videoStreamLifetime);
 }
 

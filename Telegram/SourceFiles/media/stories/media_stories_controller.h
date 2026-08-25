@@ -39,7 +39,6 @@ struct SendStarButtonEffect;
 } // namespace HistoryView::Controls
 
 namespace HistoryView::Reactions {
-struct ChosenReaction;
 enum class AttachSelectorResult;
 } // namespace HistoryView::Reactions
 
@@ -216,7 +215,6 @@ public:
 private:
 	class PhotoPlayback;
 	class Unsupported;
-	using ChosenReaction = HistoryView::Reactions::ChosenReaction;
 	struct StoriesList {
 		not_null<PeerData*> peer;
 		Data::StoriesIds ids;
@@ -311,7 +309,10 @@ private:
 
 	[[nodiscard]] int repostSkipTop() const;
 	void updateAreas(Data::Story *story);
-	bool reactionChosen(ReactionsMode mode, ChosenReaction chosen);
+	void requestReaction(
+		ReactionsMode mode,
+		Fn<bool()> send,
+		Fn<void()> done) const;
 	[[nodiscard]] rpl::producer<int> paidReactionToastTopValue() const;
 	void clearVideoStreamCall();
 

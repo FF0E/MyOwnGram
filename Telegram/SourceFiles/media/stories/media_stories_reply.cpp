@@ -46,6 +46,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "media/stories/media_stories_stealth.h"
 #include "media/view/media_view_video_stream.h"
 #include "menu/menu_send.h"
+#include "myowngram/story_action_permission.h"
 #include "payments/ui/payments_reaction_box.h" // MaxTopPaidDonorsShown
 #include "settings/settings_credits_graphics.h" // DarkCreditsEntryBoxStyle
 #include "storage/localimageloader.h"
@@ -500,7 +501,9 @@ void ReplyArea::finishSending(bool skipToast) {
 void ReplyArea::uploadFile(
 		const QByteArray &fileContent,
 		SendMediaType type) {
-	session().api().sendFile(fileContent, type, prepareSendAction({}));
+	requestSend([=] {
+		session().api().sendFile(fileContent, type, prepareSendAction({}));
+	});
 }
 
 bool ReplyArea::showSendingFilesError(
@@ -665,7 +668,7 @@ bool ReplyArea::confirmSendingFiles(
 			std::shared_ptr<Ui::PreparedBundle> bundle,
 			Api::SendOptions options,
 			FullReplyTo) {
-		sendingFilesConfirmed(std::move(bundle), options);
+		requestSend([=] { sendingFilesConfirmed(bundle, options); });
 	};
 	show->show(Box<SendFilesBox>(SendFilesBoxDescriptor{
 		.show = show,
@@ -735,6 +738,29 @@ bool ReplyArea::confirmSendingFiles(
 	return confirmSendingFiles(std::move(list), insertTextOnCancel);
 }
 
+void ReplyArea::requestSend(Fn<void()> send) {
+	const auto peer = _data.peer;
+	if (!peer) {
+		return;
+	}
+	const auto id = _data.id;
+	const auto live = (_data.videoStream != nullptr);
+	const auto action = live
+		? MyOwnGram::ActivityReporting::StoryAction::LiveComment
+		: MyOwnGram::ActivityReporting::StoryAction::Reply;
+	MyOwnGram::RequestInteractiveStoryAction(
+		_controller->uiShow(),
+		action,
+		peer,
+		crl::guard(this, [=, send = std::move(send)]() mutable {
+			if (_data.peer == peer
+				&& _data.id == id
+				&& (_data.videoStream != nullptr) == live) {
+				send();
+			}
+		}));
+}
+
 void ReplyArea::initActions() {
 	_controls->cancelRequests(
 	) | rpl::on_next([=] {
@@ -743,12 +769,12 @@ void ReplyArea::initActions() {
 
 	_controls->sendRequests(
 	) | rpl::on_next([=](Api::SendOptions options) {
-		send(options);
+		requestSend([=] { send(options); });
 	}, _lifetime);
 
 	_controls->sendVoiceRequests(
 	) | rpl::on_next([=](const VoiceToSend &data) {
-		sendVoice(data);
+		requestSend([=] { sendVoice(data); });
 	}, _lifetime);
 
 	_controls->attachRequests(
@@ -765,30 +791,38 @@ void ReplyArea::initActions() {
 	_controls->setSendAsFileConfirmed(crl::guard(this, [=](
 			std::shared_ptr<Ui::PreparedBundle> bundle,
 			Api::SendOptions options) {
-		sendingFilesConfirmed(std::move(bundle), options);
+		requestSend([=] { sendingFilesConfirmed(bundle, options); });
 	}));
 
 	_controls->fileChosen(
 	) | rpl::on_next([=](ChatHelpers::FileChosen data) {
 		_controller->uiShow()->hideLayer();
-		auto messageToSend = Api::MessageToSend(
-			prepareSendAction(data.options));
-		messageToSend.textWithTags = base::take(data.caption);
-		sendExistingDocument(
-			data.document,
-			std::move(messageToSend),
-			data.messageSendingFrom.localId);
+		requestSend([=, data = std::move(data)]() mutable {
+			auto messageToSend = Api::MessageToSend(
+				prepareSendAction(data.options));
+			messageToSend.textWithTags = base::take(data.caption);
+			sendExistingDocument(
+				data.document,
+				std::move(messageToSend),
+				data.messageSendingFrom.localId);
+		});
 	}, _lifetime);
 
 	_controls->photoChosen(
 	) | rpl::on_next([=](ChatHelpers::PhotoChosen chosen) {
-		sendExistingPhoto(chosen.photo, chosen.options);
+		requestSend([=] { sendExistingPhoto(chosen.photo, chosen.options); });
 	}, _lifetime);
 
 	_controls->inlineResultChosen(
 	) | rpl::on_next([=](ChatHelpers::InlineChosen chosen) {
-		const auto localId = chosen.messageSendingFrom.localId;
-		sendInlineResult(chosen.result, chosen.bot, chosen.options, localId);
+		requestSend([=] {
+			const auto localId = chosen.messageSendingFrom.localId;
+			sendInlineResult(
+				chosen.result,
+				chosen.bot,
+				chosen.options,
+				localId);
+		});
 	}, _lifetime);
 
 	_controls->likeToggled(
