@@ -107,6 +107,8 @@ public:
 
 	void updatePlayback(const Player::TrackState &state);
 	[[nodiscard]] ClickHandlerPtr lookupAreaHandler(QPoint point) const;
+	[[nodiscard]] bool requiresLinkPermission(
+		const ClickHandlerPtr &handler) const;
 
 	[[nodiscard]] bool subjumpAvailable(int delta) const;
 	[[nodiscard]] bool subjumpFor(int delta) const;

@@ -1032,8 +1032,10 @@ void Controller::show(
 void Controller::jumpTo(
 		not_null<Data::Story*> story,
 		Data::StoriesContext context) {
-	show(story, std::move(context));
-	_delegate->storiesRedisplay(story);
+	_delegate->storiesJumpTo(
+		&story->session(),
+		story->fullId(),
+		std::move(context));
 }
 
 bool Controller::changeShown(Data::Story *story) {

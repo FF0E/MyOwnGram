@@ -4375,7 +4375,9 @@ void OverlayWidget::show(OpenRequest request) {
 				return;
 			}
 			showAllowed(OpenRequest(controller, *maybeStory, context));
-		}));
+		}),
+		nullptr,
+		false);
 }
 
 void OverlayWidget::showAllowed(OpenRequest request) {

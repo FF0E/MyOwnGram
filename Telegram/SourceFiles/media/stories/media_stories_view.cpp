@@ -64,6 +64,10 @@ ClickHandlerPtr View::lookupAreaHandler(QPoint point) const {
 	return _controller->lookupAreaHandler(point);
 }
 
+bool View::requiresLinkPermission(const ClickHandlerPtr &handler) const {
+	return _controller->requiresLinkPermission(handler);
+}
+
 bool View::subjumpAvailable(int delta) const {
 	return _controller->subjumpAvailable(delta);
 }
