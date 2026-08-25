@@ -1320,6 +1320,7 @@ ClickHandlerPtr Controller::lookupAreaHandler(QPoint point) const {
 				.rotation = location.area.rotation,
 				.handler = std::make_shared<LocationClickHandler>(
 					location.point),
+				.requiresLinkPermission = true,
 			});
 		}
 		for (const auto &suggestedReaction : _suggestedReactions) {
@@ -1368,6 +1369,7 @@ ClickHandlerPtr Controller::lookupAreaHandler(QPoint point) const {
 					.handler = MakeChannelPostHandler(
 						session,
 						channelPost.itemId),
+					.requiresLinkPermission = true,
 				});
 			}
 		}
@@ -1377,6 +1379,7 @@ ClickHandlerPtr Controller::lookupAreaHandler(QPoint point) const {
 				.original = url.area.geometry,
 				.rotation = url.area.rotation,
 				.handler = MakeUrlAreaHandler(weak, url.url),
+				.requiresLinkPermission = true,
 			});
 		}
 		for (const auto &weather : _weatherAreas) {
@@ -1406,6 +1409,16 @@ ClickHandlerPtr Controller::lookupAreaHandler(QPoint point) const {
 		}
 	}
 	return nullptr;
+}
+
+bool Controller::requiresLinkPermission(
+		const ClickHandlerPtr &handler) const {
+	for (const auto &area : _areas) {
+		if (area.handler == handler) {
+			return area.requiresLinkPermission;
+		}
+	}
+	return false;
 }
 
 void Controller::toggleWeatherMode() const {

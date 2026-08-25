@@ -161,6 +161,8 @@ public:
 
 	void updateVideoPlayback(const Player::TrackState &state);
 	[[nodiscard]] ClickHandlerPtr lookupAreaHandler(QPoint point) const;
+	[[nodiscard]] bool requiresLinkPermission(
+		const ClickHandlerPtr &handler) const;
 
 	[[nodiscard]] bool subjumpAvailable(int delta) const;
 	[[nodiscard]] bool subjumpFor(int delta);
@@ -240,6 +242,7 @@ private:
 		float64 rotation = 0.;
 		float64 radius = 0.;
 		ClickHandlerPtr handler;
+		bool requiresLinkPermission = false;
 		std::unique_ptr<StoryAreaView> view;
 	};
 	enum class CommentsHas {

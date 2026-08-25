@@ -65,6 +65,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "media/streaming/media_streaming_document.h"
 #include "media/streaming/media_streaming_player.h"
 #include "media/player/media_player_instance.h"
+#include "myowngram/story_action_permission.h"
 #include "history/history.h"
 #include "history/history_item_helpers.h"
 #include "history/view/media/history_view_media.h"
@@ -8168,7 +8169,7 @@ void OverlayWidget::handleMouseRelease(
 		// There may be a mention / hashtag / bot command link.
 		// For now activate account for all activated links.
 		// findWindow() will activate account.
-		ActivateClickHandler(_widget, activated, {
+		const auto context = ClickContext{
 			button,
 			QVariant::fromValue(ClickHandlerContext{
 				.itemId = _message ? _message->fullId() : FullMsgId(),
@@ -8176,7 +8177,29 @@ void OverlayWidget::handleMouseRelease(
 				.show = _stories ? _stories->uiShow() : uiShow(),
 				.dark = true,
 			})
+		};
+		auto activate = crl::guard(_widget, [=] {
+			ActivateClickHandler(_widget, activated, context);
 		});
+		const auto story = _stories ? _stories->story() : nullptr;
+		const auto repost = (_stories && captionGeometry().contains(position))
+			? _stories->lookupRepostHandler(
+				position - captionGeometry().marginsRemoved(
+					st::mediaviewCaptionPadding).topLeft())
+			: Stories::RepostClickHandler();
+		const auto storyLink = story
+			&& (!activated->url().isEmpty()
+				|| _stories->requiresLinkPermission(activated)
+				|| (repost && repost.link == activated));
+		if (storyLink) {
+			MyOwnGram::RequestInteractiveStoryAction(
+				_stories->uiShow(),
+				MyOwnGram::ActivityReporting::StoryAction::Link,
+				story->peer(),
+				std::move(activate));
+		} else {
+			activate();
+		}
 		return;
 	}
 

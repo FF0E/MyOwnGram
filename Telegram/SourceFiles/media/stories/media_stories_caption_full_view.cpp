@@ -13,6 +13,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "media/stories/media_stories_controller.h"
 #include "media/stories/media_stories_view.h"
 #include "media/view/media_view_open_common.h"
+#include "myowngram/story_action_permission.h"
 #include "ui/widgets/elastic_scroll.h"
 #include "ui/widgets/labels.h"
 #include "ui/click_handler.h"
@@ -36,6 +37,25 @@ CaptionFullView::CaptionFullView(not_null<Controller*> controller)
 	_text->setMarkedText(text, Core::TextContext({
 		.session = &controller->uiShow()->session(),
 	}));
+	_text->setClickHandlerFilter([=](
+			const ClickHandlerPtr &handler,
+			Qt::MouseButton button) {
+		const auto story = _controller->story();
+		if (!story || handler->url().isEmpty()) {
+			return true;
+		}
+		MyOwnGram::RequestInteractiveStoryAction(
+			_controller->uiShow(),
+			MyOwnGram::ActivityReporting::StoryAction::Link,
+			story->peer(),
+			crl::guard(_wrap.get(), [=] {
+				ActivateClickHandler(_text.get(), handler, {
+					button,
+					QVariant(),
+				});
+			}));
+		return false;
+	});
 
 	startAnimation();
 	_controller->layoutValue(
@@ -94,9 +114,23 @@ CaptionFullView::CaptionFullView(not_null<Controller*> controller)
 				ClickHandler::pressed();
 			} else if (type == QEvent::MouseButtonRelease) {
 				if (const auto activated = ClickHandler::unpressed()) {
-					ActivateClickHandler(_wrap.get(), activated, {
-						mouse()->button(), QVariant(),
+					const auto button = mouse()->button();
+					const auto story = _controller->story();
+					auto activate = crl::guard(_wrap.get(), [=] {
+						ActivateClickHandler(_wrap.get(), activated, {
+							button,
+							QVariant(),
+						});
 					});
+					if (story) {
+						MyOwnGram::RequestInteractiveStoryAction(
+							_controller->uiShow(),
+							MyOwnGram::ActivityReporting::StoryAction::Link,
+							story->peer(),
+							std::move(activate));
+					} else {
+						activate();
+					}
 				}
 			}
 			return base::EventFilterResult::Continue;
