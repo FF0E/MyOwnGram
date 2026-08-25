@@ -1586,6 +1586,73 @@ bool Controller::subjumpFor(int delta) {
 	return true;
 }
 
+bool Controller::skipForward(not_null<Data::Story*> denied) {
+	if (!shown() || _session != &denied->session()) {
+		return false;
+	}
+	const auto id = denied->fullId();
+	if (id.peer == _shown.peer) {
+		auto deniedIndex = -1;
+		for (auto i = 0, count = shownCount(); i != count; ++i) {
+			if (shownId(i) == id.story) {
+				deniedIndex = i;
+				break;
+			}
+		}
+		if (deniedIndex < 0) {
+			return false;
+		} else if (deniedIndex <= _index) {
+			return true;
+		} else if (++deniedIndex < shownCount()) {
+			subjumpTo(deniedIndex);
+			return true;
+		}
+		return jumpFor(1, false);
+	}
+	if (!v::is<Data::StorySourcesList>(_context.data)) {
+		return false;
+	}
+	auto cached = ranges::find(
+		_cachedSourcesList,
+		id.peer,
+		&CachedSource::peerId);
+	if (cached == end(_cachedSourcesList)) {
+		return false;
+	} else if (cached - begin(_cachedSourcesList) <= _cachedSourceIndex) {
+		return true;
+	}
+	const auto &stories = denied->owner().stories();
+	const auto source = stories.source(id.peer);
+	if (!source) {
+		return false;
+	}
+	const auto story = source->ids.lower_bound(
+		Data::StoryIdDates{ id.story });
+	if (story == end(source->ids) || story->id != id.story) {
+		return false;
+	}
+	auto next = story;
+	if (++next != end(source->ids)) {
+		return jumpForwardTo({ id.peer, next->id });
+	}
+	if (++cached == end(_cachedSourcesList)) {
+		return false;
+	}
+	const auto nextSource = stories.source(cached->peerId);
+	if (!nextSource) {
+		return false;
+	}
+	const auto suggested = cached->shownId;
+	const auto suggestedStory = suggested
+		? nextSource->ids.lower_bound(Data::StoryIdDates{ suggested })
+		: end(nextSource->ids);
+	const auto nextId = (suggestedStory != end(nextSource->ids)
+		&& suggestedStory->id == suggested)
+		? suggested
+		: nextSource->toOpen().id;
+	return nextId && jumpForwardTo({ cached->peerId, nextId });
+}
+
 void Controller::subjumpTo(int index) {
 	Expects(shown());
 	Expects(index >= 0 && index < shownCount());
@@ -1632,6 +1699,10 @@ void Controller::checkWaitingFor() {
 }
 
 bool Controller::jumpFor(int delta) {
+	return jumpFor(delta, true);
+}
+
+bool Controller::jumpFor(int delta, bool markCurrentAsRead) {
 	if (delta == -1) {
 		if (const auto left = _siblingLeft.get()) {
 			_delegate->storiesJumpTo(
@@ -1641,7 +1712,7 @@ bool Controller::jumpFor(int delta) {
 			return true;
 		}
 	} else if (delta == 1) {
-		if (shown() && _index + 1 >= shownCount()) {
+		if (markCurrentAsRead && shown() && _index + 1 >= shownCount()) {
 			markAsRead();
 		}
 		if (const auto right = _siblingRight.get()) {
@@ -1653,6 +1724,22 @@ bool Controller::jumpFor(int delta) {
 		}
 	}
 	return false;
+}
+
+bool Controller::jumpForwardTo(FullStoryId id) {
+	Expects(shown());
+	Expects(id.valid());
+
+	const auto peer = shownPeer();
+	auto &stories = peer->owner().stories();
+	if (stories.lookup(id)) {
+		_delegate->storiesJumpTo(&peer->session(), id, _context);
+	} else if (_waitingForId != id) {
+		_waitingForId = id;
+		_waitingForDelta = 0;
+		stories.loadAround(id, _context);
+	}
+	return true;
 }
 
 bool Controller::paused() const {

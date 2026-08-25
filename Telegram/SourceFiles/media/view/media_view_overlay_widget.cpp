@@ -88,6 +88,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/themes/window_theme_preview.h"
 #include "window/window_peer_menu.h"
 #include "window/window_controller.h"
+#include "window/window_session_controller.h"
 #include "base/platform/base_platform_haptic.h"
 #include "base/platform/base_platform_info.h"
 #include "base/power_save_blocker.h"
@@ -4347,6 +4348,41 @@ void OverlayWidget::activate() {
 
 void OverlayWidget::show(OpenRequest request) {
 	const auto story = request.story();
+	if (!story || !story->call()) {
+		showAllowed(std::move(request));
+		return;
+	}
+	const auto controller = request.controller();
+	if (!controller) {
+		return;
+	}
+	const auto id = story->fullId();
+	const auto context = request.storiesContext();
+	const auto weakSession = base::make_weak(&story->session());
+	const auto weakController = base::make_weak(controller);
+	MyOwnGram::RequestInteractiveStoryAction(
+		controller->uiShow(),
+		MyOwnGram::ActivityReporting::StoryAction::LiveJoin,
+		story->peer(),
+		crl::guard(_widget, [=] {
+			const auto session = weakSession.get();
+			const auto controller = weakController.get();
+			if (!session || !controller) {
+				return;
+			}
+			const auto maybeStory = session->data().stories().lookup(id);
+			if (!maybeStory || !(*maybeStory)->call()) {
+				return;
+			}
+			showAllowed(OpenRequest(controller, *maybeStory, context));
+		}));
+}
+
+void OverlayWidget::showAllowed(OpenRequest request) {
+	const auto story = request.story();
+	_allowedLiveStory = (story && story->call())
+		? story->fullId()
+		: FullStoryId();
 	const auto document = story ? story->document() : request.document();
 	const auto photo = story ? story->photo() : request.photo();
 	const auto call = story ? story->call() : request.call();
@@ -5690,6 +5726,38 @@ void OverlayWidget::storiesJumpTo(
 		return;
 	}
 	const auto story = *maybeStory;
+	if (story->call() && _allowedLiveStory != id) {
+		const auto weakSession = base::make_weak(session.get());
+		MyOwnGram::RequestInteractiveStoryAction(
+			_stories->uiShow(),
+			MyOwnGram::ActivityReporting::StoryAction::LiveJoin,
+			story->peer(),
+			crl::guard(_widget, [=] {
+				if (const auto strong = weakSession.get()) {
+					storiesJumpToAllowed(strong, id, context);
+				}
+			}),
+			crl::guard(_widget, [=] {
+				if (const auto strong = weakSession.get()) {
+					storiesJumpPastDenied(strong, id);
+				}
+			}));
+		return;
+	}
+	storiesJumpToAllowed(session, id, context);
+}
+
+void OverlayWidget::storiesJumpToAllowed(
+		not_null<Main::Session*> session,
+		FullStoryId id,
+		Data::StoriesContext context) {
+	const auto maybeStory = session->data().stories().lookup(id);
+	if (!maybeStory) {
+		close();
+		return;
+	}
+	const auto story = *maybeStory;
+	_allowedLiveStory = story->call() ? id : FullStoryId();
 	setContext(StoriesContext{
 		story->peer(),
 		story->id(),
@@ -5708,9 +5776,46 @@ void OverlayWidget::storiesJumpTo(
 	});
 }
 
+void OverlayWidget::storiesJumpPastDenied(
+		not_null<Main::Session*> session,
+		FullStoryId id) {
+	const auto maybeStory = session->data().stories().lookup(id);
+	if (!maybeStory || !_stories || !_stories->skipForward(*maybeStory)) {
+		close();
+	}
+}
+
 void OverlayWidget::storiesRedisplay(not_null<Data::Story*> story) {
 	Expects(_stories != nullptr);
 
+	if (story->call() && _allowedLiveStory != story->fullId()) {
+		const auto id = story->fullId();
+		const auto weakSession = base::make_weak(&story->session());
+		MyOwnGram::RequestInteractiveStoryAction(
+			_stories->uiShow(),
+			MyOwnGram::ActivityReporting::StoryAction::LiveJoin,
+			story->peer(),
+			crl::guard(_widget, [=] {
+				const auto session = weakSession.get();
+				if (!session) {
+					return;
+				}
+				const auto maybeStory = session->data().stories().lookup(id);
+				if (maybeStory && (*maybeStory)->call()) {
+					storiesRedisplayAllowed(*maybeStory);
+				}
+			}),
+			crl::guard(_widget, [=] { storiesClose(); }));
+		return;
+	}
+	storiesRedisplayAllowed(story);
+}
+
+void OverlayWidget::storiesRedisplayAllowed(
+		not_null<Data::Story*> story) {
+	_allowedLiveStory = story->call()
+		? story->fullId()
+		: FullStoryId();
 	clearStreaming();
 	_streamingStartPaused = false;
 	v::match(story->media().data, [&](not_null<PhotoData*> photo) {

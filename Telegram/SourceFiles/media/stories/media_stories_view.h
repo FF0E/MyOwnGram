@@ -110,6 +110,7 @@ public:
 
 	[[nodiscard]] bool subjumpAvailable(int delta) const;
 	[[nodiscard]] bool subjumpFor(int delta) const;
+	[[nodiscard]] bool skipForward(not_null<Data::Story*> denied) const;
 	[[nodiscard]] bool jumpFor(int delta) const;
 
 	[[nodiscard]] bool paused() const;

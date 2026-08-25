@@ -166,6 +166,7 @@ public:
 
 	[[nodiscard]] bool subjumpAvailable(int delta) const;
 	[[nodiscard]] bool subjumpFor(int delta);
+	[[nodiscard]] bool skipForward(not_null<Data::Story*> denied);
 	[[nodiscard]] bool jumpFor(int delta);
 	[[nodiscard]] bool paused() const;
 	void togglePaused(bool paused);
@@ -288,6 +289,8 @@ private:
 		not_null<Main::Session*> session,
 		CachedSource cached);
 
+	[[nodiscard]] bool jumpFor(int delta, bool markCurrentAsRead);
+	[[nodiscard]] bool jumpForwardTo(FullStoryId id);
 	void subjumpTo(int index);
 	void checkWaitingFor();
 	void moveFromShown();

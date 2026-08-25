@@ -211,6 +211,7 @@ private:
 		const crl::time startTime = 0;
 	};
 
+	void showAllowed(OpenRequest request);
 	[[nodiscard]] not_null<QWindow*> window() const;
 	[[nodiscard]] int width() const;
 	[[nodiscard]] int height() const;
@@ -282,10 +283,18 @@ private:
 	auto storiesStickerOrEmojiChosen()
 		-> rpl::producer<ChatHelpers::FileChosen> override;
 	void storiesRedisplay(not_null<Data::Story*> story) override;
+	void storiesRedisplayAllowed(not_null<Data::Story*> story);
 	void storiesJumpTo(
 		not_null<Main::Session*> session,
 		FullStoryId id,
 		Data::StoriesContext context) override;
+	void storiesJumpToAllowed(
+		not_null<Main::Session*> session,
+		FullStoryId id,
+		Data::StoriesContext context);
+	void storiesJumpPastDenied(
+		not_null<Main::Session*> session,
+		FullStoryId id);
 	void storiesClose() override;
 	bool storiesPaused() override;
 	rpl::producer<bool> storiesLayerShown() override;
@@ -737,6 +746,7 @@ private:
 	std::shared_ptr<Show> _cachedShow;
 	rpl::event_stream<> _storiesChanged;
 	Main::Session *_storiesSession = nullptr;
+	FullStoryId _allowedLiveStory;
 	rpl::event_stream<ChatHelpers::FileChosen> _storiesStickerOrEmojiChosen;
 	std::unique_ptr<Ui::LayerManager> _layerBg;
 

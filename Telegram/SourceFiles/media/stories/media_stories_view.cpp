@@ -72,6 +72,10 @@ bool View::subjumpFor(int delta) const {
 	return _controller->subjumpFor(delta);
 }
 
+bool View::skipForward(not_null<Data::Story*> denied) const {
+	return _controller->skipForward(denied);
+}
+
 bool View::jumpFor(int delta) const {
 	return _controller->jumpFor(delta);
 }
