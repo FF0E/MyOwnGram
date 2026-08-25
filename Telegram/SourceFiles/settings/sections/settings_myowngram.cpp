@@ -113,77 +113,159 @@ void AddMyOwnGramGroupFooter(
 	builder.addDividerText(std::move(text));
 }
 
-QString StoryViewPolicyText(ActivityReporting::StoryActionPolicy policy) {
+QString StoryPolicyText(ActivityReporting::StoryActionPolicy policy) {
 	switch (policy) {
 	case ActivityReporting::StoryActionPolicy::Allow:
-		return tr::lng_myowngram_story_view_policy_allow(tr::now);
+		return tr::lng_myowngram_story_policy_allow(tr::now);
 	case ActivityReporting::StoryActionPolicy::Ask:
-		return tr::lng_myowngram_story_view_policy_ask(tr::now);
+		return tr::lng_myowngram_story_policy_ask(tr::now);
 	case ActivityReporting::StoryActionPolicy::Block:
-		return tr::lng_myowngram_story_view_policy_block(tr::now);
+		return tr::lng_myowngram_story_policy_block(tr::now);
 	}
-	Unexpected("StoryViewPolicy value.");
+	Unexpected("StoryActionPolicy value.");
 }
 
-rpl::producer<QString> StoryViewPolicyTextValue(
+rpl::producer<QString> StoryPolicyTextValue(
 		ActivityReporting::StoryActionPolicy policy) {
 	switch (policy) {
 	case ActivityReporting::StoryActionPolicy::Allow:
-		return tr::lng_myowngram_story_view_policy_allow();
+		return tr::lng_myowngram_story_policy_allow();
 	case ActivityReporting::StoryActionPolicy::Ask:
-		return tr::lng_myowngram_story_view_policy_ask();
+		return tr::lng_myowngram_story_policy_ask();
 	case ActivityReporting::StoryActionPolicy::Block:
-		return tr::lng_myowngram_story_view_policy_block();
+		return tr::lng_myowngram_story_policy_block();
 	}
-	Unexpected("StoryViewPolicy value.");
+	Unexpected("StoryActionPolicy value.");
 }
 
-rpl::producer<ActivityReporting::StoryActionPolicy> StoryViewPolicyValue() {
-	const auto action = ActivityReporting::StoryAction::View;
+rpl::producer<ActivityReporting::StoryActionPolicy> StoryPolicyValue(
+		ActivityReporting::StoryAction action) {
 	return rpl::single(ActivityReporting::StoryPolicy(action))
 		| rpl::then(ActivityReporting::StoryPolicyChanges(action));
 }
 
-void AddStoryViewPolicy(SectionBuilder &builder) {
+rpl::producer<QString> StoryActionTitle(
+		ActivityReporting::StoryAction action) {
+	switch (action) {
+	case ActivityReporting::StoryAction::View:
+		return tr::lng_myowngram_story_view_reports();
+	case ActivityReporting::StoryAction::Reaction:
+		return tr::lng_myowngram_story_reactions();
+	case ActivityReporting::StoryAction::Reply:
+		return tr::lng_myowngram_story_replies();
+	case ActivityReporting::StoryAction::Share:
+		return tr::lng_myowngram_story_shares();
+	case ActivityReporting::StoryAction::Link:
+		return tr::lng_myowngram_story_links();
+	case ActivityReporting::StoryAction::LiveJoin:
+		return tr::lng_myowngram_live_story_joins();
+	case ActivityReporting::StoryAction::LiveReaction:
+		return tr::lng_myowngram_live_story_reactions();
+	case ActivityReporting::StoryAction::LiveComment:
+		return tr::lng_myowngram_live_story_comments();
+	}
+	Unexpected("StoryAction value.");
+}
+
+QString StoryActionId(ActivityReporting::StoryAction action) {
+	switch (action) {
+	case ActivityReporting::StoryAction::View:
+		return u"myowngram/privacy/story_view_reports"_q;
+	case ActivityReporting::StoryAction::Reaction:
+		return u"myowngram/privacy/story_reactions"_q;
+	case ActivityReporting::StoryAction::Reply:
+		return u"myowngram/privacy/story_replies"_q;
+	case ActivityReporting::StoryAction::Share:
+		return u"myowngram/privacy/story_shares"_q;
+	case ActivityReporting::StoryAction::Link:
+		return u"myowngram/privacy/story_links"_q;
+	case ActivityReporting::StoryAction::LiveJoin:
+		return u"myowngram/privacy/live_story_joins"_q;
+	case ActivityReporting::StoryAction::LiveReaction:
+		return u"myowngram/privacy/live_story_reactions"_q;
+	case ActivityReporting::StoryAction::LiveComment:
+		return u"myowngram/privacy/live_story_comments"_q;
+	}
+	Unexpected("StoryAction value.");
+}
+
+QStringList StoryActionKeywords(ActivityReporting::StoryAction action) {
+	auto result = QStringList{
+		u"stories"_q,
+		u"ask"_q,
+		u"activity"_q,
+		u"privacy"_q,
+	};
+	switch (action) {
+	case ActivityReporting::StoryAction::View:
+		result.push_back(u"views"_q);
+		break;
+	case ActivityReporting::StoryAction::Reaction:
+		result.push_back(u"reactions"_q);
+		break;
+	case ActivityReporting::StoryAction::Reply:
+		result.push_back(u"replies"_q);
+		result.push_back(u"comments"_q);
+		break;
+	case ActivityReporting::StoryAction::Share:
+		result.push_back(u"shares"_q);
+		result.push_back(u"forwards"_q);
+		break;
+	case ActivityReporting::StoryAction::Link:
+		result.push_back(u"links"_q);
+		break;
+	case ActivityReporting::StoryAction::LiveJoin:
+		result.push_back(u"live"_q);
+		result.push_back(u"calls"_q);
+		result.push_back(u"joins"_q);
+		break;
+	case ActivityReporting::StoryAction::LiveReaction:
+		result.push_back(u"live"_q);
+		result.push_back(u"reactions"_q);
+		break;
+	case ActivityReporting::StoryAction::LiveComment:
+		result.push_back(u"live"_q);
+		result.push_back(u"comments"_q);
+		break;
+	}
+	return result;
+}
+
+void AddStoryPolicy(
+		SectionBuilder &builder,
+		ActivityReporting::StoryAction action) {
 	const auto controller = builder.controller();
 	if (!controller) {
 		return;
 	}
 	builder.addButton({
-		.id = u"myowngram/privacy/story_view_reports"_q,
-		.title = tr::lng_myowngram_story_view_reports(),
+		.id = StoryActionId(action),
+		.title = StoryActionTitle(action),
 		.st = &st::settingsButtonNoIcon,
-		.label = StoryViewPolicyValue(
-		) | rpl::map(StoryViewPolicyTextValue) | rpl::flatten_latest(),
+		.label = StoryPolicyValue(action
+		) | rpl::map(StoryPolicyTextValue) | rpl::flatten_latest(),
 		.onClick = [=] {
 			const auto options = std::vector{
-				StoryViewPolicyText(ActivityReporting::StoryActionPolicy::Allow),
-				StoryViewPolicyText(ActivityReporting::StoryActionPolicy::Ask),
-				StoryViewPolicyText(ActivityReporting::StoryActionPolicy::Block),
+				StoryPolicyText(ActivityReporting::StoryActionPolicy::Allow),
+				StoryPolicyText(ActivityReporting::StoryActionPolicy::Ask),
+				StoryPolicyText(ActivityReporting::StoryActionPolicy::Block),
 			};
 			controller->show(Box([=](not_null<Ui::GenericBox*> box) {
 				SingleChoiceBox(box, {
-					.title = tr::lng_myowngram_story_view_reports(),
+					.title = StoryActionTitle(action),
 					.options = options,
 					.initialSelection = static_cast<int>(
-						ActivityReporting::StoryPolicy(
-							ActivityReporting::StoryAction::View)),
-					.callback = [](int index) {
+						ActivityReporting::StoryPolicy(action)),
+					.callback = [=](int index) {
 						ActivityReporting::SetStoryPolicy(
-							ActivityReporting::StoryAction::View,
+							action,
 							static_cast<ActivityReporting::StoryActionPolicy>(
 								index));
 					},
 				});
 			}));
 		},
-		.keywords = {
-			u"stories"_q,
-			u"views"_q,
-			u"ask"_q,
-			u"activity"_q,
-			u"privacy"_q,
-		},
+		.keywords = StoryActionKeywords(action),
 	});
 }
 
@@ -234,7 +316,14 @@ void BuildPrivacySection(SectionBuilder &builder) {
 		.title = tr::lng_myowngram_story_activity(),
 		.keywords = { u"stories"_q, u"views"_q, u"activity"_q },
 	});
-	AddStoryViewPolicy(builder);
+	AddStoryPolicy(builder, ActivityReporting::StoryAction::View);
+	AddStoryPolicy(builder, ActivityReporting::StoryAction::Reaction);
+	AddStoryPolicy(builder, ActivityReporting::StoryAction::Reply);
+	AddStoryPolicy(builder, ActivityReporting::StoryAction::Share);
+	AddStoryPolicy(builder, ActivityReporting::StoryAction::Link);
+	AddStoryPolicy(builder, ActivityReporting::StoryAction::LiveJoin);
+	AddStoryPolicy(builder, ActivityReporting::StoryAction::LiveReaction);
+	AddStoryPolicy(builder, ActivityReporting::StoryAction::LiveComment);
 	const auto remember = builder.addButton({
 		.id = u"myowngram/privacy/remember_watched_stories"_q,
 		.title = tr::lng_myowngram_remember_watched_stories(),
@@ -248,7 +337,8 @@ void BuildPrivacySection(SectionBuilder &builder) {
 			u"remember"_q,
 			u"storage"_q,
 		},
-		.shown = StoryViewPolicyValue(
+		.shown = StoryPolicyValue(
+			ActivityReporting::StoryAction::View
 		) | rpl::map([](ActivityReporting::StoryActionPolicy policy) {
 			return policy != ActivityReporting::StoryActionPolicy::Allow;
 		}),
@@ -264,7 +354,7 @@ void BuildPrivacySection(SectionBuilder &builder) {
 	}
 	AddMyOwnGramGroupFooter(
 		builder,
-		tr::lng_myowngram_story_view_reports_about());
+		tr::lng_myowngram_story_activity_about());
 }
 
 void BuildDataSharingSection(SectionBuilder &builder) {

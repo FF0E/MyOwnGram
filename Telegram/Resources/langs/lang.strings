@@ -8639,11 +8639,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_live_story_joins" = "Join live stories";
 "lng_myowngram_live_story_reactions" = "Send live story reactions";
 "lng_myowngram_live_story_comments" = "Send live story comments";
-"lng_myowngram_story_view_policy_allow" = "Allow";
-"lng_myowngram_story_view_policy_ask" = "Ask";
-"lng_myowngram_story_view_policy_block" = "Block";
+"lng_myowngram_story_policy_allow" = "Allow";
+"lng_myowngram_story_policy_ask" = "Ask";
+"lng_myowngram_story_policy_block" = "Block";
 "lng_myowngram_remember_watched_stories" = "Remember watched stories on this device";
-"lng_myowngram_story_view_reports_about" = "Story views are normally shared after you watch a story. Ask prompts once for each story source while the viewer is open. Blocked views stay watched until restart; optionally store compact watched markers separately in each account's encrypted local data. Markers expire with the stories, are not synchronized with other devices and are removed when local account data is cleared.";
+"lng_myowngram_story_activity_about" = "Set each story action to Allow, Ask or Block. Ordinary and live reactions or messages have separate choices. Ask confirms every action except views, which are remembered for each source until the viewer closes because Telegram reports the highest viewed story. Loading media alone does not send a view report. Telegram Desktop does not send typing or recording indicators from the story reply composer before sending. Blocked views stay watched until restart; optionally store compact watched markers in each account's encrypted local data. Markers expire with the stories, are not synchronized and are removed with local account data.";
 "lng_myowngram_story_view_prompt_title" = "Share story views?";
 "lng_myowngram_story_view_prompt" = "Telegram reports the highest story you viewed. Sharing with {name} may also mark earlier current stories as viewed. This choice applies to their stories until you close the viewer.";
 "lng_myowngram_story_view_prompt_allow" = "Share views";
