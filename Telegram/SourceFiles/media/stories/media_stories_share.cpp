@@ -250,11 +250,11 @@ namespace Media::Stories {
 			Api::SendOptions options,
 			Data::ForwardOptions forwardOptions) {
 		using Policy = MyOwnGram::ActivityReporting::StoryActionPolicy;
-		const auto paymentChecked = (
+		const auto precheckSubmission = (
 			MyOwnGram::ActivityReporting::StoryPolicy(
 				MyOwnGram::ActivityReporting::StoryAction::Share)
 			== Policy::Ask);
-		if (paymentChecked
+		if (precheckSubmission
 			&& !checkStorySubmission(result, comment, checkPaid)) {
 			return;
 		}
