@@ -317,6 +317,7 @@ private:
 	void updateAreas(Data::Story *story);
 	void requestReaction(
 		ReactionsMode mode,
+		const Data::ReactionId &reaction,
 		Fn<bool()> send,
 		Fn<void()> done) const;
 	[[nodiscard]] rpl::producer<int> paidReactionToastTopValue() const;

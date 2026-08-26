@@ -369,6 +369,7 @@ Controller::Controller(not_null<Delegate*> delegate)
 		const auto reaction = chosen.reaction;
 		requestReaction(
 			mode,
+			reaction.id,
 			[=] {
 				if (mode == ReactionsMode::Message) {
 					return _replyArea->sendReaction(reaction.id);
@@ -712,6 +713,7 @@ void Controller::toggleLiked() {
 
 void Controller::requestReaction(
 		ReactionsMode mode,
+		const Data::ReactionId &reaction,
 		Fn<bool()> send,
 		Fn<void()> done) const {
 	const auto peer = shownPeer();
@@ -721,18 +723,28 @@ void Controller::requestReaction(
 	}
 	const auto weak = base::make_weak(this);
 	const auto id = current->fullId();
+	auto allowed = [
+		id,
+		weak,
+		send = std::move(send),
+		done = std::move(done)
+	]() mutable {
+		const auto strong = weak.get();
+		const auto now = strong ? strong->story() : nullptr;
+		if (now && now->fullId() == id && send()) {
+			done();
+		}
+	};
+	if (mode == ReactionsMode::Reaction && reaction.empty()) {
+		allowed();
+		return;
+	}
 	const auto action = StoryReactionAction(mode, current->call() != nullptr);
 	MyOwnGram::RequestInteractiveStoryAction(
 		uiShow(),
 		action,
 		peer,
-		[id, weak, send = std::move(send), done = std::move(done)]() mutable {
-			const auto strong = weak.get();
-			const auto now = strong ? strong->story() : nullptr;
-			if (now && now->fullId() == id && send()) {
-				done();
-			}
-		});
+		std::move(allowed));
 }
 
 rpl::producer<int> Controller::paidReactionToastTopValue() const {
@@ -1344,6 +1356,7 @@ ClickHandlerPtr Controller::lookupAreaHandler(QPoint point) const {
 					}
 					requestReaction(
 						ReactionsMode::Reaction,
+						id,
 						[=] {
 							const auto now = story();
 							if (!now || now->sentReactionId() == id) {
