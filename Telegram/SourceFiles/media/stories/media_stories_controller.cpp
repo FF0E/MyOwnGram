@@ -1548,9 +1548,9 @@ void Controller::askForStoryViewReport(FullStoryId id, bool viewed) {
 			},
 			.confirmText = tr::lng_myowngram_story_view_prompt_allow(),
 			.cancelText = tr::lng_myowngram_story_view_prompt_block(),
-			.strictCancel = true,
 			.labelStyle = &st::storiesBoxLabel,
 			.title = tr::lng_myowngram_story_view_prompt_title(),
+			.strictCancel = true,
 		});
 		auto padding = st::boxPadding;
 		padding.setTop(padding.bottom());

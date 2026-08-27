@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/layers/generic_box.h"
 #include "ui/widgets/checkbox.h"
 
+#include "styles/style_chat_helpers.h"
 #include "styles/style_layers.h"
 #include "styles/style_media_view.h"
 
@@ -216,9 +217,9 @@ void RequestInteractiveStoryAction(
 			},
 			.confirmText = ConfirmText(action),
 			.cancelText = tr::lng_box_no(),
-			.strictCancel = true,
 			.labelStyle = viewerStyle ? &st::storiesBoxLabel : nullptr,
 			.title = PromptTitle(action),
+			.strictCancel = true,
 		});
 		const auto &checkboxStyle = viewerStyle
 			? st::storiesComposeControls.files.checkbox
