@@ -11,7 +11,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_peer.h"
 #include "lang/lang_keys.h"
 #include "ui/boxes/confirm_box.h"
+#include "ui/layers/generic_box.h"
+#include "ui/widgets/checkbox.h"
 
+#include "styles/style_layers.h"
 #include "styles/style_media_view.h"
 
 namespace MyOwnGram {
@@ -161,37 +164,85 @@ void RequestInteractiveStoryAction(
 
 	const auto deniedCallback = std::make_shared<Fn<void()>>(
 		std::move(denied));
-	show->show(Ui::MakeConfirmBox({
-		.text = PromptText(action, peer->shortName()),
-		.confirmed = [=, allowed = std::move(allowed)](
-				Fn<void()> close) mutable {
-			const auto blocked = (ActivityReporting::StoryPolicy(action)
-				== Policy::Block);
-			auto callback = blocked
-				? std::move(*deniedCallback)
-				: std::move(allowed);
-			close();
-			if (blocked) {
-				show->showToast(tr::lng_myowngram_story_action_blocked(
-					tr::now,
-					lt_action,
-					ActionName(action)));
-			}
-			if (callback) {
-				callback();
-			}
-		},
-		.cancelled = [=](Fn<void()> close) mutable {
+	struct State {
+		Ui::Checkbox *remember = nullptr;
+		bool resolved = false;
+	};
+	const auto state = std::make_shared<State>();
+	show->show(Box([=, allowed = std::move(allowed)](
+			not_null<Ui::GenericBox*> box) mutable {
+		const auto deny = [=] {
 			auto callback = std::move(*deniedCallback);
-			close();
 			if (callback) {
 				callback();
 			}
-		},
-		.confirmText = ConfirmText(action),
-		.cancelText = tr::lng_cancel(),
-		.labelStyle = viewerStyle ? &st::storiesBoxLabel : nullptr,
-		.title = PromptTitle(action),
+		};
+		Ui::ConfirmBox(box, {
+			.text = PromptText(action, peer->shortName()),
+			.confirmed = [=, allowed = std::move(allowed)](
+					Fn<void()> close) mutable {
+				state->resolved = true;
+				const auto blocked = (ActivityReporting::StoryPolicy(action)
+					== Policy::Block);
+				if (!blocked && state->remember->checked()) {
+					ActivityReporting::SetStoryPolicy(
+						action,
+						Policy::Allow);
+				}
+				auto callback = blocked
+					? std::move(*deniedCallback)
+					: std::move(allowed);
+				close();
+				if (blocked) {
+					show->showToast(
+						tr::lng_myowngram_story_action_blocked(
+							tr::now,
+							lt_action,
+							ActionName(action)));
+				}
+				if (callback) {
+					callback();
+				}
+			},
+			.cancelled = [=](Fn<void()> close) {
+				state->resolved = true;
+				if (state->remember->checked()) {
+					ActivityReporting::SetStoryPolicy(
+						action,
+						Policy::Block);
+				}
+				close();
+				deny();
+			},
+			.confirmText = ConfirmText(action),
+			.cancelText = tr::lng_box_no(),
+			.strictCancel = true,
+			.labelStyle = viewerStyle ? &st::storiesBoxLabel : nullptr,
+			.title = PromptTitle(action),
+		});
+		const auto &checkboxStyle = viewerStyle
+			? st::storiesComposeControls.files.checkbox
+			: st::defaultBoxCheckbox;
+		const auto &checkStyle = viewerStyle
+			? st::storiesComposeControls.files.check
+			: st::defaultCheck;
+		auto padding = st::boxPadding;
+		padding.setTop(padding.bottom());
+		state->remember = box->addRow(
+			object_ptr<Ui::Checkbox>(
+				box,
+				tr::lng_myowngram_story_prompt_remember(tr::now),
+				false,
+				checkboxStyle,
+				checkStyle),
+			std::move(padding));
+		box->boxClosing() | rpl::on_next([=] {
+			if (state->resolved) {
+				return;
+			}
+			state->resolved = true;
+			deny();
+		}, box->lifetime());
 	}));
 }
 

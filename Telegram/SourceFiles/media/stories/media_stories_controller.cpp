@@ -54,14 +54,17 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/boxes/confirm_box.h"
 #include "ui/boxes/report_box_graphics.h"
 #include "ui/controls/send_button.h"
+#include "ui/layers/generic_box.h"
 #include "ui/text/text_utilities.h"
 #include "ui/toast/toast.h"
 #include "ui/widgets/buttons.h"
+#include "ui/widgets/checkbox.h"
 #include "ui/widgets/labels.h"
 #include "ui/round_rect.h"
 #include "window/window_controller.h"
 #include "window/window_session_controller.h"
 #include "styles/style_chat_helpers.h" // defaultReportBox
+#include "styles/style_layers.h"
 #include "styles/style_media_view.h"
 #include "styles/style_userpic_button.h"
 
@@ -1510,23 +1513,62 @@ void Controller::askForStoryViewReport(FullStoryId id, bool viewed) {
 			strong->resolveStoryViewReport(peerId, generation, allow);
 		}
 	};
-	uiShow()->show(Ui::MakeConfirmBox({
-		.text = tr::lng_myowngram_story_view_prompt(
-			lt_name,
-			rpl::single(tr::bold(name)),
-			tr::marked),
-		.confirmed = [=](Fn<void()> close) {
-			resolve(true);
-			close();
-		},
-		.cancelled = [=](Fn<void()> close) {
-			resolve(false);
-			close();
-		},
-		.confirmText = tr::lng_myowngram_story_view_prompt_allow(),
-		.cancelText = tr::lng_myowngram_story_view_prompt_block(),
-		.labelStyle = &st::storiesBoxLabel,
-		.title = tr::lng_myowngram_story_view_prompt_title(),
+	struct State {
+		Ui::Checkbox *remember = nullptr;
+		bool resolved = false;
+	};
+	const auto state = std::make_shared<State>();
+	uiShow()->show(Box([=](not_null<Ui::GenericBox*> box) {
+		using Policy = ActivityReporting::StoryActionPolicy;
+		const auto finish = [=](bool allow, bool remember) {
+			const auto blocked = allow
+				&& (ActivityReporting::StoryPolicy(
+					ActivityReporting::StoryAction::View) == Policy::Block);
+			resolve(allow && !blocked);
+			if (remember && !blocked) {
+				ActivityReporting::SetStoryPolicy(
+					ActivityReporting::StoryAction::View,
+					allow ? Policy::Allow : Policy::Block);
+			}
+		};
+		Ui::ConfirmBox(box, {
+			.text = tr::lng_myowngram_story_view_prompt(
+				lt_name,
+				rpl::single(tr::bold(name)),
+				tr::marked),
+			.confirmed = [=](Fn<void()> close) {
+				state->resolved = true;
+				finish(true, state->remember->checked());
+				close();
+			},
+			.cancelled = [=](Fn<void()> close) {
+				state->resolved = true;
+				finish(false, state->remember->checked());
+				close();
+			},
+			.confirmText = tr::lng_myowngram_story_view_prompt_allow(),
+			.cancelText = tr::lng_myowngram_story_view_prompt_block(),
+			.strictCancel = true,
+			.labelStyle = &st::storiesBoxLabel,
+			.title = tr::lng_myowngram_story_view_prompt_title(),
+		});
+		auto padding = st::boxPadding;
+		padding.setTop(padding.bottom());
+		state->remember = box->addRow(
+			object_ptr<Ui::Checkbox>(
+				box,
+				tr::lng_myowngram_story_prompt_remember(tr::now),
+				false,
+				st::storiesComposeControls.files.checkbox,
+				st::storiesComposeControls.files.check),
+			std::move(padding));
+		box->boxClosing() | rpl::on_next([=] {
+			if (state->resolved) {
+				return;
+			}
+			state->resolved = true;
+			finish(false, false);
+		}, box->lifetime());
 	}));
 }
 
