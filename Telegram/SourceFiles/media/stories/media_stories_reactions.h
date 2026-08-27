@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include "base/weak_ptr.h"
 #include "data/data_message_reaction_id.h"
 #include "ui/effects/animations.h"
 
@@ -42,7 +43,7 @@ enum class ReactionsMode {
 	Reaction,
 };
 
-class StoryAreaView {
+class StoryAreaView : public base::has_weak_ptr {
 public:
 	virtual ~StoryAreaView() = default;
 

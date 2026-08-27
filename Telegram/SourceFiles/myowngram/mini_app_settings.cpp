@@ -36,7 +36,7 @@ static_assert(ResolveMode(true, true) == OpenMode::Ask);
 } // namespace
 
 OpenMode Mode() {
-	const auto &settings = Core::App().settings();
+	auto &settings = Core::App().settings();
 	return ResolveMode(
 		settings.readPref<bool>(kAskBeforeOpeningKey, false),
 		settings.readPref<bool>(kOpenInBrowserKey, false));
