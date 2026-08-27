@@ -1492,8 +1492,8 @@ void WebViewInstance::showOpenChoice(ShowArgs &&args) {
 			.text = tr::lng_myowngram_open_mini_app_browser_about(),
 			.confirmed = browser,
 			.cancelled = internal,
-			.confirmText = tr::lng_myowngram_open_mini_app_browser(),
-			.cancelText = tr::lng_myowngram_open_mini_app_internal(),
+			.confirmText = tr::lng_box_yes(),
+			.cancelText = tr::lng_box_no(),
 			.title = tr::lng_myowngram_open_mini_app_browser_title(),
 			.strictCancel = true,
 		});
