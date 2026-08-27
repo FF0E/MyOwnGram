@@ -8652,9 +8652,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_story_policy_block" = "Block";
 "lng_myowngram_remember_watched_stories" = "Remember watched stories on this device";
 "lng_myowngram_story_activity_about" = "Set each story action to Allow, Ask or Block. Ordinary and live reactions or messages have separate choices. Ask confirms every action except views, which are remembered for each source until the viewer closes because Telegram reports the highest viewed story. Loading media alone does not send a view report. Telegram Desktop does not send typing or recording indicators from the story reply composer before sending. Blocked views stay watched until restart; optionally store compact watched markers in each account's encrypted local data. Markers expire with the stories, are not synchronized and are removed with local account data.";
-"lng_myowngram_story_prompt_remember" = "Set as default for all accounts on this device";
 "lng_myowngram_story_view_prompt_title" = "Share story views?";
-"lng_myowngram_story_view_prompt" = "Telegram reports the highest story you viewed. Sharing with {name} may also mark earlier current stories as viewed. Unless you set it as the default, this choice applies to their stories until you close the viewer.";
+"lng_myowngram_story_view_prompt" = "Telegram reports the highest story you viewed. Sharing with {name} may also mark earlier current stories as viewed. This choice applies to their stories until you close the viewer.";
 "lng_myowngram_story_view_prompt_allow" = "Share views";
 "lng_myowngram_story_view_prompt_block" = "Don't share";
 "lng_myowngram_story_reaction_prompt_title" = "Send story reaction?";

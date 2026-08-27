@@ -232,7 +232,7 @@ void RequestInteractiveStoryAction(
 		state->remember = box->addRow(
 			object_ptr<Ui::Checkbox>(
 				box,
-				tr::lng_myowngram_story_prompt_remember(tr::now),
+				tr::lng_remember(tr::now),
 				false,
 				checkboxStyle,
 				checkStyle),
