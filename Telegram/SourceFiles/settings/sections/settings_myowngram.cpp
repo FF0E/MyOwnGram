@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/core_settings.h"
 #include "lang/lang_keys.h"
 #include "myowngram/activity_reporting_settings.h"
+#include "myowngram/mini_app_settings.h"
 #include "settings/sections/settings_main.h"
 #include "settings/settings_builder.h"
 #include "settings/settings_common_session.h"
@@ -29,6 +30,7 @@ namespace {
 using namespace Builder;
 
 namespace ActivityReporting = ::MyOwnGram::ActivityReporting;
+namespace MiniApps = ::MyOwnGram::MiniApps;
 
 class MyOwnGram final : public Section<MyOwnGram> {
 public:
@@ -111,6 +113,71 @@ void AddMyOwnGramGroupFooter(
 		rpl::producer<QString> text) {
 	builder.addSkip();
 	builder.addDividerText(std::move(text));
+}
+
+QString MiniAppOpenModeText(MiniApps::OpenMode mode) {
+	switch (mode) {
+	case MiniApps::OpenMode::Internal:
+		return tr::lng_myowngram_open_mini_apps_internal(tr::now);
+	case MiniApps::OpenMode::Ask:
+		return tr::lng_myowngram_open_mini_apps_ask(tr::now);
+	case MiniApps::OpenMode::Browser:
+		return tr::lng_myowngram_open_mini_apps_browser(tr::now);
+	}
+	Unexpected("MiniApps::OpenMode value.");
+}
+
+rpl::producer<QString> MiniAppOpenModeTextValue(
+		MiniApps::OpenMode mode) {
+	switch (mode) {
+	case MiniApps::OpenMode::Internal:
+		return tr::lng_myowngram_open_mini_apps_internal();
+	case MiniApps::OpenMode::Ask:
+		return tr::lng_myowngram_open_mini_apps_ask();
+	case MiniApps::OpenMode::Browser:
+		return tr::lng_myowngram_open_mini_apps_browser();
+	}
+	Unexpected("MiniApps::OpenMode value.");
+}
+
+rpl::producer<MiniApps::OpenMode> MiniAppOpenModeValue() {
+	return rpl::single(MiniApps::Mode())
+		| rpl::then(MiniApps::ModeChanges());
+}
+
+void AddMiniAppOpenMode(SectionBuilder &builder) {
+	const auto controller = builder.controller();
+	builder.addButton({
+		.id = u"myowngram/general/open_mini_apps"_q,
+		.title = tr::lng_myowngram_open_mini_apps(),
+		.st = &st::settingsButtonNoIcon,
+		.label = MiniAppOpenModeValue(
+		) | rpl::map(MiniAppOpenModeTextValue) | rpl::flatten_latest(),
+		.onClick = [=] {
+			const auto options = std::vector{
+				MiniAppOpenModeText(MiniApps::OpenMode::Internal),
+				MiniAppOpenModeText(MiniApps::OpenMode::Ask),
+				MiniAppOpenModeText(MiniApps::OpenMode::Browser),
+			};
+			controller->show(Box([=](not_null<Ui::GenericBox*> box) {
+				SingleChoiceBox(box, {
+					.title = tr::lng_myowngram_open_mini_apps(),
+					.options = options,
+					.initialSelection = static_cast<int>(MiniApps::Mode()),
+					.callback = [](int index) {
+						MiniApps::SetMode(
+							static_cast<MiniApps::OpenMode>(index));
+					},
+				});
+			}));
+		},
+		.keywords = {
+			u"mini apps"_q,
+			u"browser"_q,
+			u"web"_q,
+			u"ask"_q,
+		},
+	});
 }
 
 QString StoryPolicyText(ActivityReporting::StoryActionPolicy policy) {
@@ -271,6 +338,17 @@ void AddStoryPolicy(
 
 void BuildGeneralSection(SectionBuilder &builder) {
 	const auto settings = &Core::App().settings();
+
+	builder.addSkip();
+	builder.addSubsectionTitle({
+		.id = u"myowngram/general/web_content"_q,
+		.title = tr::lng_myowngram_web_content(),
+		.keywords = { u"web"_q, u"browser"_q, u"mini apps"_q },
+	});
+	AddMiniAppOpenMode(builder);
+	AddMyOwnGramGroupFooter(
+		builder,
+		tr::lng_myowngram_open_mini_apps_about());
 
 	builder.addSkip();
 	builder.addSubsectionTitle({

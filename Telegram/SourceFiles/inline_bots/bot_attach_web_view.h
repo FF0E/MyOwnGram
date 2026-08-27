@@ -289,6 +289,9 @@ private:
 		QString title;
 	};
 	void show(ShowArgs &&args);
+	void showOpenChoice(ShowArgs &&args);
+	void showInternal(ShowArgs &&args);
+	void openInBrowser(QString url);
 	void showGame();
 	void started(uint64 queryId);
 

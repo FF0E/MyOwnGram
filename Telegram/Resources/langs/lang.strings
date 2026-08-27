@@ -8624,6 +8624,16 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_privacy" = "Privacy";
 "lng_myowngram_data_sharing" = "Data sharing";
 "lng_myowngram_general" = "General";
+"lng_myowngram_web_content" = "Web content";
+"lng_myowngram_open_mini_apps" = "Open Mini Apps";
+"lng_myowngram_open_mini_apps_internal" = "In MyOwnGram";
+"lng_myowngram_open_mini_apps_ask" = "Ask every time";
+"lng_myowngram_open_mini_apps_browser" = "Default browser";
+"lng_myowngram_open_mini_apps_about" = "Choose whether ordinary Mini Apps open in MyOwnGram or your default browser. Browser mode passes the signed Mini App link, including Telegram account data, to the browser. Telegram-specific controls and actions may not work there. Age verification and chat-join flows always remain in MyOwnGram.";
+"lng_myowngram_open_mini_app_browser_title" = "Open Mini App in browser?";
+"lng_myowngram_open_mini_app_browser_about" = "Telegram-signed account and launch data are included in the link. Telegram-specific controls and actions may not work in your browser.";
+"lng_myowngram_open_mini_app_browser" = "Open in browser";
+"lng_myowngram_open_mini_app_internal" = "Open in MyOwnGram";
 "lng_myowngram_app_data" = "App data";
 "lng_myowngram_keep_preferences_on_last_logout" = "Keep preferences after removing all accounts";
 "lng_myowngram_keep_preferences_on_last_logout_about" = "Preserve device-wide Telegram preferences, including your theme and wallpaper, when the last account is removed. Account data and the local passcode are still removed.";

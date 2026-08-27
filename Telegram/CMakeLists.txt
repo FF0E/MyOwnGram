@@ -1575,6 +1575,8 @@ PRIVATE
     mtproto/type_utils.h
     myowngram/activity_reporting_settings.cpp
     myowngram/activity_reporting_settings.h
+    myowngram/mini_app_settings.cpp
+    myowngram/mini_app_settings.h
     myowngram/story_action_permission.cpp
     myowngram/story_action_permission.h
     overview/overview_checkbox.cpp

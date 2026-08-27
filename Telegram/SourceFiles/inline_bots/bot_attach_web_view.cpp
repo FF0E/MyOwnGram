@@ -26,6 +26,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "chat_helpers/tabbed_panel.h"
 #include "core/application.h"
 #include "core/click_handler_types.h"
+#include "core/file_utilities.h"
 #include "core/local_url_handlers.h"
 #include "core/shortcuts.h"
 #include "core/ui_integration.h" // TextContext
@@ -60,6 +61,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_domain.h"
 #include "main/main_session.h"
 #include "mainwidget.h"
+#include "myowngram/mini_app_settings.h"
 #include "payments/payments_checkout_process.h"
 #include "payments/payments_non_panel_process.h"
 #include "settings/sections/settings_premium.h"
@@ -94,6 +96,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_menu_icons.h"
 
 #include <QSvgRenderer>
+#include <QUrl>
 
 namespace InlineBots {
 namespace {
@@ -101,6 +104,22 @@ namespace {
 constexpr auto kProlongTimeout = 60 * crl::time(1000);
 constexpr auto kRefreshBotsTimeout = 60 * 60 * crl::time(1000);
 constexpr auto kPopularAppBotsLimit = 100;
+
+[[nodiscard]] bool CanOpenInBrowser(
+		const WebViewSource &source,
+		const QString &url) {
+	if (v::is<WebViewSourceGame>(source)
+		|| v::is<WebViewSourceAgeVerification>(source)
+		|| v::is<WebViewSourceJoinChat>(source)) {
+		return false;
+	}
+	const auto parsed = QUrl(url);
+	if (!parsed.isValid() || parsed.host().isEmpty()) {
+		return false;
+	}
+	const auto scheme = parsed.scheme();
+	return (scheme == u"http"_q) || (scheme == u"https"_q);
+}
 
 [[nodiscard]] QImage PaintButtonEmojiFrame(
 		Ui::Text::CustomEmoji &emoji,
@@ -1420,6 +1439,91 @@ void WebViewInstance::show(ShowArgs &&args) {
 		_botFullWaitingArgs.emplace(std::move(args));
 		return;
 	}
+	if (!CanOpenInBrowser(_source, args.result.url)) {
+		showInternal(std::move(args));
+		return;
+	}
+	using OpenMode = MyOwnGram::MiniApps::OpenMode;
+	switch (MyOwnGram::MiniApps::Mode()) {
+	case OpenMode::Internal:
+		showInternal(std::move(args));
+		return;
+	case OpenMode::Ask:
+		showOpenChoice(std::move(args));
+		return;
+	case OpenMode::Browser:
+		openInBrowser(std::move(args.result.url));
+		return;
+	}
+	Unexpected("MiniApps::OpenMode value.");
+}
+
+void WebViewInstance::showOpenChoice(ShowArgs &&args) {
+	struct State {
+		ShowArgs args;
+		Ui::Checkbox *remember = nullptr;
+		bool resolved = false;
+	};
+	const auto state = std::make_shared<State>(State{
+		.args = std::move(args),
+	});
+	_parentShow->show(Box([=](not_null<Ui::GenericBox*> box) {
+		const auto browser = crl::guard(this, [=](Fn<void()> closeBox) {
+			state->resolved = true;
+			if (state->remember && state->remember->checked()) {
+				MyOwnGram::MiniApps::SetMode(
+					MyOwnGram::MiniApps::OpenMode::Browser);
+			}
+			const auto url = state->args.result.url;
+			closeBox();
+			openInBrowser(url);
+		});
+		const auto internal = crl::guard(this, [=](Fn<void()> closeBox) {
+			state->resolved = true;
+			if (state->remember && state->remember->checked()) {
+				MyOwnGram::MiniApps::SetMode(
+					MyOwnGram::MiniApps::OpenMode::Internal);
+			}
+			auto args = state->args;
+			closeBox();
+			showInternal(std::move(args));
+		});
+		Ui::ConfirmBox(box, {
+			.text = tr::lng_myowngram_open_mini_app_browser_about(),
+			.confirmed = browser,
+			.cancelled = internal,
+			.confirmText = tr::lng_myowngram_open_mini_app_browser(),
+			.cancelText = tr::lng_myowngram_open_mini_app_internal(),
+			.title = tr::lng_myowngram_open_mini_app_browser_title(),
+			.strictCancel = true,
+		});
+		box->boxClosing(
+		) | rpl::on_next(crl::guard(this, [=] {
+			if (state->resolved) {
+				return;
+			}
+			state->resolved = true;
+			auto args = state->args;
+			showInternal(std::move(args));
+		}), box->lifetime());
+		auto padding = st::boxPadding;
+		padding.setTop(padding.bottom());
+		state->remember = box->addRow(
+			object_ptr<Ui::Checkbox>(
+				box,
+				tr::lng_remember(),
+				false,
+				st::defaultBoxCheckbox),
+			std::move(padding));
+	}));
+}
+
+void WebViewInstance::openInBrowser(QString url) {
+	File::OpenUrl(url);
+	close();
+}
+
+void WebViewInstance::showInternal(ShowArgs &&args) {
 	auto title = args.title.isEmpty()
 		? Info::Profile::NameValue(_bot)
 		: rpl::single(args.title);
