@@ -4760,9 +4760,10 @@ void OverlayWidget::initSponsoredButton() {
 	_sponsoredButton->setOpacity(1.0);
 
 	_sponsoredButton->setClickedCallback([=, link = details.link] {
-		UrlClickHandler::Open(link);
-		sponsoredMessages->clicked(fullId, false, true);
-		hide();
+		if (sponsoredMessages->clicked(fullId, false, true)) {
+			UrlClickHandler::Open(link);
+			hide();
+		}
 	});
 }
 
@@ -8389,9 +8390,13 @@ void OverlayWidget::handleMouseRelease(
 						const auto details = sponsoredMessages->lookupDetails(
 							fullId);
 						if (const auto link = details.link; !link.isEmpty()) {
-							UrlClickHandler::Open(link);
-							sponsoredMessages->clicked(fullId, true, true);
-							hide();
+							if (sponsoredMessages->clicked(
+									fullId,
+									true,
+									true)) {
+								UrlClickHandler::Open(link);
+								hide();
+							}
 						}
 					} else {
 						playbackPauseResume();

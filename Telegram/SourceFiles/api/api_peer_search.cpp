@@ -9,9 +9,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "api/api_single_message_search.h"
 #include "apiwrap.h"
+#include "data/components/sponsored_messages.h"
 #include "data/data_session.h"
 #include "dialogs/ui/chat_search_in.h" // IsHashOrCashtagSearchQuery
 #include "main/main_session.h"
+#include "myowngram/sponsored_content_settings.h"
 
 namespace Api {
 namespace {
@@ -53,9 +55,12 @@ void PeerSearch::request(
 	}
 	cache.requested = true;
 	cache.result.query = _query;
-	if (_query.size() < kMinSponsoredQueryLength) {
+	if (_query.size() < kMinSponsoredQueryLength
+		|| _type != Type::WithSponsored
+		|| !MyOwnGram::SponsoredContent::ShouldRequest(
+			MyOwnGram::SponsoredContent::Surface::Search)) {
 		cache.sponsoredReady = true;
-	} else if (_type == Type::WithSponsored) {
+	} else {
 		requestSponsored();
 	}
 	requestPeers();
@@ -97,21 +102,34 @@ void PeerSearch::requestSponsored() {
 		result.match([&](const MTPDcontacts_sponsoredPeersEmpty &) {
 			finishSponsored(requestId, PeerSearchResult{});
 		}, [&](const MTPDcontacts_sponsoredPeers &data) {
-			_session->data().processUsers(data.vusers());
-			_session->data().processChats(data.vchats());
+			using Surface = MyOwnGram::SponsoredContent::Surface;
+			if (!MyOwnGram::SponsoredContent::ShouldRequest(Surface::Search)) {
+				finishSponsored(requestId, PeerSearchResult{});
+				return;
+			}
+			const auto display = MyOwnGram::SponsoredContent::ShouldDisplay(
+				Surface::Search);
+			if (display) {
+				_session->data().processUsers(data.vusers());
+				_session->data().processChats(data.vchats());
+			}
 			auto parsed = PeerSearchResult();
 			parsed.sponsored.reserve(data.vpeers().v.size());
 			for (const auto &peer : data.vpeers().v) {
 				const auto &data = peer.data();
-				const auto peerId = peerFromMTP(data.vpeer());
-				parsed.sponsored.push_back({
-					.peer = _session->data().peer(peerId),
-					.randomId = data.vrandom_id().v,
-					.sponsorInfo = TextWithEntities::Simple(
-						qs(data.vsponsor_info().value_or_empty())),
-					.additionalInfo = TextWithEntities::Simple(
-						qs(data.vadditional_info().value_or_empty())),
-				});
+				const auto &randomId = data.vrandom_id().v;
+				_session->sponsoredMessages().received(randomId);
+				if (display) {
+					const auto peerId = peerFromMTP(data.vpeer());
+					parsed.sponsored.push_back({
+						.peer = _session->data().peer(peerId),
+						.randomId = randomId,
+						.sponsorInfo = TextWithEntities::Simple(
+							qs(data.vsponsor_info().value_or_empty())),
+						.additionalInfo = TextWithEntities::Simple(
+							qs(data.vadditional_info().value_or_empty())),
+					});
+				}
 			}
 			finishSponsored(requestId, std::move(parsed));
 		});
@@ -125,7 +143,9 @@ void PeerSearch::finishPeers(
 		mtpRequestId requestId,
 		PeerSearchResult result) {
 	const auto query = _peerRequests.take(requestId);
-	Assert(query.has_value());
+	if (!query) {
+		return;
+	}
 
 	auto &cache = _cache[*query];
 	cache.peersReady = true;
@@ -140,7 +160,9 @@ void PeerSearch::finishSponsored(
 		mtpRequestId requestId,
 		PeerSearchResult result) {
 	const auto query = _sponsoredRequests.take(requestId);
-	Assert(query.has_value());
+	if (!query) {
+		return;
+	}
 
 	auto &cache = _cache[*query];
 	cache.sponsoredReady = true;

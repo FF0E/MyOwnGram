@@ -57,6 +57,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_domain.h"
 #include "main/main_session.h"
 #include "main/main_session_settings.h"
+#include "myowngram/sponsored_content_settings.h"
 #include "api/api_authorizations.h"
 #include "api/api_chat_filters.h"
 #include "apiwrap.h"
@@ -515,6 +516,19 @@ Widget::Widget(
 	_inner->searchRequests(
 	) | rpl::on_next([=](SearchRequestDelay delay) {
 		searchRequested(delay);
+	}, lifetime());
+	MyOwnGram::SponsoredContent::DeliveryChanges(
+	) | rpl::filter([](MyOwnGram::SponsoredContent::Surface surface) {
+		return surface == MyOwnGram::SponsoredContent::Surface::Search;
+	}) | rpl::on_next([=](MyOwnGram::SponsoredContent::Surface) {
+		_peerSearch.clear();
+		peerSearchReceived({});
+		const auto query = _searchState.query.trimmed();
+		if (!query.isEmpty() && peerSearchRequired()) {
+			_peerSearch.request(query, [=](Api::PeerSearchResult result) {
+				peerSearchReceived(std::move(result));
+			});
+		}
 	}, lifetime());
 	_inner->completeHashtagRequests(
 	) | rpl::on_next([=](const QString &tag) {
@@ -975,7 +989,9 @@ void Widget::chosenRow(const ChosenRow &row) {
 
 	if (!row.sponsoredRandomId.isEmpty()) {
 		auto &messages = session().sponsoredMessages();
-		messages.clicked(row.sponsoredRandomId, false, false);
+		if (!messages.clicked(row.sponsoredRandomId, false, false)) {
+			return;
+		}
 	} else if (!_searchState.query.isEmpty()) {
 		if (const auto history = row.key.history()) {
 			session().recentPeers().bump(history->peer);

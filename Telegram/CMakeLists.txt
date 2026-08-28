@@ -1577,6 +1577,8 @@ PRIVATE
     myowngram/activity_reporting_settings.h
     myowngram/mini_app_settings.cpp
     myowngram/mini_app_settings.h
+    myowngram/sponsored_content_settings.cpp
+    myowngram/sponsored_content_settings.h
     myowngram/story_action_permission.cpp
     myowngram/story_action_permission.h
     overview/overview_checkbox.cpp

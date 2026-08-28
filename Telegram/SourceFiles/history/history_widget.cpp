@@ -185,6 +185,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session.h"
 #include "main/main_session_settings.h"
 #include "main/session/send_as_peers.h"
+#include "myowngram/sponsored_content_settings.h"
 #include "webrtc/webrtc_environment.h"
 #include "window/notifications_manager.h"
 #include "window/window_adaptive.h"
@@ -375,6 +376,31 @@ HistoryWidget::HistoryWidget(
 
 	session().downloaderTaskFinished() | rpl::on_next([=] {
 		update();
+	}, lifetime());
+	MyOwnGram::SponsoredContent::DeliveryChanges(
+	) | rpl::on_next([=](MyOwnGram::SponsoredContent::Surface surface) {
+		if (!_history) {
+			return;
+		}
+		const auto current = _history->peer->isChannel()
+			? MyOwnGram::SponsoredContent::Surface::Channel
+			: MyOwnGram::SponsoredContent::Surface::Bot;
+		if (surface != current) {
+			return;
+		}
+		_sponsoredMessagesStateKnown = false;
+		crl::on_main(this, [=] {
+			if (!_history) {
+				return;
+			}
+			const auto now = _history->peer->isChannel()
+				? MyOwnGram::SponsoredContent::Surface::Channel
+				: MyOwnGram::SponsoredContent::Surface::Bot;
+			if (surface == now
+				&& MyOwnGram::SponsoredContent::ShouldRequest(surface)) {
+				requestSponsoredMessages();
+			}
+		});
 	}, lifetime());
 
 	_scroll->setHandleTouch(false);
@@ -3289,28 +3315,7 @@ void HistoryWidget::showHistory(
 		unreadCountUpdated(); // set _historyDown badge.
 		showAboutTopPromotion();
 
-		if (!session().sponsoredMessages().isTopBarFor(_history)) {
-			const auto checkState = [=] {
-				using State = Data::SponsoredMessages::State;
-				const auto state = session().sponsoredMessages().state(
-					_history);
-				_sponsoredMessagesStateKnown = (state != State::None);
-				if (state == State::InjectToMiddle) {
-					injectSponsoredMessages();
-				}
-			};
-			const auto history = _history;
-			session().sponsoredMessages().request(
-				_history,
-				crl::guard(this, [=, this] {
-					if (history == _history) {
-						checkState();
-					}
-				}));
-			checkState();
-		} else {
-			requestSponsoredMessageBar();
-		}
+		requestSponsoredMessages();
 	} else {
 		_chooseForReport = nullptr;
 		refreshTopBarActiveChat();
@@ -9587,6 +9592,32 @@ void HistoryWidget::requestMessageData(MsgId msgId) {
 		messageDataReceived(peer, msgId);
 	});
 	session().api().requestMessageData(_peer, msgId, callback);
+}
+
+void HistoryWidget::requestSponsoredMessages() {
+	if (!_history) {
+		return;
+	} else if (session().sponsoredMessages().isTopBarFor(_history)) {
+		requestSponsoredMessageBar();
+		return;
+	}
+	const auto checkState = [=, this] {
+		using State = Data::SponsoredMessages::State;
+		const auto state = session().sponsoredMessages().state(_history);
+		_sponsoredMessagesStateKnown = (state != State::None);
+		if (state == State::InjectToMiddle) {
+			injectSponsoredMessages();
+		}
+	};
+	const auto history = _history;
+	session().sponsoredMessages().request(
+		_history,
+		crl::guard(this, [=, this] {
+			if (history == _history) {
+				checkState();
+			}
+		}));
+	checkState();
 }
 
 bool HistoryWidget::checkSponsoredMessageBarVisibility() const {

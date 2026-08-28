@@ -3830,6 +3830,12 @@ void InnerWidget::fillSupportSearchMenu(not_null<Ui::PopupMenu*> menu) {
 
 bool InnerWidget::showChatPreview() {
 	const auto row = computeChatPreviewRow();
+	const auto chosen = computeChosenRow();
+	if (!chosen.sponsoredRandomId.isEmpty()
+		&& row.key == chosen.key
+		&& !session().sponsoredMessages().canOpenDestinations()) {
+		return false;
+	}
 	const auto callback = crl::guard(this, [=](bool shown) {
 		chatPreviewShown(shown, row);
 	});
@@ -3842,7 +3848,13 @@ void InnerWidget::chatPreviewShown(bool shown, RowDescriptor row) {
 		const auto chosen = computeChosenRow();
 		if (!chosen.sponsoredRandomId.isEmpty() && row.key == chosen.key) {
 			auto &messages = session().sponsoredMessages();
-			messages.clicked(chosen.sponsoredRandomId, false, false);
+			if (!messages.clicked(
+					chosen.sponsoredRandomId,
+					false,
+					false)) {
+				cancelChatPreview();
+				return;
+			}
 		}
 		_chatPreviewRow = row;
 		if (base::take(_chatPreviewTouchGlobal)) {
@@ -3862,6 +3874,12 @@ void InnerWidget::chatPreviewShown(bool shown, RowDescriptor row) {
 
 bool InnerWidget::scheduleChatPreview(QPoint positionOverride) {
 	const auto row = computeChatPreviewRow();
+	const auto chosen = computeChosenRow();
+	if (!chosen.sponsoredRandomId.isEmpty()
+		&& row.key == chosen.key
+		&& !session().sponsoredMessages().canOpenDestinations()) {
+		return false;
+	}
 	const auto callback = crl::guard(this, [=](bool shown) {
 		chatPreviewShown(shown, row);
 	});

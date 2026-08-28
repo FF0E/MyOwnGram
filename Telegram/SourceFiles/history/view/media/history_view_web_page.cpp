@@ -296,8 +296,9 @@ void WebPage::setupAdditionalData() {
 			? 1
 			: 0;
 		raw->link = std::make_shared<LambdaClickHandler>([=] {
-			session->sponsoredMessages().clicked(id, false, false);
-			UrlClickHandler::Open(link);
+			if (session->sponsoredMessages().clicked(id, false, false)) {
+				UrlClickHandler::Open(link);
+			}
 		});
 		if (!_attach) {
 			const auto maybeDocument = details.mediaDocumentId
@@ -317,19 +318,28 @@ void WebPage::setupAdditionalData() {
 		if (_attach) {
 			if (_attach->getPhoto()) {
 				raw->mediaLink = std::make_shared<LambdaClickHandler>([=] {
-					session->sponsoredMessages().clicked(id, true, false);
-					UrlClickHandler::Open(link);
+					if (session->sponsoredMessages().clicked(id, true, false)) {
+						UrlClickHandler::Open(link);
+					}
 				});
 			} else if (const auto document = _attach->getDocument()) {
 				const auto delegate = _parent->delegate();
 				raw->mediaLink = document->isVideoFile()
 					? std::make_shared<LambdaClickHandler>([=] {
-						session->sponsoredMessages().clicked(id, true, false);
-						delegate->elementOpenDocument(document, id, true);
+						if (session->sponsoredMessages().clicked(
+								id,
+								true,
+								false)) {
+							delegate->elementOpenDocument(document, id, true);
+						}
 					})
 					: std::make_shared<LambdaClickHandler>([=] {
-						session->sponsoredMessages().clicked(id, true, false);
-						UrlClickHandler::Open(link);
+						if (session->sponsoredMessages().clicked(
+								id,
+								true,
+								false)) {
+							UrlClickHandler::Open(link);
+						}
 					});
 			}
 		}

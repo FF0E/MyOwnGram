@@ -47,6 +47,7 @@ private:
 		Data::SponsoredForVideoState data;
 	};
 
+	void request();
 	void update();
 	void finish();
 	void updatePaused();

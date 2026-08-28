@@ -174,8 +174,8 @@ void FillSponsoredMessageBar(
 			if (const auto controller = FindSessionController(widget)) {
 				::Menu::ShowSponsored(widget, controller->uiShow(), fullId);
 			}
-		} else if (button == Qt::LeftButton) {
-			session->sponsoredMessages().clicked(fullId, false, false);
+		} else if (button == Qt::LeftButton
+			&& session->sponsoredMessages().clicked(fullId, false, false)) {
 			UrlClickHandler::Open(from.link);
 		}
 	});

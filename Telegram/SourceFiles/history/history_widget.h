@@ -638,6 +638,7 @@ private:
 	void setupGroupCallBar();
 	void setupRequestsBar();
 
+	void requestSponsoredMessages();
 	void checkSponsoredMessageBar();
 	[[nodiscard]] bool checkSponsoredMessageBarVisibility() const;
 	void requestSponsoredMessageBar();

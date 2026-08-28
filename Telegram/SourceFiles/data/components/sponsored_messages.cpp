@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_text_entities.h"
 #include "api/api_peer_search.h" // SponsoredSearchResult
 #include "apiwrap.h"
+#include "base/random.h"
 #include "core/click_handler_types.h"
 #include "data/data_channel.h"
 #include "data/data_document.h"
@@ -23,6 +24,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_element.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
+#include "myowngram/sponsored_content_settings.h"
 #include "ui/chat/sponsored_message_bar.h"
 #include "ui/text/text_utilities.h" // tr::rich.
 
@@ -32,10 +34,49 @@ namespace {
 constexpr auto kMs = crl::time(1000);
 constexpr auto kRequestTimeLimit = 5 * 60 * crl::time(1000);
 
+// ponytail: This fixed synthetic distribution approximates the RPC shape,
+// not Telegram's viewport-driven behavior. Client source has no measured delay
+// or omission distribution. Replace these constants with calibrated values if
+// reliable observations become available.
+constexpr auto kSyntheticViewChancePercent = 75;
+constexpr auto kSyntheticViewDelayMin = 1 * kMs;
+constexpr auto kSyntheticViewDelayMax = 30 * kMs;
+constexpr auto kSyntheticViewDelayRange = int(
+	kSyntheticViewDelayMax - kSyntheticViewDelayMin + 1);
+
+struct SyntheticViewPlan {
+	crl::time delay = 0;
+	bool send = false;
+};
+
+[[nodiscard]] constexpr SyntheticViewPlan MakeSyntheticViewPlan(
+		int chanceSample,
+		int delaySample) {
+	return {
+		.delay = kSyntheticViewDelayMin + crl::time(delaySample),
+		.send = (chanceSample < kSyntheticViewChancePercent),
+	};
+}
+
+static_assert(!MakeSyntheticViewPlan(75, 0).send);
+static_assert(MakeSyntheticViewPlan(74, 0).send);
+static_assert(MakeSyntheticViewPlan(0, 0).delay == kSyntheticViewDelayMin);
+static_assert(MakeSyntheticViewPlan(
+	0,
+	kSyntheticViewDelayRange - 1
+).delay == kSyntheticViewDelayMax);
+
 const auto kFlaggedPreload = ((MediaPreload*)quintptr(0x01));
 
 [[nodiscard]] bool TooEarlyForRequest(crl::time received) {
 	return (received > 0) && (received + kRequestTimeLimit > crl::now());
+}
+
+[[nodiscard]] MyOwnGram::SponsoredContent::Surface SurfaceFor(
+		not_null<History*> history) {
+	return history->peer->isChannel()
+		? MyOwnGram::SponsoredContent::Surface::Channel
+		: MyOwnGram::SponsoredContent::Surface::Bot;
 }
 
 template <typename Fields>
@@ -55,31 +96,110 @@ template <typename Fields>
 
 SponsoredMessages::SponsoredMessages(not_null<Main::Session*> session)
 : _session(session)
-, _clearTimer([=] { clearOldRequests(); }) {
+, _clearTimer([=] { clearOldRequests(); })
+, _syntheticViewTimer([=] { sendScheduledSyntheticViews(); }) {
 	Data::AmPremiumValue(
 		_session
 	) | rpl::on_next([=](bool premium) {
 		if (premium) {
 			clear();
 		}
-	}, _lifetime);
+	}, _premiumLifetime);
+	MyOwnGram::SponsoredContent::DeliveryChanges(
+	) | rpl::on_next([=](MyOwnGram::SponsoredContent::Surface surface) {
+		if (surface != MyOwnGram::SponsoredContent::Surface::Search) {
+			resetDelivery(surface);
+		}
+	}, _policyLifetime);
+	MyOwnGram::SponsoredContent::ViewReportingChanges(
+	) | rpl::on_next([=](
+			MyOwnGram::SponsoredContent::ViewReportingMode) {
+		resetViewReporting();
+	}, _policyLifetime);
 }
 
 SponsoredMessages::~SponsoredMessages() {
 	Expects(_data.empty());
 	Expects(_requests.empty());
 	Expects(_viewRequests.empty());
+	Expects(_syntheticViews.empty());
+	Expects(_syntheticViewHandled.empty());
+	Expects(_dataForVideo.empty());
+	Expects(_requestsForVideo.empty());
 }
 
 void SponsoredMessages::clear() {
-	_lifetime.destroy();
+	_premiumLifetime.destroy();
+	_clearTimer.cancel();
+	_syntheticViewTimer.cancel();
 	for (const auto &request : base::take(_requests)) {
-		_session->api().request(request.second.requestId).cancel();
+		if (request.second.requestId) {
+			_session->api().request(request.second.requestId).cancel();
+		}
+	}
+	for (const auto &request : base::take(_requestsForVideo)) {
+		if (request.second.requestId) {
+			_session->api().request(request.second.requestId).cancel();
+		}
 	}
 	for (const auto &request : base::take(_viewRequests)) {
-		_session->api().request(request.second.requestId).cancel();
+		if (request.second.requestId) {
+			_session->api().request(request.second.requestId).cancel();
+		}
 	}
+	base::take(_syntheticViews);
+	base::take(_syntheticViewHandled);
 	base::take(_data);
+	base::take(_dataForVideo);
+}
+
+void SponsoredMessages::resetDelivery(
+		MyOwnGram::SponsoredContent::Surface surface) {
+	if (surface == MyOwnGram::SponsoredContent::Surface::Video) {
+		auto requests = base::take(_requestsForVideo);
+		for (const auto &entry : requests) {
+			if (entry.second.requestId) {
+				_session->api().request(entry.second.requestId).cancel();
+			}
+		}
+		base::take(_dataForVideo);
+		for (auto &entry : requests) {
+			for (auto &callback : entry.second.callbacks) {
+				callback({});
+			}
+		}
+		return;
+	} else if (surface == MyOwnGram::SponsoredContent::Surface::Search) {
+		return;
+	}
+	for (auto i = begin(_requests); i != end(_requests);) {
+		if (SurfaceFor(i->first) == surface) {
+			if (i->second.requestId) {
+				_session->api().request(i->second.requestId).cancel();
+			}
+			i = _requests.erase(i);
+		} else {
+			++i;
+		}
+	}
+	for (auto i = begin(_data); i != end(_data);) {
+		if (SurfaceFor(i->first) == surface) {
+			i = _data.erase(i);
+		} else {
+			++i;
+		}
+	}
+}
+
+void SponsoredMessages::resetViewReporting() {
+	_syntheticViewTimer.cancel();
+	_syntheticViews.clear();
+	_syntheticViewHandled.clear();
+	for (const auto &entry : base::take(_viewRequests)) {
+		if (entry.second.requestId) {
+			_session->api().request(entry.second.requestId).cancel();
+		}
+	}
 }
 
 void SponsoredMessages::clearOldRequests() {
@@ -99,11 +219,28 @@ void SponsoredMessages::clearOldRequests() {
 	};
 	clear(_requests);
 	clear(_requestsForVideo);
+	clear(_viewRequests);
+	for (auto i = begin(_syntheticViewHandled)
+		; i != end(_syntheticViewHandled);) {
+		if (i->second + kRequestTimeLimit <= now) {
+			i = _syntheticViewHandled.erase(i);
+		} else {
+			++i;
+		}
+	}
+	if (!_requests.empty()
+		|| !_requestsForVideo.empty()
+		|| !_viewRequests.empty()
+		|| !_syntheticViewHandled.empty()) {
+		_clearTimer.callOnce(kRequestTimeLimit * 2);
+	}
 }
 
 SponsoredMessages::AppendResult SponsoredMessages::append(
 		not_null<History*> history) {
-	if (isTopBarFor(history)) {
+	if (!MyOwnGram::SponsoredContent::ShouldDisplay(SurfaceFor(history))) {
+		return SponsoredMessages::AppendResult::None;
+	} else if (isTopBarFor(history)) {
 		return SponsoredMessages::AppendResult::None;
 	}
 	const auto it = _data.find(history);
@@ -139,7 +276,9 @@ void SponsoredMessages::inject(
 		MsgId injectAfterMsgId,
 		int betweenHeight,
 		int fallbackWidth) {
-	if (!canHaveFor(history)) {
+	if (!canHaveFor(history)
+		|| !MyOwnGram::SponsoredContent::ShouldDisplay(
+			SurfaceFor(history))) {
 		return;
 	}
 	const auto it = _data.find(history);
@@ -264,6 +403,12 @@ bool SponsoredMessages::isTopBarFor(not_null<History*> history) const {
 void SponsoredMessages::request(not_null<History*> history, Fn<void()> done) {
 	if (!canHaveFor(history)) {
 		return;
+	} else if (!MyOwnGram::SponsoredContent::ShouldRequest(
+			SurfaceFor(history))) {
+		if (done) {
+			done();
+		}
+		return;
 	}
 	auto &request = _requests[history];
 	if (request.requestId || TooEarlyForRequest(request.lastReceived)) {
@@ -287,13 +432,18 @@ void SponsoredMessages::request(not_null<History*> history, Fn<void()> done) {
 			MTP_flags(0),
 			history->peer->input(),
 			MTPint()) // msg_id
-	).done([=](const MTPmessages_sponsoredMessages &result) {
-		parse(history, result);
-		if (done) {
+	).done([=](
+			const MTPmessages_sponsoredMessages &result,
+			mtpRequestId requestId) {
+		if (parse(history, result, requestId) && done) {
 			done();
 		}
-	}).fail([=] {
-		_requests.remove(history);
+	}).fail([=](const MTP::Error &, mtpRequestId requestId) {
+		const auto i = _requests.find(history);
+		if (i != end(_requests)
+			&& i->second.requestId == requestId) {
+			_requests.erase(i);
+		}
 	}).send();
 }
 
@@ -302,7 +452,9 @@ void SponsoredMessages::requestForVideo(
 		Fn<void(SponsoredForVideo)> done) {
 	Expects(done != nullptr);
 
-	if (!canHaveFor(item)) {
+	if (!canHaveFor(item)
+		|| !MyOwnGram::SponsoredContent::ShouldRequest(
+			MyOwnGram::SponsoredContent::Surface::Video)) {
 		done({});
 		return;
 	}
@@ -348,12 +500,18 @@ void SponsoredMessages::requestForVideo(
 			MTP_flags(Flag::f_msg_id),
 			peer->input(),
 			MTP_int(item->id.bare))
-	).done([=](const MTPmessages_sponsoredMessages &result) {
-		parseForVideo(peer, result);
-		finish();
-	}).fail([=] {
-		_requestsForVideo.remove(peer);
-		finish();
+	).done([=](
+			const MTPmessages_sponsoredMessages &result,
+			mtpRequestId requestId) {
+		if (parseForVideo(peer, result, requestId)) {
+			finish();
+		}
+	}).fail([=](const MTP::Error &, mtpRequestId requestId) {
+		const auto i = _requestsForVideo.find(peer);
+		if (i != end(_requestsForVideo)
+			&& i->second.requestId == requestId) {
+			_requestsForVideo.erase(i);
+		}
 	}).send();
 }
 
@@ -369,21 +527,37 @@ void SponsoredMessages::updateForVideo(
 	}
 }
 
-void SponsoredMessages::parse(
+bool SponsoredMessages::parse(
 		not_null<History*> history,
-		const MTPmessages_sponsoredMessages &list) {
-	auto &request = _requests[history];
-	request.lastReceived = crl::now();
-	request.requestId = 0;
+		const MTPmessages_sponsoredMessages &list,
+		mtpRequestId requestId) {
+	const auto i = _requests.find(history);
+	if (i == end(_requests) || i->second.requestId != requestId) {
+		return false;
+	}
+	const auto surface = SurfaceFor(history);
+	if (!MyOwnGram::SponsoredContent::ShouldRequest(surface)) {
+		_requests.erase(i);
+		_data.remove(history);
+		return false;
+	}
+	i->second.lastReceived = crl::now();
+	i->second.requestId = 0;
 	if (!_clearTimer.isActive()) {
 		_clearTimer.callOnce(kRequestTimeLimit * 2);
 	}
 
 	list.match([&](const MTPDmessages_sponsoredMessages &data) {
+		const auto &messages = data.vmessages().v;
+		for (const auto &message : messages) {
+			received(message.data().vrandom_id().v);
+		}
+		if (!MyOwnGram::SponsoredContent::ShouldDisplay(surface)) {
+			_data.remove(history);
+			return;
+		}
 		_session->data().processUsers(data.vusers());
 		_session->data().processChats(data.vchats());
-
-		const auto &messages = data.vmessages().v;
 		auto &list = _data.emplace(history).first->second;
 		list.entries.clear();
 		list.received = crl::now();
@@ -400,26 +574,44 @@ void SponsoredMessages::parse(
 				return &_data[history].entries;
 			}, history, message);
 		}
-	}, [](const MTPDmessages_sponsoredMessagesEmpty &) {
+	}, [&](const MTPDmessages_sponsoredMessagesEmpty &) {
+		_data.remove(history);
 	});
+	return true;
 }
 
-void SponsoredMessages::parseForVideo(
+bool SponsoredMessages::parseForVideo(
 		not_null<PeerData*> peer,
-		const MTPmessages_sponsoredMessages &list) {
-	auto &request = _requestsForVideo[peer];
-	request.lastReceived = crl::now();
-	request.requestId = 0;
+		const MTPmessages_sponsoredMessages &list,
+		mtpRequestId requestId) {
+	const auto i = _requestsForVideo.find(peer);
+	if (i == end(_requestsForVideo) || i->second.requestId != requestId) {
+		return false;
+	}
+	using Surface = MyOwnGram::SponsoredContent::Surface;
+	if (!MyOwnGram::SponsoredContent::ShouldRequest(Surface::Video)) {
+		_requestsForVideo.erase(i);
+		_dataForVideo.remove(peer);
+		return false;
+	}
+	i->second.lastReceived = crl::now();
+	i->second.requestId = 0;
 	if (!_clearTimer.isActive()) {
 		_clearTimer.callOnce(kRequestTimeLimit * 2);
 	}
 
 	list.match([&](const MTPDmessages_sponsoredMessages &data) {
+		const auto &messages = data.vmessages().v;
+		for (const auto &message : messages) {
+			received(message.data().vrandom_id().v);
+		}
+		if (!MyOwnGram::SponsoredContent::ShouldDisplay(Surface::Video)) {
+			_dataForVideo.remove(peer);
+			return;
+		}
 		_session->data().processUsers(data.vusers());
 		_session->data().processChats(data.vchats());
-
 		const auto history = _session->data().history(peer);
-		const auto &messages = data.vmessages().v;
 		auto &list = _dataForVideo.emplace(peer).first->second;
 		list.entries.clear();
 		list.received = crl::now();
@@ -430,12 +622,18 @@ void SponsoredMessages::parseForVideo(
 				return &_dataForVideo[peer].entries;
 			}, history, message);
 		}
-	}, [](const MTPDmessages_sponsoredMessagesEmpty &) {
+	}, [&](const MTPDmessages_sponsoredMessagesEmpty &) {
+		_dataForVideo.remove(peer);
 	});
+	return true;
 }
 
 SponsoredForVideo SponsoredMessages::prepareForVideo(
 		not_null<PeerData*> peer) {
+	if (!MyOwnGram::SponsoredContent::ShouldDisplay(
+			MyOwnGram::SponsoredContent::Surface::Video)) {
+		return {};
+	}
 	const auto i = _dataForVideo.find(peer);
 	if (i == end(_dataForVideo) || i->second.entries.empty()) {
 		return {};
@@ -453,6 +651,9 @@ SponsoredForVideo SponsoredMessages::prepareForVideo(
 FullMsgId SponsoredMessages::fillTopBar(
 		not_null<History*> history,
 		not_null<Ui::RpWidget*> widget) {
+	if (!MyOwnGram::SponsoredContent::ShouldDisplay(SurfaceFor(history))) {
+		return {};
+	}
 	const auto it = _data.find(history);
 	if (it != end(_data)) {
 		auto &list = it->second;
@@ -656,6 +857,13 @@ const SponsoredMessages::Entry *SponsoredMessages::find(
 	return &*entryIt;
 }
 
+void SponsoredMessages::received(const QByteArray &randomId) {
+	if (MyOwnGram::SponsoredContent::ViewReporting()
+			== MyOwnGram::SponsoredContent::ViewReportingMode::RandomAfterReceipt) {
+		scheduleSyntheticView(randomId);
+	}
+}
+
 void SponsoredMessages::view(const FullMsgId &fullId) {
 	const auto entryPtr = find(fullId);
 	if (!entryPtr) {
@@ -665,18 +873,91 @@ void SponsoredMessages::view(const FullMsgId &fullId) {
 }
 
 void SponsoredMessages::view(const QByteArray &randomId) {
+	switch (MyOwnGram::SponsoredContent::ViewReporting()) {
+	case MyOwnGram::SponsoredContent::ViewReportingMode::WhenVisible:
+		sendView(randomId);
+		break;
+	case MyOwnGram::SponsoredContent::ViewReportingMode::RandomAfterReceipt:
+		scheduleSyntheticView(randomId);
+		break;
+	case MyOwnGram::SponsoredContent::ViewReportingMode::Never:
+		break;
+	}
+}
+
+void SponsoredMessages::scheduleSyntheticView(const RandomId &randomId) {
+	if (_syntheticViewHandled.find(randomId)
+			!= end(_syntheticViewHandled)) {
+		return;
+	}
+	const auto now = crl::now();
+	_syntheticViewHandled.emplace(randomId, now);
+	if (!_clearTimer.isActive()) {
+		_clearTimer.callOnce(kRequestTimeLimit * 2);
+	}
+	const auto plan = MakeSyntheticViewPlan(
+		base::RandomIndex(100),
+		base::RandomIndex(kSyntheticViewDelayRange));
+	if (!plan.send) {
+		return;
+	}
+	_syntheticViews.emplace(randomId, now + plan.delay);
+	scheduleSyntheticViewTimer();
+}
+
+void SponsoredMessages::scheduleSyntheticViewTimer() {
+	if (_syntheticViews.empty()) {
+		_syntheticViewTimer.cancel();
+		return;
+	}
+	auto next = begin(_syntheticViews)->second;
+	for (const auto &entry : _syntheticViews) {
+		next = std::min(next, entry.second);
+	}
+	_syntheticViewTimer.callOnce(std::max(next - crl::now(), crl::time(0)));
+}
+
+void SponsoredMessages::sendScheduledSyntheticViews() {
+	if (MyOwnGram::SponsoredContent::ViewReporting()
+			!= MyOwnGram::SponsoredContent::ViewReportingMode::RandomAfterReceipt) {
+		_syntheticViews.clear();
+		return;
+	}
+	const auto now = crl::now();
+	auto ready = std::vector<RandomId>();
+	for (const auto &[randomId, when] : _syntheticViews) {
+		if (when <= now) {
+			ready.push_back(randomId);
+		}
+	}
+	for (const auto &randomId : ready) {
+		_syntheticViews.remove(randomId);
+		sendView(randomId);
+	}
+	scheduleSyntheticViewTimer();
+}
+
+void SponsoredMessages::sendView(const RandomId &randomId) {
 	auto &request = _viewRequests[randomId];
 	if (request.requestId || TooEarlyForRequest(request.lastReceived)) {
 		return;
 	}
 	request.requestId = _session->api().request(
 		MTPmessages_ViewSponsoredMessage(MTP_bytes(randomId))
-	).done([=] {
-		auto &request = _viewRequests[randomId];
-		request.lastReceived = crl::now();
-		request.requestId = 0;
-	}).fail([=] {
-		_viewRequests.remove(randomId);
+	).done([=](const MTPBool &, mtpRequestId requestId) {
+		const auto i = _viewRequests.find(randomId);
+		if (i == end(_viewRequests)
+			|| i->second.requestId != requestId) {
+			return;
+		}
+		i->second.lastReceived = crl::now();
+		i->second.requestId = 0;
+	}).fail([=](const MTP::Error &, mtpRequestId requestId) {
+		const auto i = _viewRequests.find(randomId);
+		if (i != end(_viewRequests)
+			&& i->second.requestId == requestId) {
+			_viewRequests.erase(i);
+		}
 	}).send();
 }
 
@@ -713,21 +994,28 @@ SponsoredMessages::Details SponsoredMessages::lookupDetails(
 	};
 }
 
-void SponsoredMessages::clicked(
+bool SponsoredMessages::canOpenDestinations() const {
+	return MyOwnGram::SponsoredContent::OpenDestinations();
+}
+
+bool SponsoredMessages::clicked(
 		const FullMsgId &fullId,
 		bool isMedia,
 		bool isFullscreen) {
 	const auto entryPtr = find(fullId);
-	if (!entryPtr) {
-		return;
-	}
-	clicked(entryPtr->sponsored.randomId, isMedia, isFullscreen);
+	return entryPtr
+		&& clicked(entryPtr->sponsored.randomId, isMedia, isFullscreen);
 }
 
-void SponsoredMessages::clicked(
+bool SponsoredMessages::clicked(
 		const QByteArray &randomId,
 		bool isMedia,
 		bool isFullscreen) {
+	if (!canOpenDestinations()) {
+		return false;
+	} else if (!MyOwnGram::SponsoredContent::SendClickReports()) {
+		return true;
+	}
 	using Flag = MTPmessages_ClickSponsoredMessage::Flag;
 	_session->api().request(MTPmessages_ClickSponsoredMessage(
 		MTP_flags(Flag(0)
@@ -735,6 +1023,7 @@ void SponsoredMessages::clicked(
 			| (isFullscreen ? Flag::f_fullscreen : Flag(0))),
 		MTP_bytes(randomId)
 	)).send();
+	return true;
 }
 
 SponsoredReportAction SponsoredMessages::createReportCallback(
@@ -825,12 +1114,16 @@ SponsoredReportAction SponsoredMessages::createReportCallback(
 
 SponsoredMessages::State SponsoredMessages::state(
 		not_null<History*> history) const {
+	if (!MyOwnGram::SponsoredContent::ShouldDisplay(SurfaceFor(history))) {
+		return State::None;
+	}
 	const auto it = _data.find(history);
 	return (it == end(_data)) ? State::None : it->second.state;
 }
 
 bool SponsoredMessages::hasUnshownFor(not_null<History*> history) const {
-	if (isTopBarFor(history)) {
+	if (!MyOwnGram::SponsoredContent::ShouldDisplay(SurfaceFor(history))
+		|| isTopBarFor(history)) {
 		return false;
 	}
 	const auto it = _data.find(history);

@@ -22,6 +22,10 @@ namespace Main {
 class Session;
 } // namespace Main
 
+namespace MyOwnGram::SponsoredContent {
+enum class Surface;
+} // namespace MyOwnGram::SponsoredContent
+
 namespace Ui {
 class RpWidget;
 } // namespace Ui
@@ -144,8 +148,12 @@ public:
 	[[nodiscard]] Details lookupDetails(const SponsoredMessage &data) const;
 	[[nodiscard]] Details lookupDetails(
 		const Api::SponsoredSearchResult &data) const;
-	void clicked(const FullMsgId &fullId, bool isMedia, bool isFullscreen);
-	void clicked(
+	[[nodiscard]] bool canOpenDestinations() const;
+	[[nodiscard]] bool clicked(
+		const FullMsgId &fullId,
+		bool isMedia,
+		bool isFullscreen);
+	[[nodiscard]] bool clicked(
 		const QByteArray &randomId,
 		bool isMedia,
 		bool isFullscreen);
@@ -161,6 +169,7 @@ public:
 		int betweenHeight,
 		int fallbackWidth);
 
+	void received(const QByteArray &randomId);
 	void view(const FullMsgId &fullId);
 	void view(const QByteArray &randomId);
 
@@ -212,12 +221,14 @@ private:
 		crl::time lastReceived = 0;
 	};
 
-	void parse(
+	bool parse(
 		not_null<History*> history,
-		const MTPmessages_sponsoredMessages &list);
-	void parseForVideo(
+		const MTPmessages_sponsoredMessages &list,
+		mtpRequestId requestId);
+	bool parseForVideo(
 		not_null<PeerData*> peer,
-		const MTPmessages_sponsoredMessages &list);
+		const MTPmessages_sponsoredMessages &list,
+		mtpRequestId requestId);
 	void append(
 		Fn<not_null<std::vector<Entry>*>()> entries,
 		not_null<History*> history,
@@ -225,22 +236,32 @@ private:
 	[[nodiscard]] SponsoredForVideo prepareForVideo(
 		not_null<PeerData*> peer);
 	void clearOldRequests();
+	void resetDelivery(MyOwnGram::SponsoredContent::Surface surface);
+	void resetViewReporting();
+	void scheduleSyntheticView(const RandomId &randomId);
+	void scheduleSyntheticViewTimer();
+	void sendScheduledSyntheticViews();
+	void sendView(const RandomId &randomId);
 
 	const Entry *find(const FullMsgId &fullId) const;
 
 	const not_null<Main::Session*> _session;
 
 	base::Timer _clearTimer;
+	base::Timer _syntheticViewTimer;
 	base::flat_map<not_null<History*>, List> _data;
 	base::flat_map<not_null<History*>, Request> _requests;
 	base::flat_map<RandomId, Request> _viewRequests;
+	base::flat_map<RandomId, crl::time> _syntheticViews;
+	base::flat_map<RandomId, crl::time> _syntheticViewHandled;
 
 	base::flat_map<not_null<PeerData*>, ListForVideo> _dataForVideo;
 	base::flat_map<not_null<PeerData*>, RequestForVideo> _requestsForVideo;
 
 	rpl::event_stream<FullMsgId> _itemRemoved;
 
-	rpl::lifetime _lifetime;
+	rpl::lifetime _policyLifetime;
+	rpl::lifetime _premiumLifetime;
 
 };
 

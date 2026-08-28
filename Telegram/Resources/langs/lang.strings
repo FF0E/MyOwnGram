@@ -8623,6 +8623,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_settings" = "MyOwnGram Settings";
 "lng_myowngram_privacy" = "Privacy";
 "lng_myowngram_data_sharing" = "Data sharing";
+"lng_myowngram_sponsored_content" = "Sponsored content";
 "lng_myowngram_general" = "General";
 "lng_myowngram_web_content" = "Web content";
 "lng_myowngram_open_mini_apps" = "Open Mini Apps";
@@ -8688,5 +8689,23 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_verification_messages" = "Verification messages";
 "lng_myowngram_send_gateway_delivery_reports" = "Confirm verification code delivery";
 "lng_myowngram_send_gateway_delivery_reports_about" = "Notify services using Telegram Gateway when their verification messages reach this app.";
+"lng_myowngram_sponsored_delivery" = "Ad delivery";
+"lng_myowngram_sponsored_delivery_mode" = "Ad handling";
+"lng_myowngram_sponsored_delivery_show" = "Show normally";
+"lng_myowngram_sponsored_delivery_receive" = "Receive but hide";
+"lng_myowngram_sponsored_delivery_block" = "Don't request";
+"lng_myowngram_sponsored_channel" = "Channel sponsored messages";
+"lng_myowngram_sponsored_bot" = "Bot chat ads";
+"lng_myowngram_sponsored_video" = "Channel video ads";
+"lng_myowngram_sponsored_search" = "Sponsored search results";
+"lng_myowngram_sponsored_delivery_about" = "Choose independently for each ad location. Receive but hide still requests sponsored content and discards it locally. Don't request skips the dedicated sponsored request.";
+"lng_myowngram_sponsored_reporting_links" = "Reporting and destinations";
+"lng_myowngram_sponsored_view_reporting" = "View confirmations";
+"lng_myowngram_sponsored_view_visible" = "When actually visible";
+"lng_myowngram_sponsored_view_random" = "Random after receiving";
+"lng_myowngram_sponsored_view_never" = "Never";
+"lng_myowngram_sponsored_open_destinations" = "Open sponsored links and destinations";
+"lng_myowngram_sponsored_click_reports" = "Send sponsored click confirmations";
+"lng_myowngram_sponsored_reporting_about" = "These controls apply to every account on this installation. Random mode selects 75% of received ads for a view confirmation after a random 1–30 second delay, whether or not they become visible. Blocking sponsored destinations also prevents their click confirmations.";
 
 // Keys finished

@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "myowngram/activity_reporting_settings.h"
 #include "myowngram/mini_app_settings.h"
+#include "myowngram/sponsored_content_settings.h"
 #include "settings/sections/settings_main.h"
 #include "settings/settings_builder.h"
 #include "settings/settings_common_session.h"
@@ -31,6 +32,7 @@ using namespace Builder;
 
 namespace ActivityReporting = ::MyOwnGram::ActivityReporting;
 namespace MiniApps = ::MyOwnGram::MiniApps;
+namespace SponsoredContent = ::MyOwnGram::SponsoredContent;
 
 class MyOwnGram final : public Section<MyOwnGram> {
 public:
@@ -74,6 +76,20 @@ private:
 class MyOwnGramDataSharing final : public Section<MyOwnGramDataSharing> {
 public:
 	MyOwnGramDataSharing(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+private:
+	void setupContent();
+
+};
+
+class MyOwnGramSponsoredContent final
+	: public Section<MyOwnGramSponsoredContent> {
+public:
+	MyOwnGramSponsoredContent(
 		QWidget *parent,
 		not_null<Window::SessionController*> controller);
 
@@ -176,6 +192,141 @@ void AddMiniAppOpenMode(SectionBuilder &builder) {
 			u"browser"_q,
 			u"web"_q,
 			u"ask"_q,
+		},
+	});
+}
+
+QString SponsoredDeliveryText(SponsoredContent::DeliveryMode mode) {
+	switch (mode) {
+	case SponsoredContent::DeliveryMode::Show:
+		return tr::lng_myowngram_sponsored_delivery_show(tr::now);
+	case SponsoredContent::DeliveryMode::ReceiveOnly:
+		return tr::lng_myowngram_sponsored_delivery_receive(tr::now);
+	case SponsoredContent::DeliveryMode::BlockRequests:
+		return tr::lng_myowngram_sponsored_delivery_block(tr::now);
+	}
+	Unexpected("SponsoredContent::DeliveryMode value.");
+}
+
+rpl::producer<QString> SponsoredDeliveryTextValue(
+		SponsoredContent::DeliveryMode mode) {
+	switch (mode) {
+	case SponsoredContent::DeliveryMode::Show:
+		return tr::lng_myowngram_sponsored_delivery_show();
+	case SponsoredContent::DeliveryMode::ReceiveOnly:
+		return tr::lng_myowngram_sponsored_delivery_receive();
+	case SponsoredContent::DeliveryMode::BlockRequests:
+		return tr::lng_myowngram_sponsored_delivery_block();
+	}
+	Unexpected("SponsoredContent::DeliveryMode value.");
+}
+
+void AddSponsoredDeliveryMode(
+		SectionBuilder &builder,
+		SponsoredContent::Surface surface,
+		QString id,
+		rpl::producer<QString> title) {
+	const auto controller = builder.controller();
+	builder.addButton({
+		.id = std::move(id),
+		.title = std::move(title),
+		.st = &st::settingsButtonNoIcon,
+		.label = SponsoredContent::DeliveryValue(surface)
+			| rpl::map(SponsoredDeliveryTextValue)
+			| rpl::flatten_latest(),
+		.onClick = [=] {
+			const auto options = std::vector{
+				SponsoredDeliveryText(SponsoredContent::DeliveryMode::Show),
+				SponsoredDeliveryText(
+					SponsoredContent::DeliveryMode::ReceiveOnly),
+				SponsoredDeliveryText(
+					SponsoredContent::DeliveryMode::BlockRequests),
+			};
+			controller->show(Box([=](not_null<Ui::GenericBox*> box) {
+				SingleChoiceBox(box, {
+					.title = tr::lng_myowngram_sponsored_delivery_mode(),
+					.options = options,
+					.initialSelection = static_cast<int>(
+						SponsoredContent::Delivery(surface)),
+					.callback = [=](int index) {
+						const auto mode = static_cast<
+							SponsoredContent::DeliveryMode>(index);
+						SponsoredContent::SetDelivery(surface, mode);
+					},
+				});
+			}));
+		},
+		.keywords = {
+			u"ads"_q,
+			u"sponsored"_q,
+			u"receive"_q,
+			u"block"_q,
+		},
+	});
+}
+
+QString SponsoredViewReportingText(
+		SponsoredContent::ViewReportingMode mode) {
+	switch (mode) {
+	case SponsoredContent::ViewReportingMode::WhenVisible:
+		return tr::lng_myowngram_sponsored_view_visible(tr::now);
+	case SponsoredContent::ViewReportingMode::RandomAfterReceipt:
+		return tr::lng_myowngram_sponsored_view_random(tr::now);
+	case SponsoredContent::ViewReportingMode::Never:
+		return tr::lng_myowngram_sponsored_view_never(tr::now);
+	}
+	Unexpected("SponsoredContent::ViewReportingMode value.");
+}
+
+rpl::producer<QString> SponsoredViewReportingTextValue(
+		SponsoredContent::ViewReportingMode mode) {
+	switch (mode) {
+	case SponsoredContent::ViewReportingMode::WhenVisible:
+		return tr::lng_myowngram_sponsored_view_visible();
+	case SponsoredContent::ViewReportingMode::RandomAfterReceipt:
+		return tr::lng_myowngram_sponsored_view_random();
+	case SponsoredContent::ViewReportingMode::Never:
+		return tr::lng_myowngram_sponsored_view_never();
+	}
+	Unexpected("SponsoredContent::ViewReportingMode value.");
+}
+
+void AddSponsoredViewReporting(SectionBuilder &builder) {
+	const auto controller = builder.controller();
+	builder.addButton({
+		.id = u"myowngram/sponsored/view_reporting"_q,
+		.title = tr::lng_myowngram_sponsored_view_reporting(),
+		.st = &st::settingsButtonNoIcon,
+		.label = SponsoredContent::ViewReportingValue(
+		) | rpl::map(SponsoredViewReportingTextValue) | rpl::flatten_latest(),
+		.onClick = [=] {
+			const auto options = std::vector{
+				SponsoredViewReportingText(
+					SponsoredContent::ViewReportingMode::WhenVisible),
+				SponsoredViewReportingText(
+					SponsoredContent::ViewReportingMode::RandomAfterReceipt),
+				SponsoredViewReportingText(
+					SponsoredContent::ViewReportingMode::Never),
+			};
+			controller->show(Box([=](not_null<Ui::GenericBox*> box) {
+				SingleChoiceBox(box, {
+					.title = tr::lng_myowngram_sponsored_view_reporting(),
+					.options = options,
+					.initialSelection = static_cast<int>(
+						SponsoredContent::ViewReporting()),
+					.callback = [](int index) {
+						const auto mode = static_cast<
+							SponsoredContent::ViewReportingMode>(index);
+						SponsoredContent::SetViewReporting(mode);
+					},
+				});
+			}));
+		},
+		.keywords = {
+			u"ads"_q,
+			u"sponsored"_q,
+			u"view"_q,
+			u"report"_q,
 		},
 	});
 }
@@ -435,6 +586,63 @@ void BuildPrivacySection(SectionBuilder &builder) {
 		tr::lng_myowngram_story_activity_about());
 }
 
+void BuildSponsoredContentSection(SectionBuilder &builder) {
+	builder.addSkip();
+	builder.addSubsectionTitle({
+		.id = u"myowngram/sponsored/delivery"_q,
+		.title = tr::lng_myowngram_sponsored_delivery(),
+		.keywords = { u"ads"_q, u"sponsored"_q, u"delivery"_q },
+	});
+	AddSponsoredDeliveryMode(
+		builder,
+		SponsoredContent::Surface::Channel,
+		u"myowngram/sponsored/channel"_q,
+		tr::lng_myowngram_sponsored_channel());
+	AddSponsoredDeliveryMode(
+		builder,
+		SponsoredContent::Surface::Bot,
+		u"myowngram/sponsored/bot"_q,
+		tr::lng_myowngram_sponsored_bot());
+	AddSponsoredDeliveryMode(
+		builder,
+		SponsoredContent::Surface::Video,
+		u"myowngram/sponsored/video"_q,
+		tr::lng_myowngram_sponsored_video());
+	AddSponsoredDeliveryMode(
+		builder,
+		SponsoredContent::Surface::Search,
+		u"myowngram/sponsored/search"_q,
+		tr::lng_myowngram_sponsored_search());
+	AddMyOwnGramGroupFooter(
+		builder,
+		tr::lng_myowngram_sponsored_delivery_about());
+
+	builder.addSkip();
+	builder.addSubsectionTitle({
+		.id = u"myowngram/sponsored/reporting_links"_q,
+		.title = tr::lng_myowngram_sponsored_reporting_links(),
+		.keywords = { u"ads"_q, u"reporting"_q, u"links"_q },
+	});
+	AddSponsoredViewReporting(builder);
+	AddMyOwnGramToggle(
+		builder,
+		u"myowngram/sponsored/open_destinations"_q,
+		tr::lng_myowngram_sponsored_open_destinations(),
+		SponsoredContent::OpenDestinations,
+		SponsoredContent::SetOpenDestinations,
+		{ u"ads"_q, u"links"_q, u"buttons"_q, u"clicks"_q });
+	AddMyOwnGramToggle(
+		builder,
+		u"myowngram/sponsored/click_reports"_q,
+		tr::lng_myowngram_sponsored_click_reports(),
+		SponsoredContent::SendClickReports,
+		SponsoredContent::SetSendClickReports,
+		{ u"ads"_q, u"click"_q, u"report"_q, u"tracking"_q });
+	AddMyOwnGramGroupFooter(
+		builder,
+		tr::lng_myowngram_sponsored_reporting_about());
+}
+
 void BuildDataSharingSection(SectionBuilder &builder) {
 	builder.addSkip();
 	builder.addSubsectionTitle({
@@ -517,6 +725,12 @@ void BuildMyOwnGramMenu(SectionBuilder &builder) {
 		.keywords = { u"data"_q, u"sharing"_q, u"analytics"_q, u"diagnostics"_q },
 	});
 	builder.addSectionButton({
+		.title = tr::lng_myowngram_sponsored_content(),
+		.targetSection = MyOwnGramSponsoredContent::Id(),
+		.icon = { &st::menuIconEarn },
+		.keywords = { u"ads"_q, u"sponsored"_q, u"tracking"_q },
+	});
+	builder.addSectionButton({
 		.title = tr::lng_myowngram_general(),
 		.targetSection = MyOwnGramGeneral::Id(),
 		.icon = { &st::menuIconSettings },
@@ -552,6 +766,15 @@ const auto kDataSharingMeta = BuildHelper({
 	BuildDataSharingSection(builder);
 });
 
+const auto kSponsoredContentMeta = BuildHelper({
+	.id = MyOwnGramSponsoredContent::Id(),
+	.parentId = MyOwnGram::Id(),
+	.title = &tr::lng_myowngram_sponsored_content,
+	.icon = &st::menuIconEarn,
+}, [](SectionBuilder &builder) {
+	BuildSponsoredContentSection(builder);
+});
+
 const auto kMeta = BuildHelper({
 	.id = MyOwnGram::Id(),
 	.parentId = MainId(),
@@ -564,6 +787,7 @@ const auto kMeta = BuildHelper({
 const SectionBuildMethod kGeneralSection = kGeneralMeta.build;
 const SectionBuildMethod kPrivacySection = kPrivacyMeta.build;
 const SectionBuildMethod kDataSharingSection = kDataSharingMeta.build;
+const SectionBuildMethod kSponsoredContentSection = kSponsoredContentMeta.build;
 const SectionBuildMethod kMyOwnGramSection = kMeta.build;
 
 MyOwnGram::MyOwnGram(
@@ -631,6 +855,23 @@ rpl::producer<QString> MyOwnGramDataSharing::title() {
 void MyOwnGramDataSharing::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
 	build(content, kDataSharingSection);
+	Ui::ResizeFitChild(this, content);
+}
+
+MyOwnGramSponsoredContent::MyOwnGramSponsoredContent(
+	QWidget *parent,
+	not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	setupContent();
+}
+
+rpl::producer<QString> MyOwnGramSponsoredContent::title() {
+	return tr::lng_myowngram_sponsored_content();
+}
+
+void MyOwnGramSponsoredContent::setupContent() {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	build(content, kSponsoredContentSection);
 	Ui::ResizeFitChild(this, content);
 }
 

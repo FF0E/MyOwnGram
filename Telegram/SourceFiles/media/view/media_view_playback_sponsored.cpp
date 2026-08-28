@@ -18,6 +18,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
 #include "menu/menu_sponsored.h"
+#include "myowngram/sponsored_content_settings.h"
 #include "ui/effects/numbers_animation.h"
 #include "ui/effects/ripple_animation.h"
 #include "ui/widgets/menu/menu_add_action_callback.h"
@@ -476,8 +477,12 @@ void PlaybackSponsored::Message::mousePressEvent(QMouseEvent *e) {
 }
 
 void PlaybackSponsored::Message::mouseReleaseEvent(QMouseEvent *e) {
-	if (base::take(_pressed) && _over) {
-		_session->sponsoredMessages().clicked(_data.randomId, false, false);
+	if (base::take(_pressed)
+		&& _over
+		&& _session->sponsoredMessages().clicked(
+			_data.randomId,
+			false,
+			false)) {
 		UrlClickHandler::Open(_data.link);
 	}
 }
@@ -561,6 +566,34 @@ PlaybackSponsored::PlaybackSponsored(
 , _itemId(item->fullId())
 , _controlsGeometry(controls->geometryValue())
 , _timer([=] { update(); }) {
+	request();
+	MyOwnGram::SponsoredContent::DeliveryChanges(
+	) | rpl::on_next([=](MyOwnGram::SponsoredContent::Surface surface) {
+		if (surface != MyOwnGram::SponsoredContent::Surface::Video) {
+			return;
+		}
+		if (!MyOwnGram::SponsoredContent::ShouldDisplay(surface)) {
+			_timer.cancel();
+			_widget = nullptr;
+			_data = std::nullopt;
+		}
+		crl::on_main(crl::guard(this, [=] {
+			if (MyOwnGram::SponsoredContent::ShouldRequest(surface)) {
+				request();
+			}
+		}));
+	}, _lifetime);
+}
+
+PlaybackSponsored::~PlaybackSponsored() {
+	saveState();
+}
+
+void PlaybackSponsored::request() {
+	const auto item = _session->data().message(_itemId);
+	if (!item) {
+		return;
+	}
 	_session->sponsoredMessages().requestForVideo(item, crl::guard(this, [=](
 			Data::SponsoredForVideo data) {
 		if (data.list.empty()) {
@@ -578,10 +611,6 @@ PlaybackSponsored::PlaybackSponsored(
 		}
 		update();
 	}));
-}
-
-PlaybackSponsored::~PlaybackSponsored() {
-	saveState();
 }
 
 void PlaybackSponsored::start() {
