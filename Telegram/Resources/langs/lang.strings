@@ -8701,11 +8701,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_sponsored_delivery_about" = "Choose independently for each ad location. Receive but hide still requests sponsored content and discards it locally. Don't request skips the dedicated sponsored request.";
 "lng_myowngram_sponsored_reporting_links" = "Reporting and destinations";
 "lng_myowngram_sponsored_view_reporting" = "View confirmations";
-"lng_myowngram_sponsored_view_visible" = "When actually visible";
+"lng_myowngram_sponsored_view_visible" = "When shown and visible";
 "lng_myowngram_sponsored_view_random" = "Random after receiving";
 "lng_myowngram_sponsored_view_never" = "Never";
 "lng_myowngram_sponsored_open_destinations" = "Open sponsored links and destinations";
 "lng_myowngram_sponsored_click_reports" = "Send sponsored click confirmations";
-"lng_myowngram_sponsored_reporting_about" = "These controls apply to every account on this installation. Random mode selects 75% of received ads for a view confirmation after a random 1–30 second delay, whether or not they become visible. Blocking sponsored destinations also prevents their click confirmations.";
+"lng_myowngram_sponsored_reporting_about" = "These controls apply to every account on this installation. The When shown and visible option uses Telegram's normal on-screen checks and only applies to ads set to Show normally. Random mode selects 75% of received ads for a view confirmation after a random 1–30 second delay, whether or not they become visible. Blocking sponsored destinations also prevents their click confirmations.";
 
 // Keys finished
