@@ -1,0 +1,50 @@
+// This file is part of MyOwnGram,
+// a Telegram Desktop fork.
+//
+// For license and copyright information please follow this link:
+// https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+//
+#pragma once
+
+#include "storage/cache/storage_cache_types.h"
+
+#include <QtCore/QByteArray>
+
+#include <optional>
+
+struct FullMsgId;
+
+namespace MyOwnGram::MessageArchiveStorage {
+
+enum class RecordType : uint8 {
+	MessageTimeline = 1,
+};
+
+enum class ParseError : uint8 {
+	None,
+	Corrupt,
+	WrongType,
+	UnsupportedVersion,
+};
+
+struct ParsedRecord {
+	uint16 version = 0;
+	ParseError error = ParseError::Corrupt;
+	QByteArray payload;
+
+	explicit operator bool() const {
+		return error == ParseError::None;
+	}
+};
+
+[[nodiscard]] Storage::Cache::Key MessageTimelineKey(FullMsgId id);
+[[nodiscard]] std::optional<QByteArray> SerializeRecord(
+	RecordType type,
+	uint16 version,
+	const QByteArray &payload);
+[[nodiscard]] ParsedRecord ParseRecord(
+	const QByteArray &serialized,
+	RecordType expectedType,
+	uint16 latestVersion);
+
+} // namespace MyOwnGram::MessageArchiveStorage

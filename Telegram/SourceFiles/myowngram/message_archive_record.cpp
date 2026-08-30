@@ -1,0 +1,135 @@
+// This file is part of MyOwnGram,
+// a Telegram Desktop fork.
+//
+// For license and copyright information please follow this link:
+// https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+//
+#include "myowngram/message_archive_record.h"
+
+#include "data/data_msg_id.h"
+#include "data/data_peer_id.h"
+#include "storage/storage_account.h"
+
+#include <QtCore/QDataStream>
+
+namespace MyOwnGram::MessageArchiveStorage {
+namespace {
+
+constexpr auto kKeyPartBits = 56;
+constexpr auto kKeyPartMask = (uint64(1) << kKeyPartBits) - 1;
+constexpr auto kKeyMagic = uint64(0x4D) << kKeyPartBits;
+constexpr auto kRecordMagic = quint32(0x4D4F4741);
+constexpr auto kRecordHeaderSize = int(
+	sizeof(quint32) + sizeof(quint16) + sizeof(quint16) + sizeof(quint32));
+
+constexpr Storage::Cache::Key MakeKey(
+		RecordType type,
+		uint64 peer,
+		uint64 position) {
+	return {
+		kKeyMagic | peer,
+		(uint64(type) << kKeyPartBits) | position,
+	};
+}
+
+static_assert(MakeKey(RecordType::MessageTimeline, 1, 2).high
+	== (kKeyMagic | 1));
+static_assert(MakeKey(RecordType::MessageTimeline, 1, 2).low
+	== ((uint64(RecordType::MessageTimeline) << kKeyPartBits) | 2));
+
+ParsedRecord ParseFailure(ParseError error) {
+	return { .error = error };
+}
+
+} // namespace
+
+Storage::Cache::Key MessageTimelineKey(FullMsgId id) {
+	Expects(id.peer);
+	Expects(IsServerMsgId(id.msg));
+
+	const auto peer = SerializePeerId(id.peer);
+	const auto position = uint64(id.msg.bare);
+	Assert((peer & ~kKeyPartMask) == 0);
+	Assert((position & ~kKeyPartMask) == 0);
+	return MakeKey(RecordType::MessageTimeline, peer, position);
+}
+
+std::optional<QByteArray> SerializeRecord(
+		RecordType type,
+		uint16 version,
+		const QByteArray &payload) {
+	Expects(uint8(type) != 0);
+	Expects(version != 0);
+
+	if (payload.size()
+		> (Storage::kMessageArchiveMaxRecordSize - kRecordHeaderSize)) {
+		return std::nullopt;
+	}
+	auto result = QByteArray();
+	result.reserve(kRecordHeaderSize + payload.size());
+	auto stream = QDataStream(&result, QIODevice::WriteOnly);
+	stream.setVersion(QDataStream::Qt_5_1);
+	stream.setByteOrder(QDataStream::BigEndian);
+	stream
+		<< kRecordMagic
+		<< quint16(type)
+		<< quint16(version)
+		<< quint32(payload.size());
+	const auto written = payload.isEmpty()
+		? 0
+		: stream.writeRawData(payload.constData(), payload.size());
+	if (stream.status() != QDataStream::Ok || written != payload.size()) {
+		return std::nullopt;
+	}
+	return result;
+}
+
+ParsedRecord ParseRecord(
+		const QByteArray &serialized,
+		RecordType expectedType,
+		uint16 latestVersion) {
+	Expects(uint8(expectedType) != 0);
+	Expects(latestVersion != 0);
+
+	if (serialized.size() < kRecordHeaderSize
+		|| serialized.size() > Storage::kMessageArchiveMaxRecordSize) {
+		return ParseFailure(ParseError::Corrupt);
+	}
+	auto stream = QDataStream(serialized);
+	stream.setVersion(QDataStream::Qt_5_1);
+	stream.setByteOrder(QDataStream::BigEndian);
+	auto magic = quint32();
+	auto type = quint16();
+	auto version = quint16();
+	auto payloadSize = quint32();
+	stream >> magic >> type >> version >> payloadSize;
+	if (stream.status() != QDataStream::Ok || magic != kRecordMagic) {
+		return ParseFailure(ParseError::Corrupt);
+	}
+	const auto expectedPayloadSize = serialized.size() - kRecordHeaderSize;
+	if (payloadSize != quint32(expectedPayloadSize)) {
+		return ParseFailure(ParseError::Corrupt);
+	} else if (type != quint16(expectedType)) {
+		return ParseFailure(ParseError::WrongType);
+	} else if (!version) {
+		return ParseFailure(ParseError::Corrupt);
+	} else if (version > latestVersion) {
+		return ParseFailure(ParseError::UnsupportedVersion);
+	}
+	auto payload = QByteArray(expectedPayloadSize, Qt::Uninitialized);
+	const auto read = payload.isEmpty()
+		? 0
+		: stream.readRawData(payload.data(), payload.size());
+	if (stream.status() != QDataStream::Ok
+		|| read != payload.size()
+		|| !stream.atEnd()) {
+		return ParseFailure(ParseError::Corrupt);
+	}
+	return {
+		.version = version,
+		.error = ParseError::None,
+		.payload = std::move(payload),
+	};
+}
+
+} // namespace MyOwnGram::MessageArchiveStorage
