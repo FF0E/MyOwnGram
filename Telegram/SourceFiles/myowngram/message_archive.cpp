@@ -6,6 +6,7 @@
 //
 #include "myowngram/message_archive.h"
 
+#include "myowngram/message_archive_timeline.h"
 #include "storage/storage_account.h"
 #include "storage/storage_encryption.h"
 
@@ -23,6 +24,9 @@ struct MessageArchive::OpenAttempt {
 
 MessageArchive::MessageArchive(not_null<Storage::Account*> account)
 : _account(account) {
+#ifdef _DEBUG
+	MessageArchiveStorage::ValidateMessageTimelineFormat();
+#endif // _DEBUG
 }
 
 MessageArchive::~MessageArchive() = default;
