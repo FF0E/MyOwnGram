@@ -1752,6 +1752,7 @@ void Settings::resetOnLastLogout() {
 	const auto srDisabled = readPref<bool>(kScreenReaderModeDisabledKey);
 	for (auto i = begin(_prefs); i != end(_prefs);) {
 		if (i->first.startsWith("myowngram.activity_reporting.")
+			|| i->first.startsWith("myowngram.message_history.")
 			|| i->first.startsWith("myowngram.sponsored.")) {
 			++i;
 		} else {
