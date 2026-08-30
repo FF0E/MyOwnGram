@@ -9,15 +9,19 @@
 #include "storage/cache/storage_cache_types.h"
 
 #include <QtCore/QByteArray>
+#include <QtCore/QString>
 
 #include <optional>
 
+class QDataStream;
 struct FullMsgId;
 
 namespace MyOwnGram::MessageArchiveStorage {
 
 enum class RecordType : uint8 {
 	MessageTimeline = 1,
+	ReplyMarkupVisible = 2,
+	ReplyMarkupSupport = 3,
 };
 
 enum class ParseError : uint8 {
@@ -47,4 +51,16 @@ struct ParsedRecord {
 	RecordType expectedType,
 	uint16 latestVersion);
 
+namespace Binary {
+
+[[nodiscard]] bool WriteBytes(
+	QDataStream &stream,
+	const QByteArray &value);
+[[nodiscard]] std::optional<QByteArray> ReadBytes(QDataStream &stream);
+[[nodiscard]] bool WriteString(
+	QDataStream &stream,
+	const QString &value);
+[[nodiscard]] std::optional<QString> ReadString(QDataStream &stream);
+
+} // namespace Binary
 } // namespace MyOwnGram::MessageArchiveStorage

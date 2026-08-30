@@ -12,6 +12,8 @@
 
 #include <QtCore/QDataStream>
 
+#include <limits>
+
 namespace MyOwnGram::MessageArchiveStorage {
 namespace {
 
@@ -132,4 +134,60 @@ ParsedRecord ParseRecord(
 	};
 }
 
+namespace Binary {
+
+bool WriteBytes(QDataStream &stream, const QByteArray &value) {
+	if (uint64(value.size()) > std::numeric_limits<quint32>::max()) {
+		return false;
+	}
+	stream << quint32(value.size());
+	return value.isEmpty()
+		|| stream.writeRawData(value.constData(), value.size()) == value.size();
+}
+
+std::optional<QByteArray> ReadBytes(QDataStream &stream) {
+	auto size = quint32();
+	stream >> size;
+	if (stream.status() != QDataStream::Ok
+		|| size > quint64(stream.device()->bytesAvailable())) {
+		return std::nullopt;
+	}
+	auto result = QByteArray(size, Qt::Uninitialized);
+	if (size && stream.readRawData(result.data(), size) != size) {
+		return std::nullopt;
+	}
+	return result;
+}
+
+bool WriteString(QDataStream &stream, const QString &value) {
+	if (uint64(value.size()) > std::numeric_limits<quint32>::max()) {
+		return false;
+	}
+	stream << quint32(value.size());
+	for (const auto character : value) {
+		stream << quint16(character.unicode());
+	}
+	return stream.status() == QDataStream::Ok;
+}
+
+std::optional<QString> ReadString(QDataStream &stream) {
+	auto size = quint32();
+	stream >> size;
+	if (stream.status() != QDataStream::Ok
+		|| size > quint64(stream.device()->bytesAvailable()) / 2) {
+		return std::nullopt;
+	}
+	const auto count = int(size);
+	auto result = QString(count, Qt::Uninitialized);
+	for (auto i = 0; i != count; ++i) {
+		auto character = quint16();
+		stream >> character;
+		result[i] = QChar(character);
+	}
+	return (stream.status() == QDataStream::Ok)
+		? std::optional<QString>(result)
+		: std::nullopt;
+}
+
+} // namespace Binary
 } // namespace MyOwnGram::MessageArchiveStorage

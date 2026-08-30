@@ -1579,6 +1579,8 @@ PRIVATE
     myowngram/mini_app_settings.h
     myowngram/message_archive.cpp
     myowngram/message_archive.h
+    myowngram/message_archive_markup.cpp
+    myowngram/message_archive_markup.h
     myowngram/message_archive_record.cpp
     myowngram/message_archive_record.h
     myowngram/message_archive_timeline.cpp

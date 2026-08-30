@@ -84,61 +84,8 @@ std::optional<EntityType> ParseEntityType(quint8 wireId) {
 	return i->type;
 }
 
-bool WriteBytes(QDataStream &stream, const QByteArray &value) {
-	if (uint64(value.size()) > std::numeric_limits<quint32>::max()) {
-		return false;
-	}
-	stream << quint32(value.size());
-	return value.isEmpty()
-		|| stream.writeRawData(value.constData(), value.size()) == value.size();
-}
-
-std::optional<QByteArray> ReadBytes(QDataStream &stream) {
-	auto size = quint32();
-	stream >> size;
-	if (stream.status() != QDataStream::Ok
-		|| size > quint64(stream.device()->bytesAvailable())) {
-		return std::nullopt;
-	}
-	auto result = QByteArray(size, Qt::Uninitialized);
-	if (size && stream.readRawData(result.data(), size) != size) {
-		return std::nullopt;
-	}
-	return result;
-}
-
-bool WriteString(QDataStream &stream, const QString &value) {
-	if (uint64(value.size()) > std::numeric_limits<quint32>::max()) {
-		return false;
-	}
-	stream << quint32(value.size());
-	for (const auto character : value) {
-		stream << quint16(character.unicode());
-	}
-	return stream.status() == QDataStream::Ok;
-}
-
-std::optional<QString> ReadString(QDataStream &stream) {
-	auto size = quint32();
-	stream >> size;
-	if (stream.status() != QDataStream::Ok
-		|| size > quint64(stream.device()->bytesAvailable()) / 2) {
-		return std::nullopt;
-	}
-	const auto count = int(size);
-	auto result = QString(count, Qt::Uninitialized);
-	for (auto i = 0; i != count; ++i) {
-		auto character = quint16();
-		stream >> character;
-		result[i] = QChar(character);
-	}
-	return (stream.status() == QDataStream::Ok)
-		? std::optional<QString>(result)
-		: std::nullopt;
-}
-
 bool WriteText(QDataStream &stream, const TextWithEntities &value) {
-	if (!WriteString(stream, value.text)
+	if (!Binary::WriteString(stream, value.text)
 		|| uint64(value.entities.size())
 			> std::numeric_limits<quint32>::max()) {
 		return false;
@@ -157,7 +104,7 @@ bool WriteText(QDataStream &stream, const TextWithEntities &value) {
 			<< *type
 			<< qint32(entity.offset())
 			<< qint32(entity.length());
-		if (!WriteString(stream, entity.data())) {
+		if (!Binary::WriteString(stream, entity.data())) {
 			return false;
 		}
 	}
@@ -165,7 +112,7 @@ bool WriteText(QDataStream &stream, const TextWithEntities &value) {
 }
 
 std::optional<TextWithEntities> ReadText(QDataStream &stream) {
-	const auto text = ReadString(stream);
+	const auto text = Binary::ReadString(stream);
 	if (!text) {
 		return std::nullopt;
 	}
@@ -184,7 +131,7 @@ std::optional<TextWithEntities> ReadText(QDataStream &stream) {
 		auto length = qint32();
 		stream >> type >> offset >> length;
 		const auto parsedType = ParseEntityType(type);
-		const auto data = ReadString(stream);
+		const auto data = Binary::ReadString(stream);
 		if (stream.status() != QDataStream::Ok
 			|| !parsedType
 			|| !data
@@ -209,9 +156,9 @@ bool WriteSnapshot(QDataStream &stream, const MessageSnapshot &snapshot) {
 		<< quint8(snapshot.service ? 1 : 0);
 	return snapshot.versionDate >= 0
 		&& WriteText(stream, snapshot.text)
-		&& WriteBytes(stream, snapshot.media)
-		&& WriteBytes(stream, snapshot.replyMarkup)
-		&& WriteBytes(stream, snapshot.support)
+		&& Binary::WriteBytes(stream, snapshot.media)
+		&& Binary::WriteBytes(stream, snapshot.replyMarkup)
+		&& Binary::WriteBytes(stream, snapshot.support)
 		&& stream.status() == QDataStream::Ok;
 }
 
@@ -220,9 +167,9 @@ std::optional<MessageSnapshot> ReadSnapshot(QDataStream &stream) {
 	auto service = quint8();
 	stream >> versionDate >> service;
 	const auto text = ReadText(stream);
-	const auto media = ReadBytes(stream);
-	const auto replyMarkup = ReadBytes(stream);
-	const auto support = ReadBytes(stream);
+	const auto media = Binary::ReadBytes(stream);
+	const auto replyMarkup = Binary::ReadBytes(stream);
+	const auto support = Binary::ReadBytes(stream);
 	if (stream.status() != QDataStream::Ok
 		|| versionDate < 0
 		|| versionDate > std::numeric_limits<TimeId>::max()
