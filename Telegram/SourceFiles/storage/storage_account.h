@@ -45,11 +45,18 @@ struct ReadSettingsContext;
 struct FileReadDescriptor;
 } // namespace details
 
+class DatabasePointer;
 class EncryptionKey;
 
 using FileKey = quint64;
 
 enum class StartResult : uchar;
+
+[[nodiscard]] QString AccountStorageDataName(
+	const QString &dataName,
+	int index);
+[[nodiscard]] QString MessageArchivePath(const QString &dataName);
+void ClearInactiveMessageArchive(const QString &dataName);
 
 struct MessageDraft {
 	FullReplyTo reply;
@@ -119,6 +126,9 @@ public:
 	[[nodiscard]] EncryptionKey cacheBigFileKey() const;
 	[[nodiscard]] QString cacheBigFilePath() const;
 	[[nodiscard]] Cache::Database::Settings cacheBigFileSettings() const;
+
+	[[nodiscard]] EncryptionKey messageArchiveKey() const;
+	[[nodiscard]] Cache::Database &messageArchiveDatabase();
 
 	void writeInstalledStickers();
 	void writeFeaturedStickers();
@@ -242,6 +252,8 @@ private:
 		MTP::AuthKeyPtr localKey,
 		const QByteArray &legacyPasscode = QByteArray());
 	void clearLegacyFiles();
+	[[nodiscard]] QString messageArchivePath() const;
+	[[nodiscard]] Cache::Database::Settings messageArchiveSettings() const;
 	void writeMapDelayed();
 	void writeMapQueued();
 	void writeMap();
@@ -317,6 +329,7 @@ private:
 	const QString _databasePath;
 
 	MTP::AuthKeyPtr _localKey;
+	std::unique_ptr<DatabasePointer> _messageArchiveDatabase;
 
 	base::flat_map<PeerId, FileKey> _draftsMap;
 	base::flat_map<PeerId, FileKey> _draftCursorsMap;

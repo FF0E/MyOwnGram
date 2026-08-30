@@ -33,22 +33,13 @@ namespace {
 
 constexpr auto kWideIdsTag = ~uint64(0);
 
-[[nodiscard]] QString ComposeDataString(const QString &dataName, int index) {
-	auto result = dataName;
-	result.replace('#', QString());
-	if (index > 0) {
-		result += '#' + QString::number(index + 1);
-	}
-	return result;
-}
-
 } // namespace
 
 Account::Account(not_null<Domain*> domain, const QString &dataName, int index)
 : _domain(domain)
 , _local(std::make_unique<Storage::Account>(
 	this,
-	ComposeDataString(dataName, index))) {
+	Storage::AccountStorageDataName(dataName, index))) {
 }
 
 Account::~Account() {

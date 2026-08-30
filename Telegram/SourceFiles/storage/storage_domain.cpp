@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/version.h"
 #include "storage/details/storage_file_utilities.h"
 #include "storage/serialize_common.h"
+#include "storage/storage_account.h"
 #include "mtproto/mtproto_config.h"
 #include "main/main_domain.h"
 #include "main/main_account.h"
@@ -238,6 +239,11 @@ void Domain::writeAccounts() {
 }
 
 void Domain::startFromScratch() {
+	const auto accountCount = Main::Domain::kPremiumMaxAccounts;
+	for (auto index = 0; index != accountCount; ++index) {
+		ClearInactiveMessageArchive(
+			AccountStorageDataName(_dataName, index));
+	}
 	startWithSingleAccount(
 		QByteArray(),
 		std::make_unique<Main::Account>(_owner, _dataName, 0));

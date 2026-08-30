@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "storage/localstorage.h"
 #include "storage/storage_domain.h"
+#include "storage/storage_databases.h"
 #include "storage/storage_encryption.h"
 #include "storage/storage_clear_legacy.h"
 #include "storage/cache/storage_cache_types.h"
@@ -51,6 +52,27 @@ using Database = Cache::Database;
 constexpr auto kDelayedWriteTimeout = crl::time(1000);
 constexpr auto kWriteSearchSuggestionsDelay = 5 * crl::time(1000);
 constexpr auto kMaxSavedPlaybackPositions = 256;
+constexpr auto kMessageArchiveMaxDataSize = 1024 * 1024;
+
+Database::Settings MessageArchiveSettings() {
+	auto result = Database::Settings();
+	result.maxDataSize = kMessageArchiveMaxDataSize;
+	result.trackEstimatedTime = false;
+	result.totalSizeLimit = 0;
+	result.totalTimeLimit = 0;
+	result.clearOnWrongKey = false;
+	return result;
+}
+
+void ClearMessageArchiveDatabase(
+		Database &database,
+		const QString &path) {
+	database.clear([path](Cache::Error error) {
+		if (error.type != Cache::Error::Type::None) {
+			LOG(("Message Archive Error: Could not clear %1.").arg(path));
+		}
+	});
+}
 
 constexpr auto kStickersVersionTag = quint32(-1);
 constexpr auto kStickersSerializeVersion = 4;
@@ -168,6 +190,31 @@ auto EmptyMessageDraftSources()
 }
 
 } // namespace
+
+QString AccountStorageDataName(const QString &dataName, int index) {
+	auto result = dataName;
+	result.replace('#', QString());
+	if (index > 0) {
+		result += '#' + QString::number(index + 1);
+	}
+	return result;
+}
+
+QString MessageArchivePath(const QString &dataName) {
+	return ComputeDatabasePath(dataName)
+		+ u"myowngram_message_archive"_q;
+}
+
+void ClearInactiveMessageArchive(const QString &dataName) {
+	const auto path = MessageArchivePath(dataName);
+	if (!QDir(path).exists()) {
+		return;
+	}
+	auto database = Core::App().databases().get(
+		path,
+		MessageArchiveSettings());
+	ClearMessageArchiveDatabase(*database, path);
+}
 
 Account::Account(not_null<Main::Account*> owner, const QString &dataName)
 : _owner(owner)
@@ -765,6 +812,14 @@ void Account::writeMap() {
 
 void Account::reset() {
 	_writeSearchSuggestionsTimer.cancel();
+	if (_messageArchiveDatabase) {
+		ClearMessageArchiveDatabase(
+			**_messageArchiveDatabase,
+			messageArchivePath());
+		_messageArchiveDatabase = nullptr;
+	} else {
+		ClearInactiveMessageArchive(_dataName);
+	}
 
 	auto names = collectGoodNames();
 	_draftsMap.clear();
@@ -1884,6 +1939,28 @@ Cache::Database::Settings Account::cacheBigFileSettings() const {
 	result.totalTimeLimit = _cacheBigFileTotalTimeLimit;
 	result.maxDataSize = kMaxFileInMemory;
 	return result;
+}
+
+EncryptionKey Account::messageArchiveKey() const {
+	return cacheKey();
+}
+
+QString Account::messageArchivePath() const {
+	return MessageArchivePath(_dataName);
+}
+
+Cache::Database::Settings Account::messageArchiveSettings() const {
+	return MessageArchiveSettings();
+}
+
+Cache::Database &Account::messageArchiveDatabase() {
+	if (!_messageArchiveDatabase) {
+		_messageArchiveDatabase = std::make_unique<DatabasePointer>(
+			Core::App().databases().get(
+				messageArchivePath(),
+				messageArchiveSettings()));
+	}
+	return **_messageArchiveDatabase;
 }
 
 void Account::writeStickerSet(
