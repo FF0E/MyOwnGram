@@ -37,6 +37,10 @@ namespace Main {
 class Session;
 } // namespace Main
 
+namespace MyOwnGram {
+class MessageArchive;
+} // namespace MyOwnGram
+
 namespace Ui {
 class BoxContent;
 } // namespace Ui
@@ -266,6 +270,7 @@ public:
 
 	[[nodiscard]] Storage::Cache::Database &cache();
 	[[nodiscard]] Storage::Cache::Database &cacheBigFile();
+	[[nodiscard]] MyOwnGram::MessageArchive &messageArchive();
 
 	[[nodiscard]] not_null<PeerData*> peer(PeerId id);
 	[[nodiscard]] not_null<PeerData*> peer(UserId id) = delete;
@@ -1177,6 +1182,7 @@ private:
 
 	Storage::DatabasePointer _cache;
 	Storage::DatabasePointer _bigFileCache;
+	std::unique_ptr<MyOwnGram::MessageArchive> _messageArchive;
 
 	TimeId _exportAvailableAt = 0;
 	base::weak_qptr<Ui::BoxContent> _exportSuggestion;

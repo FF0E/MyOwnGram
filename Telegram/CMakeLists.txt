@@ -1577,6 +1577,8 @@ PRIVATE
     myowngram/activity_reporting_settings.h
     myowngram/mini_app_settings.cpp
     myowngram/mini_app_settings.h
+    myowngram/message_archive.cpp
+    myowngram/message_archive.h
     myowngram/message_history_settings.cpp
     myowngram/message_history_settings.h
     myowngram/sponsored_content_settings.cpp

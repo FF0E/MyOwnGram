@@ -52,11 +52,10 @@ using Database = Cache::Database;
 constexpr auto kDelayedWriteTimeout = crl::time(1000);
 constexpr auto kWriteSearchSuggestionsDelay = 5 * crl::time(1000);
 constexpr auto kMaxSavedPlaybackPositions = 256;
-constexpr auto kMessageArchiveMaxDataSize = 1024 * 1024;
 
 Database::Settings MessageArchiveSettings() {
 	auto result = Database::Settings();
-	result.maxDataSize = kMessageArchiveMaxDataSize;
+	result.maxDataSize = kMessageArchiveMaxRecordSize;
 	result.trackEstimatedTime = false;
 	result.totalSizeLimit = 0;
 	result.totalTimeLimit = 0;
@@ -1943,6 +1942,10 @@ Cache::Database::Settings Account::cacheBigFileSettings() const {
 
 EncryptionKey Account::messageArchiveKey() const {
 	return cacheKey();
+}
+
+bool Account::messageArchiveExists() const {
+	return _messageArchiveDatabase || QDir(messageArchivePath()).exists();
 }
 
 QString Account::messageArchivePath() const {

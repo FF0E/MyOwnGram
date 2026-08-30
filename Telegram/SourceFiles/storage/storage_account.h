@@ -50,6 +50,8 @@ class EncryptionKey;
 
 using FileKey = quint64;
 
+constexpr auto kMessageArchiveMaxRecordSize = 1024 * 1024;
+
 enum class StartResult : uchar;
 
 [[nodiscard]] QString AccountStorageDataName(
@@ -128,6 +130,7 @@ public:
 	[[nodiscard]] Cache::Database::Settings cacheBigFileSettings() const;
 
 	[[nodiscard]] EncryptionKey messageArchiveKey() const;
+	[[nodiscard]] bool messageArchiveExists() const;
 	[[nodiscard]] Cache::Database &messageArchiveDatabase();
 
 	void writeInstalledStickers();

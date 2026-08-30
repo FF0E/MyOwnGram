@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session.h"
 #include "main/main_session_settings.h"
 #include "main/main_app_config.h"
+#include "myowngram/message_archive.h"
 #include "apiwrap.h"
 #include "mainwidget.h"
 #include "api/api_bot.h"
@@ -232,6 +233,8 @@ Session::Session(not_null<Main::Session*> session)
 , _bigFileCache(Core::App().databases().get(
 	_session->local().cacheBigFilePath(),
 	_session->local().cacheBigFileSettings()))
+, _messageArchive(std::make_unique<MyOwnGram::MessageArchive>(
+	&_session->local()))
 , _groupFreeTranscribeLevel(session->appConfig().value(
 ) | rpl::map([limits = Data::LevelLimits(session)] {
 	return limits.groupTranscribeLevelMin();
@@ -1680,6 +1683,10 @@ Storage::Cache::Database &Session::cache() {
 
 Storage::Cache::Database &Session::cacheBigFile() {
 	return *_bigFileCache;
+}
+
+MyOwnGram::MessageArchive &Session::messageArchive() {
+	return *_messageArchive;
 }
 
 void Session::suggestStartExport(TimeId availableAt) {
