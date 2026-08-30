@@ -22,6 +22,8 @@ enum class RecordType : uint8 {
 	MessageTimeline = 1,
 	ReplyMarkupVisible = 2,
 	ReplyMarkupSupport = 3,
+	PhotoMediaVisible = 4,
+	PhotoMediaSupport = 5,
 };
 
 enum class ParseError : uint8 {

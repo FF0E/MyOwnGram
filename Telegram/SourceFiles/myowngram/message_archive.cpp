@@ -7,6 +7,7 @@
 #include "myowngram/message_archive.h"
 
 #include "myowngram/message_archive_markup.h"
+#include "myowngram/message_archive_media.h"
 #include "myowngram/message_archive_timeline.h"
 #include "storage/storage_account.h"
 #include "storage/storage_encryption.h"
@@ -28,6 +29,7 @@ MessageArchive::MessageArchive(not_null<Storage::Account*> account)
 #ifdef _DEBUG
 	MessageArchiveStorage::ValidateMessageTimelineFormat();
 	MessageArchiveStorage::ValidateReplyMarkupFormat();
+	MessageArchiveStorage::ValidatePhotoMediaFormat();
 #endif // _DEBUG
 }
 
