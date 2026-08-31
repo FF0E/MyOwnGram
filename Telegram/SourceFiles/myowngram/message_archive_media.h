@@ -21,11 +21,19 @@ struct SerializedPhotoMedia {
 	QByteArray support;
 };
 
+struct SerializedDocumentMedia {
+	QByteArray visible;
+	QByteArray support;
+};
+
 [[nodiscard]] std::optional<SerializedPhotoMedia> SerializePhotoMedia(
+	const Data::Media *media);
+[[nodiscard]] std::optional<SerializedDocumentMedia> SerializeDocumentMedia(
 	const Data::Media *media);
 
 #ifdef _DEBUG
 void ValidatePhotoMediaFormat();
+void ValidateDocumentMediaFormat();
 #endif // _DEBUG
 
 } // namespace MyOwnGram::MessageArchiveStorage

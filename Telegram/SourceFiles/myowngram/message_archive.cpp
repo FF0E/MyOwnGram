@@ -30,6 +30,7 @@ MessageArchive::MessageArchive(not_null<Storage::Account*> account)
 	MessageArchiveStorage::ValidateMessageTimelineFormat();
 	MessageArchiveStorage::ValidateReplyMarkupFormat();
 	MessageArchiveStorage::ValidatePhotoMediaFormat();
+	MessageArchiveStorage::ValidateDocumentMediaFormat();
 #endif // _DEBUG
 }
 

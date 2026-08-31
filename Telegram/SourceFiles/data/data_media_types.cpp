@@ -623,6 +623,10 @@ bool Media::hasQualitiesList() const {
 	return false;
 }
 
+bool Media::skipPremiumEffect() const {
+	return false;
+}
+
 PhotoData *Media::photo() const {
 	return nullptr;
 }
@@ -1108,6 +1112,10 @@ TimeId MediaFile::videoTimestamp() const {
 
 bool MediaFile::hasQualitiesList() const {
 	return _hasQualitiesList;
+}
+
+bool MediaFile::skipPremiumEffect() const {
+	return _skipPremiumEffect;
 }
 
 bool MediaFile::uploading() const {

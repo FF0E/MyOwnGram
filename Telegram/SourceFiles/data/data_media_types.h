@@ -223,6 +223,7 @@ public:
 	virtual PhotoData *videoCover() const;
 	virtual TimeId videoTimestamp() const;
 	virtual bool hasQualitiesList() const;
+	virtual bool skipPremiumEffect() const;
 	virtual PhotoData *photo() const;
 	virtual WebPageData *webpage() const;
 	virtual MediaWebPageFlags webpageFlags() const;
@@ -365,6 +366,7 @@ public:
 	PhotoData *videoCover() const override;
 	TimeId videoTimestamp() const override;
 	bool hasQualitiesList() const override;
+	bool skipPremiumEffect() const override;
 
 	bool uploading() const override;
 	Storage::SharedMediaTypesMask sharedMediaTypes() const override;
