@@ -26,6 +26,8 @@ enum class RecordType : uint8 {
 	PhotoMediaSupport = 5,
 	DocumentMediaVisible = 6,
 	DocumentMediaSupport = 7,
+	MessageMediaVisible = 8,
+	MessageSnapshotSupport = 9,
 };
 
 enum class ParseError : uint8 {

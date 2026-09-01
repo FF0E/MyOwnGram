@@ -209,6 +209,9 @@ public:
 	[[nodiscard]] bool isScheduled() const;
 	[[nodiscard]] TimeId scheduleRepeatPeriod() const;
 	[[nodiscard]] bool isSponsored() const;
+	[[nodiscard]] bool isLegacyMessage() const {
+		return _flags & MessageFlag::Legacy;
+	}
 	[[nodiscard]] bool canLookupMessageAuthor() const;
 	[[nodiscard]] bool skipNotification() const;
 	[[nodiscard]] bool isUserpicSuggestion() const;
@@ -690,9 +693,6 @@ private:
 	void detectTextLinks(const TextWithEntities &textWithEntities);
 	void setTextValue(TextWithEntities text, bool force = false);
 	[[nodiscard]] bool isTooOldForEdit(TimeId now) const;
-	[[nodiscard]] bool isLegacyMessage() const {
-		return _flags & MessageFlag::Legacy;
-	}
 
 	[[nodiscard]] bool checkDiscussionLink(ChannelId id) const;
 	void updateSentContent(
