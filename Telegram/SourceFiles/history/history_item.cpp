@@ -1912,8 +1912,24 @@ void HistoryItem::returnSavedMedia() {
 	}
 	const auto wasGrouped = history()->owner().groups().isGrouped(this);
 	const auto data = Get<HistoryMessageSavedMediaData>();
+	const auto invertMedia = data->invertMedia;
+	const auto editDate = data->editDate;
+	const auto hadEditedComponent = data->hadEditedComponent;
 	_media = std::move(data->media);
 	setText(data->text);
+	if (invertMedia) {
+		_flags |= MessageFlag::InvertMedia;
+	} else {
+		_flags &= ~MessageFlag::InvertMedia;
+	}
+	if (hadEditedComponent) {
+		if (!Has<HistoryMessageEdited>()) {
+			AddComponents(HistoryMessageEdited::Bit());
+		}
+		Get<HistoryMessageEdited>()->date = editDate;
+	} else {
+		RemoveComponents(HistoryMessageEdited::Bit());
+	}
 	clearSavedMedia();
 	if (wasGrouped) {
 		history()->owner().groups().refreshMessage(this, true);
@@ -1928,6 +1944,11 @@ void HistoryItem::savePreviousMedia() {
 	const auto data = Get<HistoryMessageSavedMediaData>();
 	data->text = originalText();
 	data->media = _media ? _media->clone(this) : nullptr;
+	if (const auto edited = Get<HistoryMessageEdited>()) {
+		data->editDate = edited->date;
+		data->hadEditedComponent = true;
+	}
+	data->invertMedia = invertMedia();
 }
 
 bool HistoryItem::isEditingMedia() const {
@@ -2210,6 +2231,14 @@ void HistoryItem::applyEdition(HistoryMessageEdition &&edition) {
 		savePreviousMedia();
 	}
 	Assert(!updatingSavedLocalEdit || !isLocalUpdateMedia());
+	if (updatingSavedLocalEdit) {
+		const auto saved = Get<HistoryMessageSavedMediaData>();
+		if (edition.editDate != -1) {
+			saved->editDate = edition.editDate;
+			saved->hadEditedComponent = true;
+		}
+		saved->invertMedia = edition.invertMedia;
+	}
 
 	const auto wasGrouped = !updatingSavedLocalEdit
 		&& history()->owner().groups().isGrouped(this);

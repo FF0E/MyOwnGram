@@ -6,6 +6,7 @@
 //
 #include "myowngram/message_archive.h"
 
+#include "lang/lang_keys.h"
 #include "myowngram/message_archive_markup.h"
 #include "myowngram/message_archive_media.h"
 #include "myowngram/message_archive_snapshot.h"
@@ -25,6 +26,105 @@ struct MessageArchive::OpenAttempt {
 	Storage::Cache::Error error;
 };
 
+namespace {
+
+using MessageArchiveStorage::MessageSnapshot;
+using MessageArchiveStorage::MessageTimeline;
+using MessageArchiveStorage::ObserveResult;
+
+std::optional<QByteArray> ApplyEditedSnapshots(
+		QByteArray serialized,
+		MessageSnapshot before,
+		MessageSnapshot after) {
+	const auto visibleChanged = !MessageArchiveStorage::SameVisibleContent(
+		before,
+		after);
+	if (serialized.isEmpty() && !visibleChanged) {
+		return std::nullopt;
+	}
+	auto timeline = MessageTimeline();
+	if (!serialized.isEmpty()) {
+		auto parsed = MessageArchiveStorage::ParseMessageTimeline(serialized);
+		if (!parsed) {
+			LOG(("Message Archive Error: Could not parse edited timeline."));
+			return std::nullopt;
+		}
+		timeline = std::move(parsed.value);
+	}
+	if (!visibleChanged) {
+		if (timeline.versions.empty()
+			|| !MessageArchiveStorage::SameVisibleContent(
+				timeline.versions.back(),
+				before)
+			|| MessageArchiveStorage::ObserveVersion(
+				timeline,
+				std::move(after)) == ObserveResult::Unchanged) {
+			return std::nullopt;
+		}
+	} else {
+		const auto beforeResult = MessageArchiveStorage::ObserveVersion(
+			timeline,
+			std::move(before));
+		const auto afterResult = MessageArchiveStorage::ObserveVersion(
+			timeline,
+			std::move(after));
+		if (beforeResult == ObserveResult::Unchanged
+			&& afterResult == ObserveResult::Unchanged) {
+			return std::nullopt;
+		}
+	}
+	auto result = MessageArchiveStorage::SerializeMessageTimeline(timeline);
+	if (!result) {
+		LOG(("Message Archive Error: Could not serialize edited timeline."));
+	}
+	return result;
+}
+
+#ifdef _DEBUG
+void ValidateEditedTimelineUpdates() {
+	static auto checked = false;
+	if (checked) {
+		return;
+	}
+	checked = true;
+
+	auto first = MessageSnapshot{
+		.versionDate = 1,
+		.text = tr::marked(u"first"_q),
+	};
+	auto second = MessageSnapshot{
+		.versionDate = 2,
+		.text = tr::marked(u"second"_q),
+	};
+	auto third = MessageSnapshot{
+		.versionDate = 3,
+		.text = tr::marked(u"third"_q),
+	};
+	auto serialized = ApplyEditedSnapshots({}, first, second);
+	Assert(serialized.has_value());
+	const auto firstEdit = *serialized;
+	auto parsed = MessageArchiveStorage::ParseMessageTimeline(*serialized);
+	Assert(parsed && parsed.value.versions.size() == 2);
+
+	serialized = ApplyEditedSnapshots(*serialized, second, third);
+	Assert(serialized.has_value());
+	parsed = MessageArchiveStorage::ParseMessageTimeline(*serialized);
+	Assert(parsed && parsed.value.versions.size() == 3);
+
+	auto refreshed = third;
+	refreshed.support = "support";
+	serialized = ApplyEditedSnapshots(*serialized, third, refreshed);
+	Assert(serialized.has_value());
+	parsed = MessageArchiveStorage::ParseMessageTimeline(*serialized);
+	Assert(parsed && parsed.value.versions.size() == 3);
+	Assert(parsed.value.versions.back().support == refreshed.support);
+	Assert(!ApplyEditedSnapshots({}, third, refreshed));
+	Assert(!ApplyEditedSnapshots(firstEdit, third, refreshed));
+}
+#endif // _DEBUG
+
+} // namespace
+
 MessageArchive::MessageArchive(not_null<Storage::Account*> account)
 : _account(account) {
 #ifdef _DEBUG
@@ -33,6 +133,7 @@ MessageArchive::MessageArchive(not_null<Storage::Account*> account)
 	MessageArchiveStorage::ValidatePhotoMediaFormat();
 	MessageArchiveStorage::ValidateDocumentMediaFormat();
 	MessageArchiveStorage::ValidateMessageSnapshotFormat();
+	ValidateEditedTimelineUpdates();
 #endif // _DEBUG
 }
 
@@ -58,7 +159,8 @@ void MessageArchive::readRecord(
 	}
 	auto &database = databaseForOperation();
 	const auto attempt = _openAttempt;
-	database.get(
+	_account->readMessageArchiveRecord(
+		database,
 		key,
 		[weak, attempt, done = std::move(done)](
 				QByteArray &&value) mutable {
@@ -101,7 +203,8 @@ void MessageArchive::writeRecord(
 	}
 	auto &database = databaseForOperation();
 	const auto attempt = _openAttempt;
-	database.put(
+	_account->writeMessageArchiveRecord(
+		database,
 		key,
 		std::move(value),
 		[weak, attempt, done = std::move(done)](
@@ -138,7 +241,8 @@ void MessageArchive::removeRecord(
 	}
 	auto &database = databaseForOperation();
 	const auto attempt = _openAttempt;
-	database.remove(
+	_account->removeMessageArchiveRecord(
+		database,
 		key,
 		[weak, attempt, done = std::move(done)](
 				Storage::Cache::Error error) mutable {
@@ -154,6 +258,52 @@ void MessageArchive::removeRecord(
 				]() mutable {
 					done(std::move(error));
 				});
+		});
+}
+
+void MessageArchive::observeEdit(
+		FullMsgId id,
+		MessageSnapshot before,
+		MessageSnapshot after) {
+	const auto visibleChanged = !MessageArchiveStorage::SameVisibleContent(
+		before,
+		after);
+	if (!visibleChanged && before.support == after.support) {
+		return;
+	} else if (!visibleChanged
+		&& _state == State::Closed
+		&& !_account->messageArchiveExists()) {
+		return;
+	}
+	auto &database = databaseForOperation();
+	const auto attempt = _openAttempt;
+	_account->updateMessageArchiveRecord(
+		database,
+		MessageArchiveStorage::MessageTimelineKey(id),
+		[
+			attempt,
+			before = std::move(before),
+			after = std::move(after)
+		](QByteArray &&serialized) mutable {
+			if (attempt
+				&& attempt->error.type
+					!= Storage::Cache::Error::Type::None) {
+				return std::optional<QByteArray>();
+			}
+			return ApplyEditedSnapshots(
+				std::move(serialized),
+				std::move(before),
+				std::move(after));
+		},
+		[attempt](Storage::Cache::Error error) mutable {
+			if (attempt
+				&& attempt->error.type
+					!= Storage::Cache::Error::Type::None) {
+				error = attempt->error;
+			}
+			if (error.type != Storage::Cache::Error::Type::None) {
+				LOG(("Message Archive Error: Could not store edited timeline."));
+			}
 		});
 }
 

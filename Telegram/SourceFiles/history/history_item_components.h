@@ -233,6 +233,9 @@ struct HistoryMessageSavedMediaData
 : RuntimeComponent<HistoryMessageSavedMediaData, HistoryItem> {
 	TextWithEntities text;
 	std::unique_ptr<Data::Media> media;
+	TimeId editDate = 0;
+	bool invertMedia = false;
+	bool hadEditedComponent = false;
 };
 
 struct HistoryMessageSaved

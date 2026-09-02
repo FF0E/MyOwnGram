@@ -47,6 +47,7 @@ struct FileReadDescriptor;
 
 class DatabasePointer;
 class EncryptionKey;
+class MessageArchiveOperations;
 
 using FileKey = quint64;
 
@@ -132,6 +133,24 @@ public:
 	[[nodiscard]] EncryptionKey messageArchiveKey() const;
 	[[nodiscard]] bool messageArchiveExists() const;
 	[[nodiscard]] Cache::Database &messageArchiveDatabase();
+	void readMessageArchiveRecord(
+		Cache::Database &database,
+		Cache::Key key,
+		FnMut<void(QByteArray&&)> done);
+	void writeMessageArchiveRecord(
+		Cache::Database &database,
+		Cache::Key key,
+		QByteArray value,
+		FnMut<void(Cache::Error)> done);
+	void removeMessageArchiveRecord(
+		Cache::Database &database,
+		Cache::Key key,
+		FnMut<void(Cache::Error)> done);
+	void updateMessageArchiveRecord(
+		Cache::Database &database,
+		Cache::Key key,
+		FnMut<std::optional<QByteArray>(QByteArray&&)> update,
+		FnMut<void(Cache::Error)> done = nullptr);
 
 	void writeInstalledStickers();
 	void writeFeaturedStickers();
@@ -235,6 +254,8 @@ public:
 	void reset();
 
 private:
+	MessageArchiveOperations &messageArchiveOperations();
+
 	enum class ReadMapResult {
 		Success,
 		IncorrectPasscode,
@@ -333,6 +354,7 @@ private:
 
 	MTP::AuthKeyPtr _localKey;
 	std::unique_ptr<DatabasePointer> _messageArchiveDatabase;
+	std::shared_ptr<MessageArchiveOperations> _messageArchiveOperations;
 
 	base::flat_map<PeerId, FileKey> _draftsMap;
 	base::flat_map<PeerId, FileKey> _draftCursorsMap;

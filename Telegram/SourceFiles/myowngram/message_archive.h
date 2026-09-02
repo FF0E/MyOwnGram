@@ -11,9 +11,15 @@
 
 #include <memory>
 
+struct FullMsgId;
+
 namespace Storage {
 class Account;
 } // namespace Storage
+
+namespace MyOwnGram::MessageArchiveStorage {
+struct MessageSnapshot;
+} // namespace MyOwnGram::MessageArchiveStorage
 
 namespace MyOwnGram {
 
@@ -36,6 +42,10 @@ public:
 		QByteArray value,
 		WriteDone done);
 	void removeRecord(Storage::Cache::Key key, WriteDone done);
+	void observeEdit(
+		FullMsgId id,
+		MessageArchiveStorage::MessageSnapshot before,
+		MessageArchiveStorage::MessageSnapshot after);
 
 private:
 	struct OpenAttempt;

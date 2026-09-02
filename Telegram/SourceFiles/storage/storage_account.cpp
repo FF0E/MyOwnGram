@@ -43,7 +43,209 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "webview/webview_interface.h"
 #include "window/themes/window_theme.h"
 
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+
 namespace Storage {
+
+// ponytail: archive operations share one account queue so compound updates
+// cannot be overtaken by reads or mutations. If archive volume becomes measurable,
+// replace this with per-key queues while retaining the same reset cancellation
+// and destructor drain guarantees.
+class MessageArchiveOperations final
+	: public std::enable_shared_from_this<MessageArchiveOperations> {
+public:
+	enum class Type {
+		Read,
+		Write,
+		Remove,
+		Update,
+	};
+	using ReadDone = FnMut<void(QByteArray&&)>;
+	using WriteDone = FnMut<void(Cache::Error)>;
+	using Update = FnMut<std::optional<QByteArray>(QByteArray&&)>;
+	struct Operation {
+		Type type = Type::Read;
+		Cache::Key key;
+		QByteArray value;
+		ReadDone readDone;
+		WriteDone writeDone;
+		Update update;
+	};
+
+	void push(Cache::Database &database, Operation operation);
+	void drain();
+	void cancel();
+
+private:
+	void startNextLocked();
+	void readDone(QByteArray &&value);
+	void updateReadDone(QByteArray &&value);
+	void writeDone(Cache::Error error);
+	void finish();
+	void finishLocked();
+
+	std::mutex _mutex;
+	std::condition_variable _idle;
+	Cache::Database *_database = nullptr;
+	std::deque<Operation> _pending;
+	std::optional<Operation> _current;
+	bool _cancelled = false;
+
+};
+
+void MessageArchiveOperations::push(
+		Cache::Database &database,
+		Operation operation) {
+	Expects(operation.key.valid());
+	Expects(operation.type != Type::Update || operation.update != nullptr);
+
+	const auto lock = std::lock_guard(_mutex);
+	Expects(!_cancelled);
+	if (_database) {
+		Assert(_database == &database);
+	} else {
+		_database = &database;
+	}
+	_pending.push_back(std::move(operation));
+	if (!_current) {
+		startNextLocked();
+	}
+}
+
+void MessageArchiveOperations::drain() {
+	auto lock = std::unique_lock(_mutex);
+	_idle.wait(lock, [this] { return !_current.has_value(); });
+}
+
+void MessageArchiveOperations::cancel() {
+	const auto lock = std::lock_guard(_mutex);
+	_cancelled = true;
+	_pending.clear();
+}
+
+void MessageArchiveOperations::startNextLocked() {
+	Expects(!_current.has_value());
+	Expects(!_pending.empty());
+
+	_current = std::move(_pending.front());
+	_pending.pop_front();
+	const auto self = shared_from_this();
+	switch (_current->type) {
+	case Type::Read:
+		_database->get(_current->key, [self](QByteArray &&value) {
+			self->readDone(std::move(value));
+		});
+		break;
+	case Type::Write:
+		_database->put(
+			_current->key,
+			std::move(_current->value),
+			[self](Cache::Error error) {
+				self->writeDone(std::move(error));
+			});
+		break;
+	case Type::Remove:
+		_database->remove(_current->key, [self](Cache::Error error) {
+			self->writeDone(std::move(error));
+		});
+		break;
+	case Type::Update:
+		_database->get(_current->key, [self](QByteArray &&value) {
+			self->updateReadDone(std::move(value));
+		});
+		break;
+	}
+}
+
+void MessageArchiveOperations::readDone(QByteArray &&value) {
+	auto done = ReadDone();
+	{
+		const auto lock = std::lock_guard(_mutex);
+		if (!_cancelled) {
+			Assert(_current && _current->type == Type::Read);
+			done = std::move(_current->readDone);
+		}
+	}
+	if (done) {
+		done(std::move(value));
+	}
+	finish();
+}
+
+void MessageArchiveOperations::updateReadDone(QByteArray &&value) {
+	auto update = Update();
+	{
+		const auto lock = std::lock_guard(_mutex);
+		if (_cancelled) {
+			finishLocked();
+			return;
+		}
+		Assert(_current && _current->type == Type::Update);
+		update = std::move(_current->update);
+	}
+	auto updated = update(std::move(value));
+	if (!updated) {
+		writeDone(Cache::Error::NoError());
+		return;
+	} else if (updated->isEmpty()
+		|| updated->size() > kMessageArchiveMaxRecordSize) {
+		writeDone(Cache::Error{
+			.type = Cache::Error::Type::IO,
+		});
+		return;
+	}
+	{
+		const auto lock = std::lock_guard(_mutex);
+		if (_cancelled) {
+			finishLocked();
+			return;
+		}
+		const auto self = shared_from_this();
+		_database->put(
+			_current->key,
+			std::move(*updated),
+			[self](Cache::Error error) {
+				self->writeDone(std::move(error));
+			});
+	}
+}
+
+void MessageArchiveOperations::writeDone(Cache::Error error) {
+	auto done = WriteDone();
+	{
+		const auto lock = std::lock_guard(_mutex);
+		if (!_cancelled) {
+			Assert(_current && _current->type != Type::Read);
+			done = std::move(_current->writeDone);
+		}
+	}
+	if (done) {
+		done(std::move(error));
+	}
+	finish();
+}
+
+void MessageArchiveOperations::finish() {
+	const auto lock = std::lock_guard(_mutex);
+	finishLocked();
+}
+
+void MessageArchiveOperations::finishLocked() {
+	Expects(_current.has_value());
+
+	_current.reset();
+	if (_cancelled) {
+		_pending.clear();
+	} else if (!_pending.empty()) {
+		startNextLocked();
+	}
+	if (!_current) {
+		_idle.notify_all();
+	}
+}
+
 namespace {
 
 using namespace details;
@@ -235,6 +437,9 @@ Account::Account(not_null<Main::Account*> owner, const QString &dataName)
 Account::~Account() {
 	Expects(!_writeSearchSuggestionsTimer.isActive());
 
+	if (_messageArchiveOperations) {
+		_messageArchiveOperations->drain();
+	}
 	if (_localKey) {
 		if (_prefsChanged) {
 			writePrefs();
@@ -811,6 +1016,10 @@ void Account::writeMap() {
 
 void Account::reset() {
 	_writeSearchSuggestionsTimer.cancel();
+	if (_messageArchiveOperations) {
+		_messageArchiveOperations->cancel();
+		_messageArchiveOperations = nullptr;
+	}
 	if (_messageArchiveDatabase) {
 		ClearMessageArchiveDatabase(
 			**_messageArchiveDatabase,
@@ -1964,6 +2173,61 @@ Cache::Database &Account::messageArchiveDatabase() {
 				messageArchiveSettings()));
 	}
 	return **_messageArchiveDatabase;
+}
+
+MessageArchiveOperations &Account::messageArchiveOperations() {
+	if (!_messageArchiveOperations) {
+		_messageArchiveOperations = std::make_shared<MessageArchiveOperations>();
+	}
+	return *_messageArchiveOperations;
+}
+
+void Account::readMessageArchiveRecord(
+		Cache::Database &database,
+		Cache::Key key,
+		FnMut<void(QByteArray&&)> done) {
+	messageArchiveOperations().push(database, {
+		.type = MessageArchiveOperations::Type::Read,
+		.key = key,
+		.readDone = std::move(done),
+	});
+}
+
+void Account::writeMessageArchiveRecord(
+		Cache::Database &database,
+		Cache::Key key,
+		QByteArray value,
+		FnMut<void(Cache::Error)> done) {
+	messageArchiveOperations().push(database, {
+		.type = MessageArchiveOperations::Type::Write,
+		.key = key,
+		.value = std::move(value),
+		.writeDone = std::move(done),
+	});
+}
+
+void Account::removeMessageArchiveRecord(
+		Cache::Database &database,
+		Cache::Key key,
+		FnMut<void(Cache::Error)> done) {
+	messageArchiveOperations().push(database, {
+		.type = MessageArchiveOperations::Type::Remove,
+		.key = key,
+		.writeDone = std::move(done),
+	});
+}
+
+void Account::updateMessageArchiveRecord(
+		Cache::Database &database,
+		Cache::Key key,
+		FnMut<std::optional<QByteArray>(QByteArray&&)> update,
+		FnMut<void(Cache::Error)> done) {
+	messageArchiveOperations().push(database, {
+		.type = MessageArchiveOperations::Type::Update,
+		.key = key,
+		.writeDone = std::move(done),
+		.update = std::move(update),
+	});
 }
 
 void Account::writeStickerSet(

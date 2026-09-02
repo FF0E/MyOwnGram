@@ -11,6 +11,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session_settings.h"
 #include "main/main_app_config.h"
 #include "myowngram/message_archive.h"
+#include "myowngram/message_archive_snapshot.h"
+#include "myowngram/message_history_settings.h"
 #include "apiwrap.h"
 #include "mainwidget.h"
 #include "api/api_bot.h"
@@ -2878,13 +2880,72 @@ void Session::reorderTwoPinnedChats(
 	notifyPinnedDialogsOrderUpdated();
 }
 
+namespace {
+
+template <typename Apply>
+void ApplyArchiveAwareEdition(
+		not_null<Session*> owner,
+		not_null<HistoryItem*> item,
+		bool localMediaUpdate,
+		Apply &&apply) {
+	const auto makeSnapshot = [&] {
+		return item->isEditingMedia()
+			? MyOwnGram::MessageArchiveStorage::MakeSavedMediaSnapshot(item)
+			: MyOwnGram::MessageArchiveStorage::MakeMessageSnapshot(item);
+	};
+	// Server edits received during an uploaded-media edit update the saved
+	// accepted state instead of the provisional item. A successful local upload
+	// retains that predecessor across PTS deferral, then this boundary captures
+	// both versions when the resulting message update is actually applied.
+	auto before = std::optional<
+		MyOwnGram::MessageArchiveStorage::MessageSnapshot>();
+	if (MyOwnGram::MessageHistory::CaptureEnabled(
+			MyOwnGram::MessageHistory::Capture::EditHistory)
+		&& !item->out()
+		&& !item->history()->peer->isSelf()) {
+		before = makeSnapshot();
+	}
+	if (localMediaUpdate) {
+		item->removeFromSharedMediaIndex();
+		item->clearSavedMedia();
+	}
+	std::forward<Apply>(apply)();
+	if (localMediaUpdate) {
+		item->setIsLocalUpdateMedia(false);
+	}
+	if (before) {
+		if (auto after = makeSnapshot()) {
+			owner->messageArchive().observeEdit(
+				item->fullId(),
+				std::move(*before),
+				std::move(*after));
+		}
+	}
+}
+
+} // namespace
+
 bool Session::updateExistingMessage(const MTPDmessage &data) {
 	const auto peer = peerFromMTP(data.vpeer_id());
 	const auto existing = message(peer, data.vid().v);
 	if (!existing) {
 		return false;
 	}
-	existing->applySentMessage(data);
+	if (existing->isEditingMedia()) {
+		const auto localMediaUpdate = existing->isLocalUpdateMedia();
+		ApplyArchiveAwareEdition(
+			this,
+			existing,
+			localMediaUpdate,
+			[&] {
+				if (localMediaUpdate) {
+					existing->applySentMessage(data);
+				}
+				existing->applyEdition(HistoryMessageEdition(_session, data));
+			});
+	} else {
+		existing->applySentMessage(data);
+	}
 	const auto result = (existing->mainView() != nullptr);
 	if (result) {
 		stickers().checkSavedGif(existing);
@@ -2906,15 +2967,24 @@ void Session::updateEditedMessage(const MTPMessage &data) {
 		Reactions::CheckUnknownForUnread(this, data);
 		return;
 	}
-	if (existing->isLocalUpdateMedia() && data.type() == mtpc_message) {
-		updateExistingMessage(data.c_message());
-	}
-	data.match([](const MTPDmessageEmpty &) {
-	}, [&](const MTPDmessageService &data) {
-		existing->applyEdition(data);
-	}, [&](const auto &data) {
-		existing->applyEdition(HistoryMessageEdition(_session, data));
-	});
+	const auto localMediaUpdate = existing->isLocalUpdateMedia()
+		&& data.type() == mtpc_message;
+	ApplyArchiveAwareEdition(
+		this,
+		existing,
+		localMediaUpdate,
+		[&] {
+			if (localMediaUpdate) {
+				updateExistingMessage(data.c_message());
+			}
+			data.match([](const MTPDmessageEmpty &) {
+			}, [&](const MTPDmessageService &data) {
+				existing->applyEdition(data);
+			}, [&](const auto &data) {
+				existing->applyEdition(
+					HistoryMessageEdition(_session, data));
+			});
+		});
 }
 
 void Session::processMessages(

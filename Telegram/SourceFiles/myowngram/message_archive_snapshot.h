@@ -65,6 +65,8 @@ struct ParsedMessageSnapshotSupport {
 	const QByteArray &serialized);
 [[nodiscard]] std::optional<MessageSnapshot> MakeMessageSnapshot(
 	not_null<const HistoryItem*> item);
+[[nodiscard]] std::optional<MessageSnapshot> MakeSavedMediaSnapshot(
+	not_null<const HistoryItem*> item);
 
 #ifdef _DEBUG
 void ValidateMessageSnapshotFormat();

@@ -252,13 +252,17 @@ ParsedMessageSnapshotSupport ParseMessageSnapshotSupport(
 	};
 }
 
-std::optional<MessageSnapshot> MakeMessageSnapshot(
-		not_null<const HistoryItem*> item) {
-	const auto edited = item->Get<HistoryMessageEdited>();
+namespace {
+
+std::optional<MessageSnapshot> MakeSnapshot(
+		not_null<const HistoryItem*> item,
+		const TextWithEntities &text,
+		const Data::Media *mediaData,
+		bool invertMedia,
+		TimeId versionDate) {
 	if (!item->isRegular()
 		|| item->isService()
 		|| item->isSponsored()
-		|| item->isEditingMedia()
 		|| item->isLegacyMessage()
 		|| !item->computeUnavailableReason().isEmpty()
 		|| item->Has<HistoryMessageRichPageSource>()
@@ -267,15 +271,15 @@ std::optional<MessageSnapshot> MakeMessageSnapshot(
 		|| item->Has<HistoryMessageFromRank>()) {
 		return std::nullopt;
 	}
-	const auto media = SerializeMessageMedia(item->media());
+	const auto media = SerializeMessageMedia(mediaData);
 	if (!media) {
 		return std::nullopt;
 	}
 	const auto visibleMedia = SerializeMessageMediaVisible({
 		.type = media->type,
 		.invertMedia = (media->type != MessageMediaType::None)
-			&& !item->emptyText()
-			&& item->invertMedia(),
+			&& !text.empty()
+			&& invertMedia,
 		.record = media->visible,
 	});
 	const auto markup = item->Get<HistoryMessageReplyMarkup>();
@@ -292,15 +296,44 @@ std::optional<MessageSnapshot> MakeMessageSnapshot(
 		return std::nullopt;
 	}
 	return MessageSnapshot{
-		.versionDate = (edited && edited->date)
-			? edited->date
-			: item->date(),
+		.versionDate = versionDate,
 		.service = false,
-		.text = item->originalText(),
+		.text = text,
 		.media = *visibleMedia,
 		.replyMarkup = serializedMarkup->visible,
 		.support = *support,
 	};
+}
+
+} // namespace
+
+std::optional<MessageSnapshot> MakeMessageSnapshot(
+		not_null<const HistoryItem*> item) {
+	if (item->isEditingMedia()) {
+		return std::nullopt;
+	}
+	const auto edited = item->Get<HistoryMessageEdited>();
+	return MakeSnapshot(
+		item,
+		item->originalText(),
+		item->media(),
+		item->invertMedia(),
+		(edited && edited->date) ? edited->date : item->date());
+}
+
+std::optional<MessageSnapshot> MakeSavedMediaSnapshot(
+		not_null<const HistoryItem*> item) {
+	const auto saved = item->Get<HistoryMessageSavedMediaData>();
+	return saved
+		? MakeSnapshot(
+			item,
+			saved->text,
+			saved->media.get(),
+			saved->invertMedia,
+			(saved->hadEditedComponent && saved->editDate)
+				? saved->editDate
+				: item->date())
+		: std::nullopt;
 }
 
 #ifdef _DEBUG

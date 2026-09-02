@@ -10,11 +10,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "apiwrap.h"
 #include "api/api_media.h"
 #include "api/api_text_entities.h"
+#include "api/api_updates.h"
 #include "base/random.h"
 #include "core/application.h"
 #include "ui/boxes/confirm_box.h"
 #include "data/business/data_shortcut_messages.h"
 #include "data/components/scheduled_messages.h"
+#include "data/data_channel.h"
 #include "data/data_file_origin.h"
 #include "data/data_histories.h"
 #include "data/data_saved_sublist.h"
@@ -100,6 +102,73 @@ constexpr auto ErrorWithoutId
 		: item->isBusinessShortcut()
 		? item->history()->session().data().shortcutMessages().lookupId(item)
 		: item->id;
+}
+
+[[nodiscard]] bool EditUpdateAlreadyApplied(
+		not_null<Main::Session*> session,
+		not_null<HistoryItem*> item,
+		const MTPUpdates &updates) {
+	auto result = false;
+	const auto check = [&](const MTPUpdate &update) {
+		const auto checkMessage = [&](const MTPMessage &message,
+				int32 pts,
+				int32 count,
+				bool channelUpdate) {
+			if (!count
+				|| FullMsgId(
+					PeerFromMessage(message),
+					IdFromMessage(message)) != item->fullId()) {
+				return;
+			} else if (channelUpdate) {
+				const auto channel = item->history()->peer->asChannel();
+				result = result || (channel && (pts <= channel->pts()));
+			} else {
+				result = result || (pts <= session->updates().pts());
+			}
+		};
+		if (update.type() == mtpc_updateEditMessage) {
+			const auto &data = update.c_updateEditMessage();
+			checkMessage(
+				data.vmessage(),
+				data.vpts().v,
+				data.vpts_count().v,
+				false);
+		} else if (update.type() == mtpc_updateEditChannelMessage) {
+			const auto &data = update.c_updateEditChannelMessage();
+			checkMessage(
+				data.vmessage(),
+				data.vpts().v,
+				data.vpts_count().v,
+				true);
+		}
+	};
+	const auto checkAll = [&](const MTPVector<MTPUpdate> &list) {
+		for (const auto &update : list.v) {
+			check(update);
+		}
+	};
+	updates.match([&](const MTPDupdates &data) {
+		checkAll(data.vupdates());
+	}, [&](const MTPDupdatesCombined &data) {
+		checkAll(data.vupdates());
+	}, [&](const MTPDupdateShort &data) {
+		check(data.vupdate());
+	}, [](const auto &) {
+	});
+	return result;
+}
+
+void ApplyEditUpdates(
+		not_null<ApiWrap*> api,
+		not_null<HistoryItem*> item,
+		const MTPUpdates &updates) {
+	const auto session = &item->history()->session();
+	api->applyUpdates(updates);
+	if (item->isLocalUpdateMedia()
+		&& EditUpdateAlreadyApplied(session, item, updates)) {
+		item->setIsLocalUpdateMedia(false);
+		item->returnSavedMedia();
+	}
 }
 
 template <typename DoneCallback, typename FailCallback>
@@ -352,7 +421,7 @@ mtpRequestId EditMessage(
 	)).done([=](
 			const MTPUpdates &result,
 			[[maybe_unused]] mtpRequestId requestId) {
-		const auto apply = [=] { api->applyUpdates(result); };
+		const auto apply = [=] { ApplyEditUpdates(api, item, result); };
 
 		if constexpr (WithId<DoneCallback>) {
 			done(apply, requestId);
@@ -406,13 +475,20 @@ void EditMessageWithUploadedMedia(
 		not_null<HistoryItem*> item,
 		SendOptions options,
 		MTPInputMedia media) {
+	const auto waitForAppliedUpdate = item->isRegular()
+		&& item->computeSuggestionActions()
+			!= SuggestionActions::AcceptAndDecline;
 	const auto done = [=](Fn<void()> applyUpdates) {
 		if (item) {
-			item->removeFromSharedMediaIndex();
-			item->clearSavedMedia();
+			if (!waitForAppliedUpdate) {
+				item->removeFromSharedMediaIndex();
+				item->clearSavedMedia();
+			}
 			item->setIsLocalUpdateMedia(true);
 			applyUpdates();
-			item->setIsLocalUpdateMedia(false);
+			if (!waitForAppliedUpdate) {
+				item->setIsLocalUpdateMedia(false);
+			}
 		}
 	};
 	const auto fail = [=](const QString &error) {
