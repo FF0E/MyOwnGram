@@ -31,6 +31,7 @@ struct MessageMediaVisible {
 struct MessageSnapshotSupport {
 	QByteArray media;
 	QByteArray replyMarkup;
+	QByteArray deletion;
 
 	friend inline bool operator==(
 		const MessageSnapshotSupport &,
@@ -66,6 +67,8 @@ struct ParsedMessageSnapshotSupport {
 [[nodiscard]] std::optional<MessageSnapshot> MakeMessageSnapshot(
 	not_null<const HistoryItem*> item);
 [[nodiscard]] std::optional<MessageSnapshot> MakeSavedMediaSnapshot(
+	not_null<const HistoryItem*> item);
+[[nodiscard]] std::optional<MessageSnapshot> MakeDeletedMessageSnapshot(
 	not_null<const HistoryItem*> item);
 
 #ifdef _DEBUG

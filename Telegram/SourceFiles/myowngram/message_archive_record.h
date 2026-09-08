@@ -28,6 +28,7 @@ enum class RecordType : uint8 {
 	DocumentMediaSupport = 7,
 	MessageMediaVisible = 8,
 	MessageSnapshotSupport = 9,
+	DeletedMessageContext = 10,
 };
 
 enum class ParseError : uint8 {

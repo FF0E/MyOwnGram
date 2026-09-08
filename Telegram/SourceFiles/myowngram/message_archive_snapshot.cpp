@@ -8,6 +8,7 @@
 
 #include "history/history_item.h"
 #include "history/history_item_components.h"
+#include "myowngram/message_archive_deletion.h"
 #include "myowngram/message_archive_markup.h"
 #include "myowngram/message_archive_media.h"
 
@@ -19,7 +20,7 @@ namespace MyOwnGram::MessageArchiveStorage {
 namespace {
 
 constexpr auto kMessageMediaVisibleVersion = uint16(1);
-constexpr auto kMessageSnapshotSupportVersion = uint16(1);
+constexpr auto kMessageSnapshotSupportVersion = uint16(2);
 
 struct SerializedMessageMedia {
 	MessageMediaType type = MessageMediaType::None;
@@ -98,15 +99,45 @@ void CheckMessageSnapshotFormat() {
 	}));
 	Assert(ParseMessageMediaVisible(QByteArray()));
 
+	const auto deletion = SerializeDeletedMessageContext({
+		.from = peerFromUser(UserId(1)),
+		.date = 2,
+	});
+	Assert(deletion.has_value());
 	const auto support = MessageSnapshotSupport{
 		.media = QByteArray("media support"),
 		.replyMarkup = QByteArray("markup support"),
+		.deletion = *deletion,
 	};
 	const auto serializedSupport = SerializeMessageSnapshotSupport(support);
 	Assert(serializedSupport.has_value());
 	const auto parsedSupport = ParseMessageSnapshotSupport(*serializedSupport);
 	Assert(parsedSupport && parsedSupport.value == support);
 	Assert(ParseMessageSnapshotSupport(QByteArray()));
+
+	auto legacySupportPayload = QByteArray();
+	auto legacySupportStream = QDataStream(
+		&legacySupportPayload,
+		QIODevice::WriteOnly);
+	legacySupportStream.setVersion(QDataStream::Qt_5_1);
+	legacySupportStream.setByteOrder(QDataStream::BigEndian);
+	Assert(Binary::WriteBytes(legacySupportStream, support.media));
+	Assert(Binary::WriteBytes(legacySupportStream, support.replyMarkup));
+	const auto legacySupport = SerializeRecord(
+		RecordType::MessageSnapshotSupport,
+		1,
+		legacySupportPayload);
+	Assert(legacySupport.has_value());
+	const auto parsedLegacySupport = ParseMessageSnapshotSupport(
+		*legacySupport);
+	Assert(parsedLegacySupport);
+	Assert(parsedLegacySupport.value.media == support.media);
+	Assert(parsedLegacySupport.value.replyMarkup == support.replyMarkup);
+	Assert(parsedLegacySupport.value.deletion.isEmpty());
+
+	auto invalidSupport = support;
+	invalidSupport.deletion.chop(1);
+	Assert(!SerializeMessageSnapshotSupport(invalidSupport));
 
 	auto corrupt = *serializedMedia;
 	corrupt.chop(1);
@@ -199,8 +230,13 @@ ParsedMessageMediaVisible ParseMessageMediaVisible(
 
 std::optional<QByteArray> SerializeMessageSnapshotSupport(
 		const MessageSnapshotSupport &support) {
-	if (support.media.isEmpty() && support.replyMarkup.isEmpty()) {
+	if (support.media.isEmpty()
+		&& support.replyMarkup.isEmpty()
+		&& support.deletion.isEmpty()) {
 		return QByteArray();
+	} else if (!support.deletion.isEmpty()
+		&& !ParseDeletedMessageContext(support.deletion)) {
+		return std::nullopt;
 	}
 	auto payload = QByteArray();
 	auto stream = QDataStream(&payload, QIODevice::WriteOnly);
@@ -208,12 +244,16 @@ std::optional<QByteArray> SerializeMessageSnapshotSupport(
 	stream.setByteOrder(QDataStream::BigEndian);
 	if (!Binary::WriteBytes(stream, support.media)
 		|| !Binary::WriteBytes(stream, support.replyMarkup)
+		|| (!support.deletion.isEmpty()
+			&& !Binary::WriteBytes(stream, support.deletion))
 		|| stream.status() != QDataStream::Ok) {
 		return std::nullopt;
 	}
 	return SerializeRecord(
 		RecordType::MessageSnapshotSupport,
-		kMessageSnapshotSupportVersion,
+		support.deletion.isEmpty()
+			? uint16(1)
+			: kMessageSnapshotSupportVersion,
 		payload);
 }
 
@@ -237,16 +277,23 @@ ParsedMessageSnapshotSupport ParseMessageSnapshotSupport(
 	stream.setByteOrder(QDataStream::BigEndian);
 	const auto media = Binary::ReadBytes(stream);
 	const auto replyMarkup = Binary::ReadBytes(stream);
+	const auto deletion = (record.version >= 2)
+		? Binary::ReadBytes(stream)
+		: std::optional<QByteArray>(QByteArray());
 	if (stream.status() != QDataStream::Ok
 		|| !stream.atEnd()
 		|| !media
-		|| !replyMarkup) {
+		|| !replyMarkup
+		|| !deletion
+		|| (!deletion->isEmpty()
+			&& !ParseDeletedMessageContext(*deletion))) {
 		return ParseSupportFailure(ParseError::Corrupt);
 	}
 	return {
 		.value = MessageSnapshotSupport{
 			.media = *media,
 			.replyMarkup = *replyMarkup,
+			.deletion = *deletion,
 		},
 		.error = ParseError::None,
 	};
@@ -259,7 +306,8 @@ std::optional<MessageSnapshot> MakeSnapshot(
 		const TextWithEntities &text,
 		const Data::Media *mediaData,
 		bool invertMedia,
-		TimeId versionDate) {
+		TimeId versionDate,
+		QByteArray deletion = {}) {
 	if (!item->isRegular()
 		|| item->isService()
 		|| item->isSponsored()
@@ -291,6 +339,7 @@ std::optional<MessageSnapshot> MakeSnapshot(
 	const auto support = SerializeMessageSnapshotSupport({
 		.media = media->support,
 		.replyMarkup = serializedMarkup->support,
+		.deletion = std::move(deletion),
 	});
 	if (!support) {
 		return std::nullopt;
@@ -334,6 +383,25 @@ std::optional<MessageSnapshot> MakeSavedMediaSnapshot(
 				? saved->editDate
 				: item->date())
 		: std::nullopt;
+}
+
+std::optional<MessageSnapshot> MakeDeletedMessageSnapshot(
+		not_null<const HistoryItem*> item) {
+	if (item->isEditingMedia()) {
+		return std::nullopt;
+	}
+	const auto deletion = SerializeDeletedMessageContext(item);
+	if (!deletion) {
+		return std::nullopt;
+	}
+	const auto edited = item->Get<HistoryMessageEdited>();
+	return MakeSnapshot(
+		item,
+		item->originalText(),
+		item->media(),
+		item->invertMedia(),
+		(edited && edited->date) ? edited->date : item->date(),
+		*deletion);
 }
 
 #ifdef _DEBUG
