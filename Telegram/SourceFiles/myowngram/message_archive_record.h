@@ -11,6 +11,7 @@
 #include <QtCore/QByteArray>
 #include <QtCore/QString>
 
+#include <array>
 #include <optional>
 
 class QDataStream;
@@ -30,6 +31,7 @@ enum class RecordType : uint8 {
 	MessageSnapshotSupport = 9,
 	DeletedMessageContext = 10,
 	DeletedMessageEngagement = 11,
+	MessagePositionIndex = 12,
 };
 
 enum class ParseError : uint8 {
@@ -49,7 +51,14 @@ struct ParsedRecord {
 	}
 };
 
+struct MessagePositionEntry {
+	Storage::Cache::Key key;
+	uint8 bit = 0;
+};
+
 [[nodiscard]] Storage::Cache::Key MessageTimelineKey(FullMsgId id);
+[[nodiscard]] std::array<MessagePositionEntry, 7> MessagePositionPath(
+	FullMsgId id);
 [[nodiscard]] std::optional<QByteArray> SerializeRecord(
 	RecordType type,
 	uint16 version,

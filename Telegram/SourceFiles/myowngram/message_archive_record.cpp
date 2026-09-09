@@ -34,6 +34,37 @@ constexpr Storage::Cache::Key MakeKey(
 	};
 }
 
+constexpr auto kMessagePositionSegmentBits = 8;
+constexpr auto kMessagePositionLevels
+	= kKeyPartBits / kMessagePositionSegmentBits;
+constexpr auto kMessagePositionPrefixBits
+	= kKeyPartBits - kMessagePositionSegmentBits;
+static_assert(kMessagePositionLevels == 7);
+
+std::array<MessagePositionEntry, 7> MakeMessagePositionPath(
+		uint64 peer,
+		uint64 position) {
+	auto result = std::array<
+		MessagePositionEntry,
+		kMessagePositionLevels>();
+	for (auto level = 0; level != kMessagePositionLevels; ++level) {
+		const auto prefixBits = level * kMessagePositionSegmentBits;
+		const auto prefix = prefixBits
+			? (position >> (kKeyPartBits - prefixBits))
+			: 0;
+		const auto bitShift = kKeyPartBits
+			- ((level + 1) * kMessagePositionSegmentBits);
+		result[level] = {
+			MakeKey(
+				RecordType::MessagePositionIndex,
+				peer,
+				(uint64(level) << kMessagePositionPrefixBits) | prefix),
+			uint8(position >> bitShift),
+		};
+	}
+	return result;
+}
+
 static_assert(MakeKey(RecordType::MessageTimeline, 1, 2).high
 	== (kKeyMagic | 1));
 static_assert(MakeKey(RecordType::MessageTimeline, 1, 2).low
@@ -54,6 +85,17 @@ Storage::Cache::Key MessageTimelineKey(FullMsgId id) {
 	Assert((peer & ~kKeyPartMask) == 0);
 	Assert((position & ~kKeyPartMask) == 0);
 	return MakeKey(RecordType::MessageTimeline, peer, position);
+}
+
+std::array<MessagePositionEntry, 7> MessagePositionPath(FullMsgId id) {
+	Expects(id.peer);
+	Expects(IsServerMsgId(id.msg));
+
+	const auto peer = SerializePeerId(id.peer);
+	const auto position = uint64(id.msg.bare);
+	Assert((peer & ~kKeyPartMask) == 0);
+	Assert((position & ~kKeyPartMask) == 0);
+	return MakeMessagePositionPath(peer, position);
 }
 
 std::optional<QByteArray> SerializeRecord(

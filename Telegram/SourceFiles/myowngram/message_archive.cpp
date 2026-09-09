@@ -9,6 +9,7 @@
 #include "lang/lang_keys.h"
 #include "myowngram/message_archive_deletion.h"
 #include "myowngram/message_archive_engagement.h"
+#include "myowngram/message_archive_index.h"
 #include "myowngram/message_archive_markup.h"
 #include "myowngram/message_archive_media.h"
 #include "myowngram/message_archive_snapshot.h"
@@ -20,6 +21,15 @@
 
 namespace MyOwnGram {
 
+struct MessageArchive::IndexState {
+	[[nodiscard]] bool failed() const {
+		return invalid || error.type != Storage::Cache::Error::Type::None;
+	}
+
+	Storage::Cache::Error error;
+	bool invalid = false;
+};
+
 // Operations enter the database queue right after open() so FIFO is kept.
 // The open callback and operation callbacks run on that same queue.
 // Each operation keeps this result to report the original open error,
@@ -30,6 +40,7 @@ struct MessageArchive::OpenAttempt {
 
 namespace {
 
+using MessageArchiveStorage::MessagePositionUpdateResult;
 using MessageArchiveStorage::MessageSnapshot;
 using MessageArchiveStorage::MessageTimeline;
 using MessageArchiveStorage::ObserveResult;
@@ -212,6 +223,7 @@ MessageArchive::MessageArchive(not_null<Storage::Account*> account)
 	MessageArchiveStorage::ValidateMessageTimelineFormat();
 	MessageArchiveStorage::ValidateDeletedMessageContextFormat();
 	MessageArchiveStorage::ValidateDeletedMessageEngagementFormat();
+	MessageArchiveStorage::ValidateMessagePositionIndexFormat();
 	MessageArchiveStorage::ValidateReplyMarkupFormat();
 	MessageArchiveStorage::ValidatePhotoMediaFormat();
 	MessageArchiveStorage::ValidateDocumentMediaFormat();
@@ -361,17 +373,22 @@ void MessageArchive::observeEdit(
 	}
 	auto &database = databaseForOperation();
 	const auto attempt = _openAttempt;
+	const auto index = visibleChanged
+		? indexMessage(database, attempt, id)
+		: nullptr;
 	_account->updateMessageArchiveRecord(
 		database,
 		MessageArchiveStorage::MessageTimelineKey(id),
 		[
 			attempt,
+			index,
 			before = std::move(before),
 			after = std::move(after)
 		](QByteArray &&serialized) mutable {
-			if (attempt
-				&& attempt->error.type
-					!= Storage::Cache::Error::Type::None) {
+			if ((attempt
+					&& attempt->error.type
+						!= Storage::Cache::Error::Type::None)
+				|| (index && index->failed())) {
 				return std::optional<QByteArray>();
 			}
 			return ApplyEditedSnapshots(
@@ -396,16 +413,19 @@ void MessageArchive::observeDeletion(
 		MessageSnapshot snapshot) {
 	auto &database = databaseForOperation();
 	const auto attempt = _openAttempt;
+	const auto index = indexMessage(database, attempt, id);
 	_account->updateMessageArchiveRecord(
 		database,
 		MessageArchiveStorage::MessageTimelineKey(id),
 		[
 			attempt,
+			index,
 			snapshot = std::move(snapshot)
 		](QByteArray &&serialized) mutable {
-			if (attempt
-				&& attempt->error.type
-					!= Storage::Cache::Error::Type::None) {
+			if ((attempt
+					&& attempt->error.type
+						!= Storage::Cache::Error::Type::None)
+				|| (index && index->failed())) {
 				return std::optional<QByteArray>();
 			}
 			return ApplyDeletedSnapshot(
@@ -422,6 +442,68 @@ void MessageArchive::observeDeletion(
 				LOG(("Message Archive Error: Could not store deleted timeline."));
 			}
 		});
+}
+
+std::shared_ptr<MessageArchive::IndexState> MessageArchive::indexMessage(
+		Storage::Cache::Database &database,
+		const std::shared_ptr<OpenAttempt> &attempt,
+		FullMsgId id) {
+	const auto state = std::make_shared<IndexState>();
+	const auto path = MessageArchiveStorage::MessagePositionPath(id);
+	// Ancestors are queued before descendants and the timeline is queued last.
+	// A crash may leave dangling index bits, which readers can skip when the
+	// timeline is absent, but cannot make a newly written timeline unreachable.
+	// Index failures also stop the following timeline update from
+	// being written.
+	// The account-owned FIFO preserves this dispatch order for archive writes.
+	// ponytail: Nodes are updated one message at a time to reuse that FIFO.
+	// If large deletion batches become measurable, group entries by key and
+	// enqueue one bitmap update per node without changing the persisted format.
+	for (auto i = path.begin(); i != path.end(); ++i) {
+		const auto entry = *i;
+		const auto last = (i + 1 == path.end());
+		_account->updateMessageArchiveRecord(
+			database,
+			entry.key,
+			[attempt, state, entry](QByteArray &&serialized) {
+				if ((attempt
+						&& attempt->error.type
+							!= Storage::Cache::Error::Type::None)
+					|| state->failed()) {
+					return std::optional<QByteArray>();
+				}
+				auto updated = MessageArchiveStorage::AddMessagePosition(
+					serialized,
+					entry);
+				if (updated.result == MessagePositionUpdateResult::Invalid) {
+					state->invalid = true;
+					return std::optional<QByteArray>();
+				}
+				return (updated.result == MessagePositionUpdateResult::Updated)
+					? std::make_optional(std::move(updated.value))
+					: std::optional<QByteArray>();
+			},
+			[attempt, state, last](Storage::Cache::Error error) {
+				if (attempt
+					&& attempt->error.type
+						!= Storage::Cache::Error::Type::None) {
+					error = attempt->error;
+				}
+				if (error.type != Storage::Cache::Error::Type::None
+					&& state->error.type
+						== Storage::Cache::Error::Type::None) {
+					state->error = std::move(error);
+				}
+				if (last
+					&& state->failed()
+					&& (!attempt
+						|| attempt->error.type
+							== Storage::Cache::Error::Type::None)) {
+					LOG(("Message Archive Error: Could not update position index."));
+				}
+			});
+	}
+	return state;
 }
 
 Storage::Cache::Database &MessageArchive::databaseForOperation() {

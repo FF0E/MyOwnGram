@@ -51,6 +51,7 @@ public:
 		MessageArchiveStorage::MessageSnapshot snapshot);
 
 private:
+	struct IndexState;
 	struct OpenAttempt;
 
 	enum class State {
@@ -60,6 +61,10 @@ private:
 	};
 
 	[[nodiscard]] Storage::Cache::Database &databaseForOperation();
+	[[nodiscard]] std::shared_ptr<IndexState> indexMessage(
+		Storage::Cache::Database &database,
+		const std::shared_ptr<OpenAttempt> &attempt,
+		FullMsgId id);
 	void open();
 	void openDone(Storage::Cache::Error error);
 

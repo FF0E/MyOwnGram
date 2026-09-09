@@ -1583,6 +1583,8 @@ PRIVATE
     myowngram/message_archive_deletion.h
     myowngram/message_archive_engagement.cpp
     myowngram/message_archive_engagement.h
+    myowngram/message_archive_index.cpp
+    myowngram/message_archive_index.h
     myowngram/message_archive_markup.cpp
     myowngram/message_archive_markup.h
     myowngram/message_archive_media.cpp
