@@ -64,7 +64,7 @@ public:
 	};
 	using ReadDone = FnMut<void(QByteArray&&)>;
 	using WriteDone = FnMut<void(Cache::Error)>;
-	using Update = FnMut<std::optional<QByteArray>(QByteArray&&)>;
+	using Update = FnMut<MessageArchiveRecordMutation(QByteArray&&)>;
 	struct Operation {
 		Type type = Type::Read;
 		Cache::Key key;
@@ -185,12 +185,13 @@ void MessageArchiveOperations::updateReadDone(QByteArray &&value) {
 		Assert(_current && _current->type == Type::Update);
 		update = std::move(_current->update);
 	}
-	auto updated = update(std::move(value));
-	if (!updated) {
+	auto mutation = update(std::move(value));
+	if (mutation.action == MessageArchiveRecordAction::None) {
 		writeDone(Cache::Error::NoError());
 		return;
-	} else if (updated->isEmpty()
-		|| updated->size() > kMessageArchiveMaxRecordSize) {
+	} else if (mutation.action == MessageArchiveRecordAction::Write
+		&& (mutation.value.isEmpty()
+			|| mutation.value.size() > kMessageArchiveMaxRecordSize)) {
 		writeDone(Cache::Error{
 			.type = Cache::Error::Type::IO,
 		});
@@ -203,12 +204,19 @@ void MessageArchiveOperations::updateReadDone(QByteArray &&value) {
 			return;
 		}
 		const auto self = shared_from_this();
-		_database->put(
-			_current->key,
-			std::move(*updated),
-			[self](Cache::Error error) {
+		if (mutation.action == MessageArchiveRecordAction::Write) {
+			_database->put(
+				_current->key,
+				std::move(mutation.value),
+				[self](Cache::Error error) {
+					self->writeDone(std::move(error));
+				});
+		} else {
+			Assert(mutation.action == MessageArchiveRecordAction::Remove);
+			_database->remove(_current->key, [self](Cache::Error error) {
 				self->writeDone(std::move(error));
 			});
+		}
 	}
 }
 
@@ -2222,11 +2230,31 @@ void Account::updateMessageArchiveRecord(
 		Cache::Key key,
 		FnMut<std::optional<QByteArray>(QByteArray&&)> update,
 		FnMut<void(Cache::Error)> done) {
+	mutateMessageArchiveRecord(
+		database,
+		key,
+		[update = std::move(update)](QByteArray &&value) mutable {
+			auto updated = update(std::move(value));
+			return updated
+				? MessageArchiveRecordMutation{
+					.value = std::move(*updated),
+					.action = MessageArchiveRecordAction::Write,
+				}
+				: MessageArchiveRecordMutation();
+		},
+		std::move(done));
+}
+
+void Account::mutateMessageArchiveRecord(
+		Cache::Database &database,
+		Cache::Key key,
+		FnMut<MessageArchiveRecordMutation(QByteArray&&)> mutate,
+		FnMut<void(Cache::Error)> done) {
 	messageArchiveOperations().push(database, {
 		.type = MessageArchiveOperations::Type::Update,
 		.key = key,
 		.writeDone = std::move(done),
-		.update = std::move(update),
+		.update = std::move(mutate),
 	});
 }
 

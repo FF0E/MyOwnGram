@@ -6,6 +6,7 @@
 //
 #include "myowngram/message_archive.h"
 
+#include "base/flat_map.h"
 #include "lang/lang_keys.h"
 #include "myowngram/message_archive_deletion.h"
 #include "myowngram/message_archive_engagement.h"
@@ -36,6 +37,54 @@ struct MessageArchive::IndexState {
 // while the queued operation itself survives MessageArchive destruction.
 struct MessageArchive::OpenAttempt {
 	Storage::Cache::Error error;
+};
+
+// A page is a predecessor walk through prefix bitmaps. Choosing an earlier
+// byte fills the remaining suffix with 0xFF; an empty descendant backtracks
+// to the nearest earlier parent byte. Index nodes are cached for the page,
+// while absent timelines are skipped as crash-safe dangling entries.
+struct MessageArchive::PageState final
+	: public std::enable_shared_from_this<PageState> {
+	PageState(
+		base::weak_ptr<MessageArchive> archive,
+		PeerId peer,
+		MsgId before,
+		int limit,
+		TimelinePageDone done);
+
+	void start();
+
+private:
+	void descend();
+	void applyNode(
+		const QByteArray &serialized,
+		const MessageArchiveStorage::MessagePositionEntry &entry);
+	void backtrack();
+	void readTimeline();
+	void setTargetAt(int level, uint8 bit);
+	void finish(Storage::Cache::Error error, bool exhausted);
+
+	base::weak_ptr<MessageArchive> _archive;
+	PeerId _peer = 0;
+	uint64 _target = 0;
+	int _level = 0;
+	int _limit = 0;
+	TimelinePageDone _done;
+	TimelinePage _result;
+	base::flat_map<Storage::Cache::Key, QByteArray> _nodes;
+
+};
+
+struct MessageArchive::RemovalState {
+	[[nodiscard]] bool failed() const {
+		return invalid || error.type != Storage::Cache::Error::Type::None;
+	}
+
+	base::weak_ptr<MessageArchive> archive;
+	WriteDone done;
+	Storage::Cache::Error error;
+	bool invalid = false;
+	bool stop = false;
 };
 
 namespace {
@@ -217,6 +266,162 @@ void ValidateDeletedTimelineUpdates() {
 
 } // namespace
 
+MessageArchive::PageState::PageState(
+		base::weak_ptr<MessageArchive> archive,
+		PeerId peer,
+		MsgId before,
+		int limit,
+		TimelinePageDone done)
+: _archive(archive)
+, _peer(peer)
+, _target(uint64(before.bare - 1))
+, _limit(limit)
+, _done(std::move(done)) {
+	_result.records.reserve(limit);
+}
+
+void MessageArchive::PageState::start() {
+	if (_target) {
+		descend();
+	} else {
+		finish(Storage::Cache::Error::NoError(), true);
+	}
+}
+
+void MessageArchive::PageState::descend() {
+	Expects(_target != 0);
+	Expects(_level >= 0
+		&& _level < MessageArchiveStorage::kMessagePositionLevels);
+
+	const auto path = MessageArchiveStorage::MessagePositionPath(FullMsgId(
+		_peer,
+		MsgId(int64(_target))));
+	const auto entry = path[_level];
+	const auto i = _nodes.find(entry.key);
+	if (i != _nodes.end()) {
+		applyNode(i->second, entry);
+		return;
+	}
+	if (const auto archive = _archive.get()) {
+		archive->readRecord(
+			entry.key,
+			[self = shared_from_this(), entry](ReadResult result) mutable {
+				if (result.error.type
+						!= Storage::Cache::Error::Type::None) {
+					self->finish(std::move(result.error), false);
+					return;
+				}
+				const auto i = self->_nodes.emplace(
+					entry.key,
+					std::move(result.value)).first;
+				self->applyNode(i->second, entry);
+			});
+	}
+}
+
+void MessageArchive::PageState::applyNode(
+		const QByteArray &serialized,
+		const MessageArchiveStorage::MessagePositionEntry &entry) {
+	const auto found = MessageArchiveStorage::FindMessagePosition(
+		serialized,
+		entry.bit);
+	if (!found) {
+		LOG(("Message Archive Error: Could not parse position index."));
+		finish(Storage::Cache::Error{
+			.type = Storage::Cache::Error::Type::IO,
+		}, false);
+		return;
+	} else if (!found.found) {
+		backtrack();
+		return;
+	}
+	if (found.bit != entry.bit) {
+		setTargetAt(_level, found.bit);
+	}
+	if (++_level
+			== MessageArchiveStorage::kMessagePositionLevels) {
+		readTimeline();
+	} else {
+		descend();
+	}
+}
+
+void MessageArchive::PageState::backtrack() {
+	while (_level > 0) {
+		const auto level = --_level;
+		const auto shift = (MessageArchiveStorage::kMessagePositionLevels
+			- level - 1) * 8;
+		const auto bit = uint8(_target >> shift);
+		if (bit) {
+			setTargetAt(level, uint8(bit - 1));
+			descend();
+			return;
+		}
+	}
+	finish(Storage::Cache::Error::NoError(), true);
+}
+
+void MessageArchive::PageState::readTimeline() {
+	if (!_target) {
+		finish(Storage::Cache::Error::NoError(), true);
+		return;
+	}
+	const auto id = FullMsgId(_peer, MsgId(int64(_target)));
+	if (const auto archive = _archive.get()) {
+		archive->readRecord(
+			MessageArchiveStorage::MessageTimelineKey(id),
+			[self = shared_from_this(), id](ReadResult result) mutable {
+				if (result.error.type
+						!= Storage::Cache::Error::Type::None) {
+					self->finish(std::move(result.error), false);
+					return;
+				}
+				self->_target = uint64(id.msg.bare - 1);
+				if (!result.value.isEmpty()) {
+					self->_result.records.push_back({
+						.id = id,
+						.value = std::move(result.value),
+					});
+				}
+				if (!self->_target) {
+					self->finish(Storage::Cache::Error::NoError(), true);
+				} else if (int(self->_result.records.size())
+						>= self->_limit) {
+					self->finish(Storage::Cache::Error::NoError(), false);
+				} else {
+					self->_level = 0;
+					self->descend();
+				}
+			});
+	}
+}
+
+void MessageArchive::PageState::setTargetAt(int level, uint8 bit) {
+	const auto shift = (MessageArchiveStorage::kMessagePositionLevels
+		- level - 1) * 8;
+	Expects(bit < uint8(_target >> shift));
+	const auto lower = shift ? ((uint64(1) << shift) - 1) : 0;
+	const auto through = shift + 8;
+	const auto upper = ~((uint64(1) << through) - 1);
+	_target = (_target & upper) | (uint64(bit) << shift) | lower;
+}
+
+void MessageArchive::PageState::finish(
+		Storage::Cache::Error error,
+		bool exhausted) {
+	if (!_done) {
+		return;
+	}
+	_result.error = std::move(error);
+	_result.exhausted = exhausted;
+	if (!exhausted
+		&& _result.error.type == Storage::Cache::Error::Type::None) {
+		_result.nextBefore = MsgId(int64(_target + 1));
+	}
+	auto done = base::take(_done);
+	done(std::move(_result));
+}
+
 MessageArchive::MessageArchive(not_null<Storage::Account*> account)
 : _account(account) {
 #ifdef _DEBUG
@@ -355,6 +560,134 @@ void MessageArchive::removeRecord(
 					done(std::move(error));
 				});
 		});
+}
+
+void MessageArchive::readTimelinePage(
+		PeerId peer,
+		MsgId before,
+		int limit,
+		TimelinePageDone done) {
+	Expects(peer != 0);
+	Expects(before > MsgId() && before <= ServerMaxMsgId);
+	Expects(limit > 0);
+	Expects(done != nullptr);
+
+	const auto weak = base::make_weak(this);
+	const auto state = std::make_shared<PageState>(
+		weak,
+		peer,
+		before,
+		limit,
+		std::move(done));
+	crl::on_main(weak, [state] {
+		state->start();
+	});
+}
+
+void MessageArchive::removeMessage(FullMsgId id, WriteDone done) {
+	Expects(id.peer != 0);
+	Expects(IsServerMsgId(id.msg));
+	Expects(done != nullptr);
+
+	const auto weak = base::make_weak(this);
+	if (_state == State::Closed && !_account->messageArchiveExists()) {
+		crl::on_main(
+			weak,
+			[done = std::move(done)]() mutable {
+				done(Storage::Cache::Error::NoError());
+			});
+		return;
+	}
+	auto &database = databaseForOperation();
+	const auto attempt = _openAttempt;
+	const auto state = std::make_shared<RemovalState>();
+	state->archive = weak;
+	state->done = std::move(done);
+	// The timeline is removed before leaf-to-root index pruning. A crash can
+	// leave a dangling bit for readers to skip, but cannot leave an unreachable
+	// timeline. Each node mutation atomically writes or removes its record, so
+	// a later insertion on the account FIFO cannot be erased by stale cleanup.
+	_account->removeMessageArchiveRecord(
+		database,
+		MessageArchiveStorage::MessageTimelineKey(id),
+		[attempt, state](Storage::Cache::Error error) mutable {
+			if (attempt
+				&& attempt->error.type
+					!= Storage::Cache::Error::Type::None) {
+				error = attempt->error;
+			}
+			if (error.type != Storage::Cache::Error::Type::None) {
+				state->error = std::move(error);
+			}
+		});
+	const auto path = MessageArchiveStorage::MessagePositionPath(id);
+	for (auto level = path.size(); level != 0; --level) {
+		const auto entry = path[level - 1];
+		const auto last = (level == 1);
+		_account->mutateMessageArchiveRecord(
+			database,
+			entry.key,
+			[attempt, state, entry](QByteArray &&serialized) {
+				using Action = Storage::MessageArchiveRecordAction;
+				using Mutation = Storage::MessageArchiveRecordMutation;
+				if ((attempt
+						&& attempt->error.type
+							!= Storage::Cache::Error::Type::None)
+					|| state->failed()
+					|| state->stop) {
+					return Mutation();
+				}
+				auto updated = MessageArchiveStorage::RemoveMessagePosition(
+					serialized,
+					entry);
+				if (updated.result == MessagePositionUpdateResult::Invalid) {
+					state->invalid = true;
+					return Mutation();
+				} else if (updated.empty) {
+					return Mutation{ .action = Action::Remove };
+				}
+				state->stop = true;
+				return (updated.result
+						== MessagePositionUpdateResult::Updated)
+					? Mutation{
+						.value = std::move(updated.value),
+						.action = Action::Write,
+					}
+					: Mutation();
+			},
+			[attempt, state, last](Storage::Cache::Error error) mutable {
+				if (attempt
+					&& attempt->error.type
+						!= Storage::Cache::Error::Type::None) {
+					error = attempt->error;
+				}
+				if (error.type != Storage::Cache::Error::Type::None
+					&& state->error.type
+						== Storage::Cache::Error::Type::None) {
+					state->error = std::move(error);
+				}
+				if (!last) {
+					return;
+				}
+				if (state->invalid
+					&& state->error.type
+						== Storage::Cache::Error::Type::None) {
+					state->error = Storage::Cache::Error{
+						.type = Storage::Cache::Error::Type::IO,
+					};
+				}
+				if (state->error.type
+						!= Storage::Cache::Error::Type::None) {
+					LOG(("Message Archive Error: Could not remove message."));
+				}
+				crl::on_main(
+					state->archive,
+					[state]() mutable {
+						auto done = base::take(state->done);
+						done(std::move(state->error));
+					});
+			});
+	}
 }
 
 void MessageArchive::observeEdit(

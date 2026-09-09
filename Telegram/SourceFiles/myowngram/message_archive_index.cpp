@@ -9,6 +9,7 @@
 #include "data/data_msg_id.h"
 #include "data/data_peer_id.h"
 
+#include <algorithm>
 #include <array>
 #include <optional>
 #include <utility>
@@ -26,27 +27,32 @@ static_assert(uint8(RecordType::MessagePositionIndex) == 12);
 
 struct ParsedMessagePositionBits {
 	QByteArray value;
-	bool valid = false;
+	ParseError error = ParseError::Corrupt;
+
+	explicit operator bool() const {
+		return error == ParseError::None;
+	}
 };
 
 ParsedMessagePositionBits ParseMessagePositionBits(
 		const QByteArray &serialized) {
 	if (serialized.isEmpty()) {
-		return { .valid = true };
+		return { .error = ParseError::None };
 	}
 	auto record = ParseRecord(
 		serialized,
 		RecordType::MessagePositionIndex,
 		kMessagePositionIndexVersion);
 	const auto byteLimit = (kMessagePositionNodeBits + 7) / 8;
-	if (!record
-		|| record.payload.size() > byteLimit
+	if (!record) {
+		return { .error = record.error };
+	} else if (record.payload.size() > byteLimit
 		|| (!record.payload.isEmpty() && record.payload.back() == 0)) {
 		return {};
 	}
 	return {
 		.value = std::move(record.payload),
-		.valid = true,
+		.error = ParseError::None,
 	};
 }
 
@@ -57,14 +63,10 @@ std::optional<bool> MessagePositionContains(
 	if (!entry.key.valid()) {
 		return std::nullopt;
 	}
-	const auto parsed = ParseMessagePositionBits(serialized);
-	if (!parsed.valid) {
-		return std::nullopt;
-	}
-	const auto byte = int(entry.bit / 8);
-	const auto mask = uint8(1U << (entry.bit % 8));
-	return byte < parsed.value.size()
-		&& (uint8(parsed.value[byte]) & mask);
+	const auto found = FindMessagePosition(serialized, entry.bit);
+	return found
+		? std::make_optional(found.found && found.bit == entry.bit)
+		: std::nullopt;
 }
 
 void CheckMessagePositionIndexFormat() {
@@ -72,7 +74,7 @@ void CheckMessagePositionIndexFormat() {
 		peerFromUser(UserId(123)),
 		MsgId(int64(0x00AB'CDEF'1234'5678ULL)));
 	const auto path = MessagePositionPath(id);
-	constexpr auto bits = std::array<uint8, 7>{
+	constexpr auto bits = std::array<uint8, kMessagePositionLevels>{
 		0xAB,
 		0xCD,
 		0xEF,
@@ -112,6 +114,9 @@ void CheckMessagePositionIndexFormat() {
 		Assert(duplicate.result == MessagePositionUpdateResult::Unchanged);
 	}
 
+	const auto empty = FindMessagePosition({}, 0xFF);
+	Assert(empty && !empty.found);
+
 	const auto first = path.back();
 	auto second = first;
 	second.bit = uint8(first.bit + 1);
@@ -127,6 +132,34 @@ void CheckMessagePositionIndexFormat() {
 		second);
 	Assert(firstPresent && *firstPresent);
 	Assert(secondPresent && *secondPresent);
+	const auto foundSecond = FindMessagePosition(secondAdded.value, 0xFF);
+	Assert(foundSecond && foundSecond.found && foundSecond.bit == second.bit);
+	const auto foundFirst = FindMessagePosition(secondAdded.value, first.bit);
+	Assert(foundFirst && foundFirst.found && foundFirst.bit == first.bit);
+	const auto beforeFirst = FindMessagePosition(
+		secondAdded.value,
+		uint8(first.bit - 1));
+	Assert(beforeFirst && !beforeFirst.found);
+
+	const auto firstRemoved = RemoveMessagePosition(secondAdded.value, first);
+	Assert(firstRemoved.result == MessagePositionUpdateResult::Updated);
+	Assert(!firstRemoved.empty);
+	const auto firstAfterRemoval = MessagePositionContains(
+		firstRemoved.value,
+		first);
+	const auto secondAfterRemoval = MessagePositionContains(
+		firstRemoved.value,
+		second);
+	Assert(firstAfterRemoval && !*firstAfterRemoval);
+	Assert(secondAfterRemoval && *secondAfterRemoval);
+	const auto secondRemoved = RemoveMessagePosition(
+		firstRemoved.value,
+		second);
+	Assert(secondRemoved.result == MessagePositionUpdateResult::Updated);
+	Assert(secondRemoved.empty && secondRemoved.value.isEmpty());
+	const auto missingRemoved = RemoveMessagePosition({}, first);
+	Assert(missingRemoved.result == MessagePositionUpdateResult::Unchanged);
+	Assert(missingRemoved.empty);
 
 	auto highest = path.back();
 	highest.bit = 0xFF;
@@ -146,6 +179,8 @@ void CheckMessagePositionIndexFormat() {
 
 	Assert(AddMessagePosition({}, MessagePositionEntry()).result
 		== MessagePositionUpdateResult::Invalid);
+	Assert(RemoveMessagePosition({}, MessagePositionEntry()).result
+		== MessagePositionUpdateResult::Invalid);
 
 	const auto trailingZero = SerializeRecord(
 		RecordType::MessagePositionIndex,
@@ -153,6 +188,9 @@ void CheckMessagePositionIndexFormat() {
 		QByteArray(1, 0));
 	Assert(trailingZero.has_value());
 	Assert(!MessagePositionContains(*trailingZero, path.front()));
+	Assert(!FindMessagePosition(*trailingZero, 0xFF));
+	Assert(RemoveMessagePosition(*trailingZero, path.front()).result
+		== MessagePositionUpdateResult::Invalid);
 
 	const auto oversized = SerializeRecord(
 		RecordType::MessagePositionIndex,
@@ -167,6 +205,8 @@ void CheckMessagePositionIndexFormat() {
 		QByteArray(1, 1));
 	Assert(future.has_value());
 	Assert(!MessagePositionContains(*future, path.front()));
+	Assert(FindMessagePosition(*future, 0xFF).error
+		== ParseError::UnsupportedVersion);
 
 	const auto wrongType = SerializeRecord(
 		RecordType::MessageTimeline,
@@ -174,10 +214,39 @@ void CheckMessagePositionIndexFormat() {
 		QByteArray(1, 1));
 	Assert(wrongType.has_value());
 	Assert(!MessagePositionContains(*wrongType, path.front()));
+	Assert(FindMessagePosition(*wrongType, 0xFF).error
+		== ParseError::WrongType);
 }
 #endif // _DEBUG
 
 } // namespace
+
+MessagePositionLookup FindMessagePosition(
+		const QByteArray &serialized,
+		uint8 till) {
+	const auto parsed = ParseMessagePositionBits(serialized);
+	if (!parsed) {
+		return { .error = parsed.error };
+	}
+	for (auto byte = std::min(till / 8, int(parsed.value.size()) - 1);
+			byte >= 0;
+			--byte) {
+		auto value = uint8(parsed.value[byte]);
+		if (byte == (till / 8)) {
+			value &= uint8((uint16(1) << ((till % 8) + 1)) - 1);
+		}
+		for (auto bit = 7; bit >= 0; --bit) {
+			if (value & (1U << bit)) {
+				return {
+					.error = ParseError::None,
+					.bit = uint8((byte * 8) + bit),
+					.found = true,
+				};
+			}
+		}
+	}
+	return { .error = ParseError::None };
+}
 
 MessagePositionUpdate AddMessagePosition(
 		const QByteArray &serialized,
@@ -186,7 +255,7 @@ MessagePositionUpdate AddMessagePosition(
 		return {};
 	}
 	auto parsed = ParseMessagePositionBits(serialized);
-	if (!parsed.valid) {
+	if (!parsed) {
 		return {};
 	}
 	const auto byte = int(entry.bit / 8);
@@ -201,6 +270,47 @@ MessagePositionUpdate AddMessagePosition(
 		parsed.value.append(QByteArray(byte + 1 - parsed.value.size(), 0));
 	}
 	parsed.value[byte] = char(uint8(parsed.value[byte]) | mask);
+	auto result = SerializeRecord(
+		RecordType::MessagePositionIndex,
+		kMessagePositionIndexVersion,
+		parsed.value);
+	return result
+		? MessagePositionUpdate{
+			.value = std::move(*result),
+			.result = MessagePositionUpdateResult::Updated,
+		}
+		: MessagePositionUpdate();
+}
+
+MessagePositionUpdate RemoveMessagePosition(
+		const QByteArray &serialized,
+		const MessagePositionEntry &entry) {
+	if (!entry.key.valid()) {
+		return {};
+	}
+	auto parsed = ParseMessagePositionBits(serialized);
+	if (!parsed) {
+		return {};
+	}
+	const auto byte = int(entry.bit / 8);
+	const auto mask = uint8(1U << (entry.bit % 8));
+	if (byte >= parsed.value.size()
+		|| !(uint8(parsed.value[byte]) & mask)) {
+		return {
+			.result = MessagePositionUpdateResult::Unchanged,
+			.empty = parsed.value.isEmpty(),
+		};
+	}
+	parsed.value[byte] = char(uint8(parsed.value[byte]) & ~mask);
+	while (!parsed.value.isEmpty() && parsed.value.back() == 0) {
+		parsed.value.chop(1);
+	}
+	if (parsed.value.isEmpty()) {
+		return {
+			.result = MessagePositionUpdateResult::Updated,
+			.empty = true,
+		};
+	}
 	auto result = SerializeRecord(
 		RecordType::MessagePositionIndex,
 		kMessagePositionIndexVersion,

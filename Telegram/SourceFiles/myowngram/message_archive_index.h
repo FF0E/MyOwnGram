@@ -16,12 +16,29 @@ enum class MessagePositionUpdateResult : uint8 {
 	Updated,
 };
 
+struct MessagePositionLookup {
+	ParseError error = ParseError::Corrupt;
+	uint8 bit = 0;
+	bool found = false;
+
+	explicit operator bool() const {
+		return error == ParseError::None;
+	}
+};
+
 struct MessagePositionUpdate {
 	QByteArray value;
 	MessagePositionUpdateResult result = MessagePositionUpdateResult::Invalid;
+	bool empty = false;
 };
 
+[[nodiscard]] MessagePositionLookup FindMessagePosition(
+	const QByteArray &serialized,
+	uint8 till);
 [[nodiscard]] MessagePositionUpdate AddMessagePosition(
+	const QByteArray &serialized,
+	const MessagePositionEntry &entry);
+[[nodiscard]] MessagePositionUpdate RemoveMessagePosition(
 	const QByteArray &serialized,
 	const MessagePositionEntry &entry);
 

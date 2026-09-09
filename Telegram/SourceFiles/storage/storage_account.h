@@ -53,6 +53,17 @@ using FileKey = quint64;
 
 constexpr auto kMessageArchiveMaxRecordSize = 1024 * 1024;
 
+enum class MessageArchiveRecordAction : uchar {
+	None,
+	Write,
+	Remove,
+};
+
+struct MessageArchiveRecordMutation {
+	QByteArray value;
+	MessageArchiveRecordAction action = MessageArchiveRecordAction::None;
+};
+
 enum class StartResult : uchar;
 
 [[nodiscard]] QString AccountStorageDataName(
@@ -150,6 +161,11 @@ public:
 		Cache::Database &database,
 		Cache::Key key,
 		FnMut<std::optional<QByteArray>(QByteArray&&)> update,
+		FnMut<void(Cache::Error)> done = nullptr);
+	void mutateMessageArchiveRecord(
+		Cache::Database &database,
+		Cache::Key key,
+		FnMut<MessageArchiveRecordMutation(QByteArray&&)> mutate,
 		FnMut<void(Cache::Error)> done = nullptr);
 
 	void writeInstalledStickers();

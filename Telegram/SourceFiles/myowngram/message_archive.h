@@ -7,11 +7,11 @@
 #pragma once
 
 #include "base/weak_ptr.h"
+#include "data/data_msg_id.h"
 #include "storage/cache/storage_cache_database.h"
 
 #include <memory>
-
-struct FullMsgId;
+#include <vector>
 
 namespace Storage {
 class Account;
@@ -30,7 +30,20 @@ public:
 		Storage::Cache::Error error;
 	};
 
+	struct TimelineRecord {
+		FullMsgId id;
+		QByteArray value;
+	};
+
+	struct TimelinePage {
+		std::vector<TimelineRecord> records;
+		MsgId nextBefore;
+		Storage::Cache::Error error;
+		bool exhausted = false;
+	};
+
 	using ReadDone = FnMut<void(ReadResult)>;
+	using TimelinePageDone = FnMut<void(TimelinePage)>;
 	using WriteDone = FnMut<void(Storage::Cache::Error)>;
 
 	explicit MessageArchive(not_null<Storage::Account*> account);
@@ -42,6 +55,12 @@ public:
 		QByteArray value,
 		WriteDone done);
 	void removeRecord(Storage::Cache::Key key, WriteDone done);
+	void readTimelinePage(
+		PeerId peer,
+		MsgId before,
+		int limit,
+		TimelinePageDone done);
+	void removeMessage(FullMsgId id, WriteDone done);
 	void observeEdit(
 		FullMsgId id,
 		MessageArchiveStorage::MessageSnapshot before,
@@ -53,6 +72,8 @@ public:
 private:
 	struct IndexState;
 	struct OpenAttempt;
+	struct PageState;
+	struct RemovalState;
 
 	enum class State {
 		Closed,

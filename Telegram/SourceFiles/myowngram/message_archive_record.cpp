@@ -35,15 +35,15 @@ constexpr Storage::Cache::Key MakeKey(
 }
 
 constexpr auto kMessagePositionSegmentBits = 8;
-constexpr auto kMessagePositionLevels
-	= kKeyPartBits / kMessagePositionSegmentBits;
 constexpr auto kMessagePositionPrefixBits
 	= kKeyPartBits - kMessagePositionSegmentBits;
-static_assert(kMessagePositionLevels == 7);
+static_assert(
+	kKeyPartBits / kMessagePositionSegmentBits == kMessagePositionLevels);
 
-std::array<MessagePositionEntry, 7> MakeMessagePositionPath(
+auto MakeMessagePositionPath(
 		uint64 peer,
-		uint64 position) {
+		uint64 position)
+-> std::array<MessagePositionEntry, kMessagePositionLevels> {
 	auto result = std::array<
 		MessagePositionEntry,
 		kMessagePositionLevels>();
@@ -87,7 +87,8 @@ Storage::Cache::Key MessageTimelineKey(FullMsgId id) {
 	return MakeKey(RecordType::MessageTimeline, peer, position);
 }
 
-std::array<MessagePositionEntry, 7> MessagePositionPath(FullMsgId id) {
+auto MessagePositionPath(FullMsgId id)
+-> std::array<MessagePositionEntry, kMessagePositionLevels> {
 	Expects(id.peer);
 	Expects(IsServerMsgId(id.msg));
 

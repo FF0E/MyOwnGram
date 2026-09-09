@@ -51,14 +51,16 @@ struct ParsedRecord {
 	}
 };
 
+constexpr auto kMessagePositionLevels = 7;
+
 struct MessagePositionEntry {
 	Storage::Cache::Key key;
 	uint8 bit = 0;
 };
 
 [[nodiscard]] Storage::Cache::Key MessageTimelineKey(FullMsgId id);
-[[nodiscard]] std::array<MessagePositionEntry, 7> MessagePositionPath(
-	FullMsgId id);
+[[nodiscard]] auto MessagePositionPath(FullMsgId id)
+-> std::array<MessagePositionEntry, kMessagePositionLevels>;
 [[nodiscard]] std::optional<QByteArray> SerializeRecord(
 	RecordType type,
 	uint16 version,
