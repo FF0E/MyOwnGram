@@ -46,6 +46,9 @@ public:
 		FullMsgId id,
 		MessageArchiveStorage::MessageSnapshot before,
 		MessageArchiveStorage::MessageSnapshot after);
+	void observeDeletion(
+		FullMsgId id,
+		MessageArchiveStorage::MessageSnapshot snapshot);
 
 private:
 	struct OpenAttempt;

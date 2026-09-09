@@ -82,6 +82,34 @@ std::optional<QByteArray> ApplyEditedSnapshots(
 	return result;
 }
 
+std::optional<QByteArray> ApplyDeletedSnapshot(
+		QByteArray serialized,
+		MessageSnapshot snapshot) {
+	auto timeline = MessageTimeline();
+	if (!serialized.isEmpty()) {
+		auto parsed = MessageArchiveStorage::ParseMessageTimeline(serialized);
+		if (!parsed) {
+			LOG(("Message Archive Error: Could not parse deleted timeline."));
+			return std::nullopt;
+		}
+		timeline = std::move(parsed.value);
+	}
+	const auto wasDeleted = (timeline.flags.value()
+		& uint8(MessageArchiveStorage::MessageTimelineFlag::Deleted)) != 0;
+	const auto observed = MessageArchiveStorage::ObserveVersion(
+		timeline,
+		std::move(snapshot));
+	timeline.flags |= MessageArchiveStorage::MessageTimelineFlag::Deleted;
+	if (wasDeleted && observed == ObserveResult::Unchanged) {
+		return std::nullopt;
+	}
+	auto result = MessageArchiveStorage::SerializeMessageTimeline(timeline);
+	if (!result) {
+		LOG(("Message Archive Error: Could not serialize deleted timeline."));
+	}
+	return result;
+}
+
 #ifdef _DEBUG
 void ValidateEditedTimelineUpdates() {
 	static auto checked = false;
@@ -123,6 +151,57 @@ void ValidateEditedTimelineUpdates() {
 	Assert(!ApplyEditedSnapshots({}, third, refreshed));
 	Assert(!ApplyEditedSnapshots(firstEdit, third, refreshed));
 }
+
+void ValidateDeletedTimelineUpdates() {
+	static auto checked = false;
+	if (checked) {
+		return;
+	}
+	checked = true;
+
+	auto snapshot = MessageSnapshot{
+		.versionDate = 1,
+		.text = tr::marked(u"current"_q),
+		.support = "support-1",
+	};
+	const auto created = ApplyDeletedSnapshot({}, snapshot);
+	Assert(created.has_value());
+	const auto createdTimeline = MessageArchiveStorage::ParseMessageTimeline(
+		*created);
+	Assert(createdTimeline && createdTimeline.value.versions.size() == 1);
+	Assert(createdTimeline.value.flags
+		& MessageArchiveStorage::MessageTimelineFlag::Deleted);
+
+	auto live = MessageTimeline();
+	live.versions.push_back(snapshot);
+	const auto liveSerialized = MessageArchiveStorage::SerializeMessageTimeline(
+		live);
+	Assert(liveSerialized.has_value());
+	auto serialized = ApplyDeletedSnapshot(*liveSerialized, snapshot);
+	Assert(serialized.has_value());
+	auto parsed = MessageArchiveStorage::ParseMessageTimeline(*serialized);
+	Assert(parsed);
+	Assert(parsed.value.flags
+		& MessageArchiveStorage::MessageTimelineFlag::Deleted);
+	Assert(parsed.value.versions.size() == 1);
+	Assert(!ApplyDeletedSnapshot(*serialized, snapshot));
+
+	auto refreshed = snapshot;
+	refreshed.support = "support-2";
+	serialized = ApplyDeletedSnapshot(*serialized, refreshed);
+	Assert(serialized.has_value());
+	parsed = MessageArchiveStorage::ParseMessageTimeline(*serialized);
+	Assert(parsed && parsed.value.versions.size() == 1);
+	Assert(parsed.value.versions.back().support == refreshed.support);
+
+	auto changed = refreshed;
+	changed.versionDate = 2;
+	changed.text = tr::marked(u"changed"_q);
+	serialized = ApplyDeletedSnapshot(*serialized, changed);
+	Assert(serialized.has_value());
+	parsed = MessageArchiveStorage::ParseMessageTimeline(*serialized);
+	Assert(parsed && parsed.value.versions.size() == 2);
+}
 #endif // _DEBUG
 
 } // namespace
@@ -138,6 +217,7 @@ MessageArchive::MessageArchive(not_null<Storage::Account*> account)
 	MessageArchiveStorage::ValidateDocumentMediaFormat();
 	MessageArchiveStorage::ValidateMessageSnapshotFormat();
 	ValidateEditedTimelineUpdates();
+	ValidateDeletedTimelineUpdates();
 #endif // _DEBUG
 }
 
@@ -307,6 +387,39 @@ void MessageArchive::observeEdit(
 			}
 			if (error.type != Storage::Cache::Error::Type::None) {
 				LOG(("Message Archive Error: Could not store edited timeline."));
+			}
+		});
+}
+
+void MessageArchive::observeDeletion(
+		FullMsgId id,
+		MessageSnapshot snapshot) {
+	auto &database = databaseForOperation();
+	const auto attempt = _openAttempt;
+	_account->updateMessageArchiveRecord(
+		database,
+		MessageArchiveStorage::MessageTimelineKey(id),
+		[
+			attempt,
+			snapshot = std::move(snapshot)
+		](QByteArray &&serialized) mutable {
+			if (attempt
+				&& attempt->error.type
+					!= Storage::Cache::Error::Type::None) {
+				return std::optional<QByteArray>();
+			}
+			return ApplyDeletedSnapshot(
+				std::move(serialized),
+				std::move(snapshot));
+		},
+		[attempt](Storage::Cache::Error error) mutable {
+			if (attempt
+				&& attempt->error.type
+					!= Storage::Cache::Error::Type::None) {
+				error = attempt->error;
+			}
+			if (error.type != Storage::Cache::Error::Type::None) {
+				LOG(("Message Archive Error: Could not store deleted timeline."));
 			}
 		});
 }
