@@ -32,6 +32,7 @@ struct MessageSnapshotSupport {
 	QByteArray media;
 	QByteArray replyMarkup;
 	QByteArray deletion;
+	QByteArray engagement;
 
 	friend inline bool operator==(
 		const MessageSnapshotSupport &,

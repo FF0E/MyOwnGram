@@ -6,10 +6,10 @@
 //
 #include "myowngram/message_archive_deletion.h"
 
-#include "data/data_message_reactions.h"
 #include "data/data_peer.h"
 #include "history/history_item.h"
 #include "history/history_item_components.h"
+#include "myowngram/message_archive_peer.h"
 
 #include <QtCore/QDataStream>
 
@@ -32,22 +32,8 @@ ParsedDeletedMessageContext ParseFailure(ParseError error) {
 	return { .error = error };
 }
 
-bool GoodPeerId(PeerId id) {
-	const auto bare = id.value & PeerId::kChatTypeMask;
-	if (!bare) {
-		return false;
-	}
-	switch (id.value >> 48) {
-	case UserId::kShift:
-	case ChatId::kShift:
-	case ChannelId::kShift:
-		return true;
-	}
-	return false;
-}
-
 bool GoodContext(const DeletedMessageContext &context) {
-	return GoodPeerId(context.from)
+	return IsValidArchivePeerId(context.from)
 		&& context.date > 0
 		&& (!context.authorHidden || context.post);
 }
@@ -63,7 +49,6 @@ bool HasUnsupportedContext(not_null<const HistoryItem*> item) {
 	return item->out()
 		|| item->Get<HistoryMessageReply>()
 		|| item->Get<HistoryMessageForwarded>()
-		|| item->Get<HistoryMessageViews>()
 		|| item->Get<HistoryMessageMediaForInstantView>()
 		|| item->Get<HistoryMessageSigned>()
 		|| item->Get<HistoryMessageGuestChat>()
@@ -76,11 +61,7 @@ bool HasUnsupportedContext(not_null<const HistoryItem*> item) {
 		|| item->starsPaid()
 		|| item->hasUnpaidContent()
 		|| item->hasPossibleRestrictions()
-		|| item->textAppearing()
-		|| item->hasUnreadReaction()
-		|| !item->reactions().empty()
-		|| !item->recentReactions().empty()
-		|| item->reactionsPaidScheduled();
+		|| item->textAppearing();
 }
 
 #ifdef _DEBUG
@@ -156,7 +137,8 @@ void CheckDeletedMessageContextFormat() {
 
 std::optional<QByteArray> SerializeDeletedMessageContext(
 		const DeletedMessageContext &context) {
-	if (!GoodContext(context)) {
+	const auto from = SerializeArchivePeerId(context.from);
+	if (!GoodContext(context) || !from) {
 		return std::nullopt;
 	}
 	auto payload = QByteArray();
@@ -164,7 +146,7 @@ std::optional<QByteArray> SerializeDeletedMessageContext(
 	stream.setVersion(QDataStream::Qt_5_1);
 	stream.setByteOrder(QDataStream::BigEndian);
 	stream
-		<< SerializePeerId(context.from)
+		<< quint64(*from)
 		<< qint64(context.date)
 		<< quint64(context.groupedId)
 		<< ContextFlags(context);
@@ -210,17 +192,16 @@ ParsedDeletedMessageContext ParseDeletedMessageContext(
 	auto groupedId = quint64();
 	auto flags = quint8();
 	stream >> from >> date >> groupedId >> flags;
-	const auto fromId = DeserializePeerId(from);
+	const auto fromId = DeserializeArchivePeerId(from);
 	if (stream.status() != QDataStream::Ok
 		|| (flags & ~kKnownFlags)
 		|| date <= 0
 		|| date > std::numeric_limits<TimeId>::max()
-		|| !GoodPeerId(fromId)
-		|| SerializePeerId(fromId) != from) {
+		|| !fromId) {
 		return ParseFailure(ParseError::Corrupt);
 	}
 	auto result = DeletedMessageContext{
-		.from = fromId,
+		.from = *fromId,
 		.date = TimeId(date),
 		.groupedId = groupedId,
 		.post = (flags & kFlagPost) != 0,

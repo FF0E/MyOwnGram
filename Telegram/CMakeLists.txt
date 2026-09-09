@@ -1581,10 +1581,13 @@ PRIVATE
     myowngram/message_archive.h
     myowngram/message_archive_deletion.cpp
     myowngram/message_archive_deletion.h
+    myowngram/message_archive_engagement.cpp
+    myowngram/message_archive_engagement.h
     myowngram/message_archive_markup.cpp
     myowngram/message_archive_markup.h
     myowngram/message_archive_media.cpp
     myowngram/message_archive_media.h
+    myowngram/message_archive_peer.h
     myowngram/message_archive_record.cpp
     myowngram/message_archive_record.h
     myowngram/message_archive_snapshot.cpp

@@ -8,6 +8,7 @@
 
 #include "lang/lang_keys.h"
 #include "myowngram/message_archive_deletion.h"
+#include "myowngram/message_archive_engagement.h"
 #include "myowngram/message_archive_markup.h"
 #include "myowngram/message_archive_media.h"
 #include "myowngram/message_archive_snapshot.h"
@@ -131,6 +132,7 @@ MessageArchive::MessageArchive(not_null<Storage::Account*> account)
 #ifdef _DEBUG
 	MessageArchiveStorage::ValidateMessageTimelineFormat();
 	MessageArchiveStorage::ValidateDeletedMessageContextFormat();
+	MessageArchiveStorage::ValidateDeletedMessageEngagementFormat();
 	MessageArchiveStorage::ValidateReplyMarkupFormat();
 	MessageArchiveStorage::ValidatePhotoMediaFormat();
 	MessageArchiveStorage::ValidateDocumentMediaFormat();
