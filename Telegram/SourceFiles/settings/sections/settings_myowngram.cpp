@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/core_settings.h"
 #include "lang/lang_keys.h"
 #include "myowngram/activity_reporting_settings.h"
+#include "myowngram/message_history_settings.h"
 #include "myowngram/mini_app_settings.h"
 #include "myowngram/sponsored_content_settings.h"
 #include "settings/sections/settings_main.h"
@@ -31,8 +32,11 @@ namespace {
 using namespace Builder;
 
 namespace ActivityReporting = ::MyOwnGram::ActivityReporting;
+namespace MessageHistory = ::MyOwnGram::MessageHistory;
 namespace MiniApps = ::MyOwnGram::MiniApps;
 namespace SponsoredContent = ::MyOwnGram::SponsoredContent;
+
+constexpr auto kMessageHistorySettingsExposed = false;
 
 class MyOwnGram final : public Section<MyOwnGram> {
 public:
@@ -90,6 +94,20 @@ class MyOwnGramSponsoredContent final
 	: public Section<MyOwnGramSponsoredContent> {
 public:
 	MyOwnGramSponsoredContent(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+private:
+	void setupContent();
+
+};
+
+class MyOwnGramMessageHistory final
+	: public Section<MyOwnGramMessageHistory> {
+public:
+	MyOwnGramMessageHistory(
 		QWidget *parent,
 		not_null<Window::SessionController*> controller);
 
@@ -710,6 +728,66 @@ void BuildDataSharingSection(SectionBuilder &builder) {
 		tr::lng_myowngram_send_gateway_delivery_reports_about());
 }
 
+void BuildMessageHistorySection(SectionBuilder &builder) {
+	if (!kMessageHistorySettingsExposed && !builder.container()) {
+		return;
+	}
+	builder.addSkip();
+	builder.addSubsectionTitle({
+		.id = u"myowngram/message_history/capture"_q,
+		.title = tr::lng_myowngram_message_history_capture(),
+		.keywords = { u"messages"_q, u"history"_q, u"edits"_q, u"deleted"_q },
+	});
+	AddMyOwnGramToggle(
+		builder,
+		u"myowngram/message_history/save_edits"_q,
+		tr::lng_myowngram_save_edit_history(),
+		[] {
+			return MessageHistory::CaptureEnabled(
+				MessageHistory::Capture::EditHistory);
+		},
+		[](bool enabled) {
+			MessageHistory::SetCaptureEnabled(
+				MessageHistory::Capture::EditHistory,
+				enabled);
+		},
+		{ u"messages"_q, u"history"_q, u"edits"_q, u"versions"_q });
+	AddMyOwnGramToggle(
+		builder,
+		u"myowngram/message_history/keep_deleted"_q,
+		tr::lng_myowngram_keep_deleted_messages(),
+		[] {
+			return MessageHistory::CaptureEnabled(
+				MessageHistory::Capture::DeletedMessages);
+		},
+		[](bool enabled) {
+			MessageHistory::SetCaptureEnabled(
+				MessageHistory::Capture::DeletedMessages,
+				enabled);
+		},
+		{ u"messages"_q, u"history"_q, u"deleted"_q, u"recall"_q });
+	AddMyOwnGramGroupFooter(
+		builder,
+		tr::lng_myowngram_message_history_capture_about());
+
+	builder.addSkip();
+	builder.addSubsectionTitle({
+		.id = u"myowngram/message_history/local_deletion"_q,
+		.title = tr::lng_myowngram_message_history_local_deletion(),
+		.keywords = { u"messages"_q, u"history"_q, u"delete"_q, u"remove"_q },
+	});
+	AddMyOwnGramToggle(
+		builder,
+		u"myowngram/message_history/remove_saved_on_delete"_q,
+		tr::lng_myowngram_remove_saved_history_on_delete(),
+		MessageHistory::RemoveSavedHistoryOnDelete,
+		MessageHistory::SetRemoveSavedHistoryOnDelete,
+		{ u"messages"_q, u"history"_q, u"delete"_q, u"remove"_q });
+	AddMyOwnGramGroupFooter(
+		builder,
+		tr::lng_myowngram_message_history_local_deletion_about());
+}
+
 void BuildMyOwnGramMenu(SectionBuilder &builder) {
 	builder.addSkip();
 	builder.addSectionButton({
@@ -730,6 +808,19 @@ void BuildMyOwnGramMenu(SectionBuilder &builder) {
 		.icon = { &st::menuIconEarn },
 		.keywords = { u"ads"_q, u"sponsored"_q, u"tracking"_q },
 	});
+	if (kMessageHistorySettingsExposed) {
+		builder.addSectionButton({
+			.title = tr::lng_myowngram_message_history(),
+			.targetSection = MyOwnGramMessageHistory::Id(),
+			.icon = { &st::menuIconArchive },
+			.keywords = {
+				u"messages"_q,
+				u"history"_q,
+				u"edits"_q,
+				u"deleted"_q,
+			},
+		});
+	}
 	builder.addSectionButton({
 		.title = tr::lng_myowngram_general(),
 		.targetSection = MyOwnGramGeneral::Id(),
@@ -775,6 +866,15 @@ const auto kSponsoredContentMeta = BuildHelper({
 	BuildSponsoredContentSection(builder);
 });
 
+const auto kMessageHistoryMeta = BuildHelper({
+	.id = MyOwnGramMessageHistory::Id(),
+	.parentId = kMessageHistorySettingsExposed ? MyOwnGram::Id() : nullptr,
+	.title = &tr::lng_myowngram_message_history,
+	.icon = &st::menuIconArchive,
+}, [](SectionBuilder &builder) {
+	BuildMessageHistorySection(builder);
+});
+
 const auto kMeta = BuildHelper({
 	.id = MyOwnGram::Id(),
 	.parentId = MainId(),
@@ -788,6 +888,7 @@ const SectionBuildMethod kGeneralSection = kGeneralMeta.build;
 const SectionBuildMethod kPrivacySection = kPrivacyMeta.build;
 const SectionBuildMethod kDataSharingSection = kDataSharingMeta.build;
 const SectionBuildMethod kSponsoredContentSection = kSponsoredContentMeta.build;
+const SectionBuildMethod kMessageHistorySection = kMessageHistoryMeta.build;
 const SectionBuildMethod kMyOwnGramSection = kMeta.build;
 
 MyOwnGram::MyOwnGram(
@@ -872,6 +973,23 @@ rpl::producer<QString> MyOwnGramSponsoredContent::title() {
 void MyOwnGramSponsoredContent::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
 	build(content, kSponsoredContentSection);
+	Ui::ResizeFitChild(this, content);
+}
+
+MyOwnGramMessageHistory::MyOwnGramMessageHistory(
+	QWidget *parent,
+	not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	setupContent();
+}
+
+rpl::producer<QString> MyOwnGramMessageHistory::title() {
+	return tr::lng_myowngram_message_history();
+}
+
+void MyOwnGramMessageHistory::setupContent() {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	build(content, kMessageHistorySection);
 	Ui::ResizeFitChild(this, content);
 }
 

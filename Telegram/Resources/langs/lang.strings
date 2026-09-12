@@ -8624,6 +8624,14 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_privacy" = "Privacy";
 "lng_myowngram_data_sharing" = "Data sharing";
 "lng_myowngram_sponsored_content" = "Sponsored content";
+"lng_myowngram_message_history" = "Message History";
+"lng_myowngram_message_history_capture" = "Saved message history";
+"lng_myowngram_save_edit_history" = "Save edit history";
+"lng_myowngram_keep_deleted_messages" = "Keep deleted messages";
+"lng_myowngram_message_history_capture_about" = "Save supported incoming message versions on this device. These settings apply to every account, while saved history is encrypted and stored separately for each account. Media uses Telegram's normal cache and local file references; enabling history does not download or copy files.";
+"lng_myowngram_message_history_local_deletion" = "When I delete messages";
+"lng_myowngram_remove_saved_history_on_delete" = "Remove saved history";
+"lng_myowngram_message_history_local_deletion_about" = "When enabled, deleting messages on this device also removes their saved history. When disabled, saved versions remain only in Message History and are not restored in the chat.";
 "lng_myowngram_general" = "General";
 "lng_myowngram_web_content" = "Web content";
 "lng_myowngram_open_mini_apps" = "Open Mini Apps";
