@@ -55,6 +55,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_peer_menu.h"
 #include "main/main_session.h"
 #include "media/player/media_player_instance.h"
+#include "myowngram/message_history_box.h"
 #include "ui/layers/generic_box.h"
 #include "ui/widgets/menu/menu_add_action_callback_factory.h"
 #include "ui/widgets/elastic_scroll.h"
@@ -3553,6 +3554,14 @@ void ListWidget::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 		return;
 	}
 	HistoryView::AttachPollOptionTabs(_menu.get(), desiredPosition);
+	if (overItem && !hasSelection && !request.overSelection) {
+		MyOwnGram::MaybeAddEditHistoryAction(
+			_menu.get(),
+			overItem,
+			controller(),
+			hasCopyRestriction(overItem),
+			desiredPosition);
+	}
 	if (attached == AttachSelectorResult::Attached) {
 		_menu->popupPrepared();
 	} else {

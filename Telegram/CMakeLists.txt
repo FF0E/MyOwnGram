@@ -1598,6 +1598,8 @@ PRIVATE
     myowngram/message_archive_snapshot.h
     myowngram/message_archive_timeline.cpp
     myowngram/message_archive_timeline.h
+    myowngram/message_history_box.cpp
+    myowngram/message_history_box.h
     myowngram/message_history_settings.cpp
     myowngram/message_history_settings.h
     myowngram/sponsored_content_settings.cpp
