@@ -159,12 +159,13 @@ constexpr auto ErrorWithoutId
 }
 
 void ApplyEditUpdates(
-		not_null<ApiWrap*> api,
-		not_null<HistoryItem*> item,
+		not_null<Main::Session*> session,
+		FullMsgId itemId,
 		const MTPUpdates &updates) {
-	const auto session = &item->history()->session();
-	api->applyUpdates(updates);
-	if (item->isLocalUpdateMedia()
+	session->api().applyUpdates(updates);
+	const auto item = session->data().message(itemId);
+	if (item
+		&& item->isLocalUpdateMedia()
 		&& EditUpdateAlreadyApplied(session, item, updates)) {
 		item->setIsLocalUpdateMedia(false);
 		item->returnSavedMedia();
@@ -406,6 +407,7 @@ mtpRequestId EditMessage(
 		false);
 
 	const auto id = EditMessageRequestId(item);
+	const auto itemId = item->fullId();
 	return api->request(MTPmessages_EditMessage(
 		MTP_flags(flags),
 		item->history()->peer->input(),
@@ -421,7 +423,7 @@ mtpRequestId EditMessage(
 	)).done([=](
 			const MTPUpdates &result,
 			[[maybe_unused]] mtpRequestId requestId) {
-		const auto apply = [=] { ApplyEditUpdates(api, item, result); };
+		const auto apply = [=] { ApplyEditUpdates(session, itemId, result); };
 
 		if constexpr (WithId<DoneCallback>) {
 			done(apply, requestId);
@@ -475,24 +477,31 @@ void EditMessageWithUploadedMedia(
 		not_null<HistoryItem*> item,
 		SendOptions options,
 		MTPInputMedia media) {
+	const auto session = &item->history()->session();
+	const auto itemId = item->fullId();
 	const auto waitForAppliedUpdate = item->isRegular()
 		&& item->computeSuggestionActions()
 			!= SuggestionActions::AcceptAndDecline;
 	const auto done = [=](Fn<void()> applyUpdates) {
-		if (item) {
+		if (const auto item = session->data().message(itemId)) {
 			if (!waitForAppliedUpdate) {
 				item->removeFromSharedMediaIndex();
 				item->clearSavedMedia();
 			}
 			item->setIsLocalUpdateMedia(true);
-			applyUpdates();
-			if (!waitForAppliedUpdate) {
+		}
+		applyUpdates();
+		if (!waitForAppliedUpdate) {
+			if (const auto item = session->data().message(itemId)) {
 				item->setIsLocalUpdateMedia(false);
 			}
 		}
 	};
 	const auto fail = [=](const QString &error) {
-		const auto session = &item->history()->session();
+		const auto item = session->data().message(itemId);
+		if (!item) {
+			return;
+		}
 		const auto notModified = (error == u"MESSAGE_NOT_MODIFIED"_q);
 		const auto mediaInvalid = (error == u"MEDIA_NEW_INVALID"_q);
 		if (notModified || mediaInvalid) {
