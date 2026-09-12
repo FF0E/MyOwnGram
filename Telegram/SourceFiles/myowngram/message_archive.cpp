@@ -7,6 +7,8 @@
 #include "myowngram/message_archive.h"
 
 #include "base/flat_map.h"
+#include "data/data_document.h"
+#include "data/data_media.h"
 #include "data/data_peer.h"
 #include "history/history.h"
 #include "history/history_item.h"
@@ -1761,6 +1763,10 @@ void MessageArchive::captureDeletions(
 		}
 		auto snapshot = MessageArchiveStorage::MakeDeletedMessageSnapshot(item);
 		if (snapshot) {
+			const auto media = historyOnly ? nullptr : item->media();
+			if (const auto document = media ? media->document() : nullptr) {
+				document->keepDownloadOnMessageRemoval();
+			}
 			observeDeletion(
 				item->fullId(),
 				*origin,

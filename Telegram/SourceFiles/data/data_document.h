@@ -9,10 +9,12 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "base/flags.h"
 #include "base/binary_guard.h"
+#include "base/weak_ptr.h"
 #include "data/data_types.h"
 #include "data/data_cloud_file.h"
 #include "core/file_location.h"
 
+class FileLoader;
 class HistoryItem;
 class PhotoData;
 enum class ChatRestriction;
@@ -141,6 +143,8 @@ public:
 		LoadFromCloudSetting fromCloud = LoadFromCloudOrLocal,
 		bool autoLoading = false);
 	void cancel();
+	void keepDownloadOnMessageRemoval();
+	[[nodiscard]] bool isDownloadKeptOnMessageRemoval() const;
 	[[nodiscard]] bool cancelled() const;
 	void resetCancelled();
 	[[nodiscard]] float64 progress() const;
@@ -403,6 +407,7 @@ private:
 	GoodThumbnailState _goodThumbnailState = GoodThumbnailState();
 	Core::NameType _nameType = Core::NameType();
 	std::unique_ptr<FileLoader> _loader;
+	base::weak_ptr<FileLoader> _keptLoader;
 
 };
 

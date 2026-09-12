@@ -5201,7 +5201,7 @@ void Session::documentMessageRemoved(not_null<DocumentData*> document) {
 	if (_documentItems.find(document) != _documentItems.end()) {
 		return;
 	}
-	if (document->loading()) {
+	if (document->loading() && !document->isDownloadKeptOnMessageRemoval()) {
 		document->cancel();
 	}
 }

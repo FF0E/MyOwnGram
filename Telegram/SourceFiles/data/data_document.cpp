@@ -1351,6 +1351,14 @@ void DocumentData::cancel() {
 	_owner->documentLoadDone(this);
 }
 
+void DocumentData::keepDownloadOnMessageRemoval() {
+	_keptLoader = _loader;
+}
+
+bool DocumentData::isDownloadKeptOnMessageRemoval() const {
+	return _loader && (_loader.get() == _keptLoader.get());
+}
+
 bool DocumentData::cancelled() const {
 	return (_flags & Flag::DownloadCancelled);
 }

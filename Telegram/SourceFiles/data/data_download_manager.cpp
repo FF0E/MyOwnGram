@@ -1042,10 +1042,23 @@ void DownloadManager::removed(not_null<const HistoryItem*> item) {
 		const auto i = ranges::find(data.downloading, item, ByItem);
 		Assert(i != end(data.downloading));
 
-		// We don't want to download files without messages.
-		// For example, there is no way to refresh a file reference for them.
-		//entry.object.item = nullptr;
-		cancel(data, i);
+		const auto document = i->object.document;
+		if (document
+			&& document->isDownloadKeptOnMessageRemoval()
+			&& !i->externalCancel) {
+			const auto now = regenerateItem(i->object);
+			i->object.item = now;
+			if (_loading.remove(item)) {
+				_loading.emplace(now);
+			}
+			if (_loadingDone.remove(item)) {
+				_loadingDone.emplace(now);
+			}
+			itemVisibilitiesUpdated(&item->history()->session());
+			_loadingListChanges.fire({});
+		} else {
+			cancel(data, i);
+		}
 	}
 }
 
