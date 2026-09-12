@@ -4254,8 +4254,27 @@ void History::checkLocalMessages() {
 	const auto goodDate = [&](TimeId date) {
 		return (date >= firstDate && date < lastDate);
 	};
+	const auto hasArchived = ranges::any_of(_clientSideMessages, [](auto item) {
+		return IsArchivedMsgId(item->id) && !item->mainView();
+	});
+	const auto first = (hasArchived && !loadedAtTop())
+		? owner().message(peer->id, minMsgId())
+		: nullptr;
+	const auto last = (hasArchived && !loadedAtBottom())
+		? owner().message(peer->id, maxMsgId())
+		: nullptr;
+	const auto goodPosition = [&](Data::MessagePosition position) {
+		return (loadedAtTop() || (first && first->position() <= position))
+			&& (loadedAtBottom() || (last && position <= last->position()));
+	};
 	for (const auto &item : _clientSideMessages) {
-		if (!item->mainView() && goodDate(item->date())) {
+		if (item->mainView()) {
+			continue;
+		}
+		const auto good = IsArchivedMsgId(item->id)
+			? goodPosition(item->position())
+			: goodDate(item->date());
+		if (good) {
 			insertMessageToBlocks(item);
 		}
 	}
