@@ -57,7 +57,6 @@ struct MessageArchive::PageState final
 		PeerId peer,
 		MsgId before,
 		int limit,
-		TimelineFilter filter,
 		TimelinePageDone done);
 
 	void start();
@@ -78,7 +77,6 @@ private:
 	int _level = 0;
 	int _limit = 0;
 	int _visited = 0;
-	TimelineFilter _filter;
 	TimelinePageDone _done;
 	TimelinePage _result;
 	base::flat_map<Storage::Cache::Key, QByteArray> _nodes;
@@ -109,8 +107,7 @@ private:
 	void applyNext();
 	void finish(bool continueQueue);
 	[[nodiscard]] bool matches(
-		FullMsgId id,
-		const MessageTimelineMetadata *metadata) const;
+		const MessageArchiveStorage::MessageTimelineMetadata &metadata) const;
 	void persistPage();
 	void processPage(TimelinePage page);
 	void readPage();
@@ -698,13 +695,8 @@ void MessageArchive::LocalDeleteState::finish(bool continueQueue) {
 }
 
 bool MessageArchive::LocalDeleteState::matches(
-		FullMsgId,
-		const MessageTimelineMetadata *metadata) const {
-	if (!metadata) {
-		LOG(("Message Archive Error: Could not inspect local deletion."));
-		return false;
-	}
-	return MatchesLocalDeleteJob(_job, *metadata);
+		const MessageTimelineMetadata &metadata) const {
+	return MatchesLocalDeleteJob(_job, metadata);
 }
 
 void MessageArchive::LocalDeleteState::persistPage() {
@@ -736,7 +728,13 @@ void MessageArchive::LocalDeleteState::processPage(TimelinePage page) {
 	}
 	_nextBefore = page.nextBefore;
 	_exhausted = page.exhausted;
-	_pending = std::move(page.ids);
+	_pending.clear();
+	_pending.reserve(page.entries.size());
+	for (const auto &entry : page.entries) {
+		if (matches(entry.metadata)) {
+			_pending.push_back(entry.id);
+		}
+	}
 	_pendingIndex = 0;
 	applyNext();
 }
@@ -756,9 +754,6 @@ void MessageArchive::LocalDeleteState::readPage() {
 			_job.peer,
 			_job.before,
 			kLocalDeletePageSize,
-			[self](FullMsgId id, const MessageTimelineMetadata *metadata) {
-				return self->matches(id, metadata);
-			},
 			[self](TimelinePage page) {
 				self->processPage(std::move(page));
 			});
@@ -770,15 +765,13 @@ MessageArchive::PageState::PageState(
 		PeerId peer,
 		MsgId before,
 		int limit,
-		TimelineFilter filter,
 		TimelinePageDone done)
 : _archive(archive)
 , _peer(peer)
 , _target(uint64(before.bare - 1))
 , _limit(limit)
-, _filter(std::move(filter))
 , _done(std::move(done)) {
-	_result.ids.reserve(limit);
+	_result.entries.reserve(limit);
 }
 
 void MessageArchive::PageState::start() {
@@ -884,8 +877,13 @@ void MessageArchive::PageState::readTimeline() {
 					const auto metadata = result.value
 						? &*result.value
 						: nullptr;
-					if (self->_filter(id, metadata)) {
-						self->_result.ids.push_back(id);
+					if (!metadata) {
+						LOG(("Message Archive Error: Could not parse timeline metadata."));
+					} else {
+						self->_result.entries.push_back({
+							.id = id,
+							.metadata = *metadata,
+						});
 					}
 				}
 				if (!self->_target) {
@@ -1038,6 +1036,56 @@ void MessageArchive::readRecord(
 		});
 }
 
+void MessageArchive::readTimeline(
+		FullMsgId id,
+		TimelineReadDone done) {
+	Expects(id.peer != 0);
+	Expects(IsServerMsgId(id.msg));
+	Expects(done != nullptr);
+
+	const auto weak = base::make_weak(this);
+	if (_state == State::Closed && !_account->messageArchiveExists()) {
+		crl::on_main(
+			weak,
+			[done = std::move(done)]() mutable {
+				done(TimelineReadResult{
+					.error = Storage::Cache::Error::NoError(),
+				});
+			});
+		return;
+	}
+	auto &database = databaseForOperation();
+	const auto attempt = _openAttempt;
+	_account->readMessageArchiveRecord(
+		database,
+		MessageArchiveStorage::MessageTimelineKey(id),
+		[weak, attempt, done = std::move(done)](
+				QByteArray &&value) mutable {
+			auto result = TimelineReadResult{
+				.error = attempt
+					? attempt->error
+					: Storage::Cache::Error::NoError(),
+				.exists = !value.isEmpty(),
+			};
+			if (result.error.type == Storage::Cache::Error::Type::None
+				&& result.exists) {
+				auto parsed = MessageArchiveStorage::ParseMessageTimeline(value);
+				result.parseError = parsed.error;
+				if (parsed) {
+					result.value = std::move(parsed.value);
+				}
+			}
+			crl::on_main(
+				weak,
+				[
+					done = std::move(done),
+					result = std::move(result)
+				]() mutable {
+					done(std::move(result));
+				});
+		});
+}
+
 void MessageArchive::readTimelineMetadata(
 		FullMsgId id,
 		TimelineMetadataReadDone done) {
@@ -1171,12 +1219,10 @@ void MessageArchive::readTimelinePage(
 		PeerId peer,
 		MsgId before,
 		int limit,
-		TimelineFilter filter,
 		TimelinePageDone done) {
 	Expects(peer != 0);
 	Expects(before > MsgId() && before <= ServerMaxMsgId);
 	Expects(limit > 0);
-	Expects(filter != nullptr);
 	Expects(done != nullptr);
 
 	const auto weak = base::make_weak(this);
@@ -1185,7 +1231,6 @@ void MessageArchive::readTimelinePage(
 		peer,
 		before,
 		limit,
-		std::move(filter),
 		std::move(done));
 	crl::on_main(weak, [state] {
 		state->start();

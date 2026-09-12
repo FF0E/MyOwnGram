@@ -33,15 +33,40 @@ public:
 		QByteArray value;
 		Storage::Cache::Error error;
 	};
+	struct TimelineReadResult {
+		std::optional<MessageArchiveStorage::MessageTimeline> value;
+		Storage::Cache::Error error;
+		MessageArchiveStorage::ParseError parseError
+			= MessageArchiveStorage::ParseError::None;
+		bool exists = false;
+	};
+	struct TimelinePageEntry {
+		FullMsgId id;
+		MessageArchiveStorage::MessageTimelineMetadata metadata;
+	};
+	struct TimelinePage {
+		std::vector<TimelinePageEntry> entries;
+		MsgId nextBefore;
+		Storage::Cache::Error error;
+		bool exhausted = false;
+	};
 
 	using DeleteThroughDone = FnMut<void(uint64)>;
 	using ReadDone = FnMut<void(ReadResult)>;
+	using TimelineReadDone = FnMut<void(TimelineReadResult)>;
+	using TimelinePageDone = FnMut<void(TimelinePage)>;
 	using WriteDone = FnMut<void(Storage::Cache::Error)>;
 
 	explicit MessageArchive(not_null<Storage::Account*> account);
 	~MessageArchive();
 
 	void readRecord(Storage::Cache::Key key, ReadDone done);
+	void readTimeline(FullMsgId id, TimelineReadDone done);
+	void readTimelinePage(
+		PeerId peer,
+		MsgId before,
+		int limit,
+		TimelinePageDone done);
 	void writeRecord(
 		Storage::Cache::Key key,
 		QByteArray value,
@@ -97,18 +122,7 @@ private:
 		Storage::Cache::Error error;
 		bool exists = false;
 	};
-	struct TimelinePage {
-		std::vector<FullMsgId> ids;
-		MsgId nextBefore;
-		Storage::Cache::Error error;
-		bool exhausted = false;
-	};
-
-	using TimelineFilter = Fn<bool(
-		FullMsgId,
-		const MessageArchiveStorage::MessageTimelineMetadata*)>;
 	using TimelineMetadataReadDone = FnMut<void(TimelineMetadataReadResult)>;
-	using TimelinePageDone = FnMut<void(TimelinePage)>;
 
 	struct IndexState;
 	struct LocalDeleteState;
@@ -146,12 +160,6 @@ private:
 	void readTimelineMetadata(
 		FullMsgId id,
 		TimelineMetadataReadDone done);
-	void readTimelinePage(
-		PeerId peer,
-		MsgId before,
-		int limit,
-		TimelineFilter filter,
-		TimelinePageDone done);
 	void persistLocalDeleteJob(
 		const MessageArchiveStorage::LocalDeleteJob &job,
 		MsgId nextBefore,
