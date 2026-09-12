@@ -40,6 +40,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_inner_widget_accessibility.h"
 #include "history/history_item_components.h"
 #include "history/history_item_text.h"
+#include "myowngram/message_history_box.h"
 #include "payments/payments_reaction_process.h"
 #include "ui/widgets/menu/menu_add_action_callback_factory.h"
 #include "ui/widgets/menu/menu_multiline_action.h"
@@ -3876,6 +3877,14 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 		return;
 	}
 	HistoryView::AttachPollOptionTabs(_menu.get(), desiredPosition);
+	if (_dragStateItem && !hasSelected && !isUponSelected) {
+		MyOwnGram::MaybeAddEditHistoryAction(
+			_menu.get(),
+			_dragStateItem,
+			controller,
+			hasCopyRestriction(_dragStateItem),
+			desiredPosition);
+	}
 	if (attached == AttachSelectorResult::Attached) {
 		_menu->popupPrepared();
 	} else {
