@@ -8,6 +8,8 @@
 
 #include "base/basic_types.h"
 #include "base/flags.h"
+#include "data/data_msg_id.h"
+#include "data/data_peer_id.h"
 #include "myowngram/message_archive_record.h"
 #include "ui/text/text_entity.h"
 
@@ -19,6 +21,7 @@ namespace MyOwnGram::MessageArchiveStorage {
 enum class MessageTimelineFlag : uint8 {
 	Deleted = 0x01,
 	Expired = 0x02,
+	HistoryOnly = 0x04,
 };
 inline constexpr bool is_flag_type(MessageTimelineFlag) { return true; }
 using MessageTimelineFlags = base::flags<MessageTimelineFlag>;
@@ -36,8 +39,21 @@ struct MessageSnapshot {
 		const MessageSnapshot &) = default;
 };
 
+struct MessageTimelineOrigin {
+	PeerId from;
+	TimeId date = 0;
+	MsgId topicRootId;
+	PeerId sublistPeer;
+	uint64 archiveSequence = 0;
+
+	friend inline bool operator==(
+		const MessageTimelineOrigin &,
+		const MessageTimelineOrigin &) = default;
+};
+
 struct MessageTimeline {
 	MessageTimelineFlags flags;
+	MessageTimelineOrigin origin;
 	std::vector<MessageSnapshot> versions;
 
 	friend inline bool operator==(
@@ -49,6 +65,20 @@ enum class ObserveResult : uint8 {
 	Unchanged,
 	Refreshed,
 	Appended,
+};
+
+struct MessageTimelineMetadata {
+	MessageTimelineFlags flags;
+	MessageTimelineOrigin origin;
+};
+
+struct ParsedMessageTimelineMetadata {
+	MessageTimelineMetadata value;
+	ParseError error = ParseError::Corrupt;
+
+	explicit operator bool() const {
+		return error == ParseError::None;
+	}
 };
 
 struct ParsedMessageTimeline {
@@ -68,6 +98,8 @@ ObserveResult ObserveVersion(
 	MessageSnapshot snapshot);
 [[nodiscard]] std::optional<QByteArray> SerializeMessageTimeline(
 	const MessageTimeline &timeline);
+[[nodiscard]] ParsedMessageTimelineMetadata ParseMessageTimelineMetadata(
+	const QByteArray &serialized);
 [[nodiscard]] ParsedMessageTimeline ParseMessageTimeline(
 	const QByteArray &serialized);
 

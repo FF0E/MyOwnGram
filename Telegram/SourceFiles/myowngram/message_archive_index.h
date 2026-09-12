@@ -32,6 +32,15 @@ struct MessagePositionUpdate {
 	bool empty = false;
 };
 
+struct ParsedMessageArchiveSequence {
+	uint64 value = 0;
+	ParseError error = ParseError::Corrupt;
+
+	explicit operator bool() const {
+		return error == ParseError::None;
+	}
+};
+
 [[nodiscard]] MessagePositionLookup FindMessagePosition(
 	const QByteArray &serialized,
 	uint8 till);
@@ -41,6 +50,10 @@ struct MessagePositionUpdate {
 [[nodiscard]] MessagePositionUpdate RemoveMessagePosition(
 	const QByteArray &serialized,
 	const MessagePositionEntry &entry);
+[[nodiscard]] ParsedMessageArchiveSequence ParseMessageArchiveSequence(
+	const QByteArray &serialized);
+[[nodiscard]] MessagePositionUpdate NextMessageArchiveSequence(
+	const QByteArray &serialized);
 
 #ifdef _DEBUG
 void ValidateMessagePositionIndexFormat();

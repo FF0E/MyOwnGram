@@ -12,6 +12,7 @@
 
 #include <QtCore/QDataStream>
 
+#include <algorithm>
 #include <limits>
 
 namespace MyOwnGram::MessageArchiveStorage {
@@ -69,12 +70,27 @@ static_assert(MakeKey(RecordType::MessageTimeline, 1, 2).high
 	== (kKeyMagic | 1));
 static_assert(MakeKey(RecordType::MessageTimeline, 1, 2).low
 	== ((uint64(RecordType::MessageTimeline) << kKeyPartBits) | 2));
+static_assert(MakeKey(RecordType::LocalDeleteJobs, 0, 0).high == kKeyMagic);
+static_assert(MakeKey(RecordType::LocalDeleteJobs, 0, 0).low
+	== (uint64(RecordType::LocalDeleteJobs) << kKeyPartBits));
+static_assert(MakeKey(RecordType::MessageArchiveSequence, 0, 0).high
+	== kKeyMagic);
+static_assert(MakeKey(RecordType::MessageArchiveSequence, 0, 0).low
+	== (uint64(RecordType::MessageArchiveSequence) << kKeyPartBits));
 
 ParsedRecord ParseFailure(ParseError error) {
 	return { .error = error };
 }
 
 } // namespace
+
+Storage::Cache::Key LocalDeleteJobsKey() {
+	return MakeKey(RecordType::LocalDeleteJobs, 0, 0);
+}
+
+Storage::Cache::Key MessageArchiveSequenceKey() {
+	return MakeKey(RecordType::MessageArchiveSequence, 0, 0);
+}
 
 Storage::Cache::Key MessageTimelineKey(FullMsgId id) {
 	Expects(id.peer);
@@ -129,16 +145,16 @@ std::optional<QByteArray> SerializeRecord(
 	return result;
 }
 
-ParsedRecord ParseRecord(
+ParsedRecordHeader ParseRecordHeader(
 		const QByteArray &serialized,
 		RecordType expectedType,
-		uint16 latestVersion) {
+		uint16 expectedVersion) {
 	Expects(uint8(expectedType) != 0);
-	Expects(latestVersion != 0);
+	Expects(expectedVersion != 0);
 
 	if (serialized.size() < kRecordHeaderSize
 		|| serialized.size() > Storage::kMessageArchiveMaxRecordSize) {
-		return ParseFailure(ParseError::Corrupt);
+		return { .error = ParseError::Corrupt };
 	}
 	auto stream = QDataStream(serialized);
 	stream.setVersion(QDataStream::Qt_5_1);
@@ -149,29 +165,46 @@ ParsedRecord ParseRecord(
 	auto payloadSize = quint32();
 	stream >> magic >> type >> version >> payloadSize;
 	if (stream.status() != QDataStream::Ok || magic != kRecordMagic) {
-		return ParseFailure(ParseError::Corrupt);
+		return { .error = ParseError::Corrupt };
 	}
 	const auto expectedPayloadSize = serialized.size() - kRecordHeaderSize;
 	if (payloadSize != quint32(expectedPayloadSize)) {
-		return ParseFailure(ParseError::Corrupt);
+		return { .error = ParseError::Corrupt };
 	} else if (type != quint16(expectedType)) {
-		return ParseFailure(ParseError::WrongType);
+		return { .error = ParseError::WrongType };
 	} else if (!version) {
-		return ParseFailure(ParseError::Corrupt);
-	} else if (version > latestVersion) {
-		return ParseFailure(ParseError::UnsupportedVersion);
-	}
-	auto payload = QByteArray(expectedPayloadSize, Qt::Uninitialized);
-	const auto read = payload.isEmpty()
-		? 0
-		: stream.readRawData(payload.data(), payload.size());
-	if (stream.status() != QDataStream::Ok
-		|| read != payload.size()
-		|| !stream.atEnd()) {
-		return ParseFailure(ParseError::Corrupt);
+		return { .error = ParseError::Corrupt };
+	} else if (version != expectedVersion) {
+		return { .error = ParseError::UnsupportedVersion };
 	}
 	return {
 		.version = version,
+		.error = ParseError::None,
+		.payloadOffset = kRecordHeaderSize,
+		.payloadSize = expectedPayloadSize,
+	};
+}
+
+ParsedRecord ParseRecord(
+		const QByteArray &serialized,
+		RecordType expectedType,
+		uint16 expectedVersion) {
+	const auto header = ParseRecordHeader(
+		serialized,
+		expectedType,
+		expectedVersion);
+	if (!header) {
+		return ParseFailure(header.error);
+	}
+	auto payload = QByteArray(header.payloadSize, Qt::Uninitialized);
+	if (!payload.isEmpty()) {
+		std::copy_n(
+			serialized.constData() + header.payloadOffset,
+			payload.size(),
+			payload.data());
+	}
+	return {
+		.version = header.version,
 		.error = ParseError::None,
 		.payload = std::move(payload),
 	};

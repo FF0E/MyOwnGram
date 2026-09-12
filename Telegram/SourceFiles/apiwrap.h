@@ -599,6 +599,11 @@ private:
 		not_null<PeerData*> peer,
 		bool justClear,
 		bool revoke);
+	void deleteHistoryResolved(
+		not_null<PeerData*> peer,
+		bool justClear,
+		bool revoke,
+		bool removeSavedHistory);
 	void applyAffectedMessages(
 		const MTPmessages_AffectedMessages &result) const;
 
@@ -607,7 +612,8 @@ private:
 		not_null<PeerData*> from);
 	void deleteSublistHistorySend(
 		not_null<ChannelData*> parentChat,
-		not_null<PeerData*> sublistPeer);
+		not_null<PeerData*> sublistPeer,
+		Fn<void()> done);
 
 	void uploadAlbumMedia(
 		not_null<HistoryItem*> item,

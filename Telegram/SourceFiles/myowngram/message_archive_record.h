@@ -6,6 +6,7 @@
 //
 #pragma once
 
+#include "data/data_peer_id.h"
 #include "storage/cache/storage_cache_types.h"
 
 #include <QtCore/QByteArray>
@@ -32,6 +33,8 @@ enum class RecordType : uint8 {
 	DeletedMessageContext = 10,
 	DeletedMessageEngagement = 11,
 	MessagePositionIndex = 12,
+	LocalDeleteJobs = 13,
+	MessageArchiveSequence = 14,
 };
 
 enum class ParseError : uint8 {
@@ -39,6 +42,17 @@ enum class ParseError : uint8 {
 	Corrupt,
 	WrongType,
 	UnsupportedVersion,
+};
+
+struct ParsedRecordHeader {
+	uint16 version = 0;
+	ParseError error = ParseError::Corrupt;
+	int payloadOffset = 0;
+	int payloadSize = 0;
+
+	explicit operator bool() const {
+		return error == ParseError::None;
+	}
 };
 
 struct ParsedRecord {
@@ -58,6 +72,8 @@ struct MessagePositionEntry {
 	uint8 bit = 0;
 };
 
+[[nodiscard]] Storage::Cache::Key LocalDeleteJobsKey();
+[[nodiscard]] Storage::Cache::Key MessageArchiveSequenceKey();
 [[nodiscard]] Storage::Cache::Key MessageTimelineKey(FullMsgId id);
 [[nodiscard]] auto MessagePositionPath(FullMsgId id)
 -> std::array<MessagePositionEntry, kMessagePositionLevels>;
@@ -65,10 +81,14 @@ struct MessagePositionEntry {
 	RecordType type,
 	uint16 version,
 	const QByteArray &payload);
+[[nodiscard]] ParsedRecordHeader ParseRecordHeader(
+	const QByteArray &serialized,
+	RecordType expectedType,
+	uint16 expectedVersion);
 [[nodiscard]] ParsedRecord ParseRecord(
 	const QByteArray &serialized,
 	RecordType expectedType,
-	uint16 latestVersion);
+	uint16 expectedVersion);
 
 namespace Binary {
 

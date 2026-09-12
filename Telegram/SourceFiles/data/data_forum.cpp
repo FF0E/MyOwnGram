@@ -205,10 +205,36 @@ void Forum::requestTopics() {
 }
 
 void Forum::applyTopicDeleted(MsgId rootId) {
+	applyTopicDeleted(rootId, 0, false, false);
+}
+
+void Forum::applyLocalTopicDeleted(
+		MsgId rootId,
+		uint64 archiveThrough,
+		bool removeSavedHistory) {
+	applyTopicDeleted(
+		rootId,
+		archiveThrough,
+		true,
+		removeSavedHistory);
+}
+
+void Forum::applyTopicDeleted(
+		MsgId rootId,
+		uint64 archiveThrough,
+		bool locallyDeleted,
+		bool removeSavedHistory) {
 	_topicsDeleted.emplace(rootId);
 
 	const auto i = _topics.find(rootId);
 	if (i == end(_topics)) {
+		if (locallyDeleted) {
+			_history->destroyMessagesByTopic(
+				rootId,
+				archiveThrough,
+				locallyDeleted,
+				removeSavedHistory);
+		}
 		return;
 	}
 	const auto raw = i->second.get();
@@ -232,7 +258,11 @@ void Forum::applyTopicDeleted(MsgId rootId) {
 		Data::EntryUpdate::Flag::Destroyed);
 	_topics.erase(i);
 
-	_history->destroyMessagesByTopic(rootId);
+	_history->destroyMessagesByTopic(
+		rootId,
+		archiveThrough,
+		locallyDeleted,
+		removeSavedHistory);
 	session().storage().unload(Storage::SharedMediaUnloadThread(
 		_history->peer->id,
 		rootId,

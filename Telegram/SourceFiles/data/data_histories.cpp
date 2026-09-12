@@ -25,6 +25,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/random.h"
 #include "main/main_session.h"
 #include "myowngram/activity_reporting_settings.h"
+#include "myowngram/message_archive.h"
+#include "myowngram/message_history_settings.h"
 #include "window/notifications_manager.h"
 #include "history/history.h"
 #include "history/history_item.h"
@@ -921,10 +923,37 @@ void Histories::deleteMessagesByDates(
 }
 
 void Histories::deleteMessagesByDates(
-	not_null<History*> history,
-	TimeId minDate,
-	TimeId maxDate,
-	bool revoke) {
+		not_null<History*> history,
+		TimeId minDate,
+		TimeId maxDate,
+		bool revoke) {
+	const auto removeSavedHistory
+		= MyOwnGram::MessageHistory::RemoveSavedHistoryOnDelete();
+	history->destroyMessagesByDates(
+		minDate,
+		maxDate,
+		removeSavedHistory);
+	session().data().messageArchive().resolveLocalDeleteThrough(
+		[=](uint64 archiveThrough) {
+			session().data().messageArchive().applyLocalDateDeletion(
+				history->peer->id,
+				minDate,
+				maxDate,
+				archiveThrough,
+				removeSavedHistory);
+		});
+	deleteMessagesByDatesSend(
+		history,
+		minDate,
+		maxDate,
+		revoke);
+}
+
+void Histories::deleteMessagesByDatesSend(
+		not_null<History*> history,
+		TimeId minDate,
+		TimeId maxDate,
+		bool revoke) {
 	sendRequest(history, RequestType::Delete, [=](Fn<void()> finish) {
 		const auto peer = history->peer;
 		using Flag = MTPmessages_DeleteHistory::Flag;
@@ -943,12 +972,15 @@ void Histories::deleteMessagesByDates(
 				peer,
 				result);
 			if (offset > 0) {
-				deleteMessagesByDates(history, minDate, maxDate, revoke);
+				deleteMessagesByDatesSend(
+					history,
+					minDate,
+					maxDate,
+					revoke);
 			}
 			finish();
 		}).fail(finish).send();
 	});
-	history->destroyMessagesByDates(minDate, maxDate);
 }
 
 void Histories::deleteMessages(const MessageIdsList &ids, bool revoke) {
@@ -1018,6 +1050,7 @@ void Histories::deleteMessages(const MessageIdsList &ids, bool revoke) {
 	}
 
 	if (!remove.empty()) {
+		_owner->messageArchive().applyLocalMessageDeletion(remove);
 		_owner->notifyItemsAboutToBeDestroyed(remove);
 	}
 	for (const auto &item : remove) {

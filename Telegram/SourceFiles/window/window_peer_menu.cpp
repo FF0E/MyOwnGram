@@ -114,6 +114,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_histories.h"
 #include "data/data_chat_filters.h"
 #include "data/data_peer_values.h"
+#include "myowngram/message_archive.h"
+#include "myowngram/message_history_settings.h"
 #include "dialogs/dialogs_key.h"
 #include "core/application.h"
 #include "core/ui_integration.h"
@@ -2185,10 +2187,10 @@ void PeerMenuDeleteTopicWithConfirmation(
 	}));
 }
 
-void PeerMenuDeleteTopic(
-		not_null<Window::SessionNavigation*> navigation,
+void PeerMenuDeleteTopicRequest(
 		not_null<PeerData*> peer,
-		MsgId rootId) {
+		MsgId rootId,
+		Fn<void()> done) {
 	const auto api = &peer->session().api();
 	api->request(MTPmessages_DeleteTopicHistory(
 		peer->input(),
@@ -2196,11 +2198,55 @@ void PeerMenuDeleteTopic(
 	)).done([=](const MTPmessages_AffectedHistory &result) {
 		const auto offset = api->applyAffectedHistory(peer, result);
 		if (offset > 0) {
-			PeerMenuDeleteTopic(navigation, peer, rootId);
-		} else if (const auto forum = peer->forum()) {
-			forum->applyTopicDeleted(rootId);
+			PeerMenuDeleteTopicRequest(peer, rootId, done);
+		} else {
+			done();
 		}
 	}).send();
+}
+
+void PeerMenuDeleteTopic(
+		not_null<Window::SessionNavigation*> navigation,
+		not_null<PeerData*> peer,
+		MsgId rootId) {
+	const auto removeSavedHistory
+		= MyOwnGram::MessageHistory::RemoveSavedHistoryOnDelete();
+	struct ArchiveState {
+		uint64 through = 0;
+		bool resolved = false;
+		bool finished = false;
+	};
+	const auto state = std::make_shared<ArchiveState>();
+	navigation->session().data().messageArchive().resolveLocalDeleteThrough(
+		[=](uint64 archiveThrough) {
+			state->through = archiveThrough;
+			state->resolved = true;
+			if (state->finished) {
+				peer->session().data().messageArchive()
+					.applyLocalTopicDeletion(
+						peer->id,
+						rootId,
+						archiveThrough,
+						removeSavedHistory,
+						{});
+			}
+		});
+	PeerMenuDeleteTopicRequest(peer, rootId, [=] {
+		state->finished = true;
+		if (const auto forum = peer->forum()) {
+			forum->applyLocalTopicDeleted(
+				rootId,
+				state->resolved ? state->through : uint64(0),
+				removeSavedHistory);
+		} else if (state->resolved) {
+			peer->session().data().messageArchive().applyLocalTopicDeletion(
+				peer->id,
+				rootId,
+				state->through,
+				removeSavedHistory,
+				{});
+		}
+	});
 }
 
 void PeerMenuDeleteTopic(

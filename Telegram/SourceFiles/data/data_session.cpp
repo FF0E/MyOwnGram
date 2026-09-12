@@ -2882,27 +2882,6 @@ void Session::reorderTwoPinnedChats(
 
 namespace {
 
-void CaptureDeletedMessages(
-		not_null<Session*> owner,
-		const std::vector<not_null<HistoryItem*>> &items) {
-	using MyOwnGram::MessageArchiveStorage::MakeDeletedMessageSnapshot;
-
-	if (!MyOwnGram::MessageHistory::CaptureEnabled(
-			MyOwnGram::MessageHistory::Capture::DeletedMessages)) {
-		return;
-	}
-	for (const auto &item : items) {
-		if (item->out() || item->history()->peer->isSelf()) {
-			continue;
-		}
-		if (auto snapshot = MakeDeletedMessageSnapshot(item)) {
-			owner->messageArchive().observeDeletion(
-				item->fullId(),
-				std::move(*snapshot));
-		}
-	}
-}
-
 template <typename Apply>
 void ApplyArchiveAwareEdition(
 		not_null<Session*> owner,
@@ -2937,7 +2916,7 @@ void ApplyArchiveAwareEdition(
 	if (before) {
 		if (auto after = makeSnapshot()) {
 			owner->messageArchive().observeEdit(
-				item->fullId(),
+				item,
 				std::move(*before),
 				std::move(*after));
 		}
@@ -3216,7 +3195,7 @@ void Session::processMessagesDeleted(
 		}
 	}
 	if (!toDestroy.empty()) {
-		CaptureDeletedMessages(this, toDestroy);
+		messageArchive().captureRemoteDeletions(toDestroy);
 		notifyItemsAboutToBeDestroyed(toDestroy);
 		for (const auto &item : toDestroy) {
 			item->destroy();
@@ -3240,7 +3219,7 @@ void Session::processNonChannelMessagesDeleted(const QVector<MTPint> &data) {
 		}
 	}
 	if (!toDestroy.empty()) {
-		CaptureDeletedMessages(this, toDestroy);
+		messageArchive().captureRemoteDeletions(toDestroy);
 		notifyItemsAboutToBeDestroyed(toDestroy);
 		for (const auto &item : toDestroy) {
 			item->destroy();

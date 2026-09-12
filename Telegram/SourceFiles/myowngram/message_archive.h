@@ -8,17 +8,21 @@
 
 #include "base/weak_ptr.h"
 #include "data/data_msg_id.h"
+#include "myowngram/message_archive_timeline.h"
 #include "storage/cache/storage_cache_database.h"
 
 #include <memory>
+#include <optional>
 #include <vector>
+
+class HistoryItem;
 
 namespace Storage {
 class Account;
 } // namespace Storage
 
 namespace MyOwnGram::MessageArchiveStorage {
-struct MessageSnapshot;
+struct LocalDeleteJob;
 } // namespace MyOwnGram::MessageArchiveStorage
 
 namespace MyOwnGram {
@@ -30,20 +34,8 @@ public:
 		Storage::Cache::Error error;
 	};
 
-	struct TimelineRecord {
-		FullMsgId id;
-		QByteArray value;
-	};
-
-	struct TimelinePage {
-		std::vector<TimelineRecord> records;
-		MsgId nextBefore;
-		Storage::Cache::Error error;
-		bool exhausted = false;
-	};
-
+	using DeleteThroughDone = FnMut<void(uint64)>;
 	using ReadDone = FnMut<void(ReadResult)>;
-	using TimelinePageDone = FnMut<void(TimelinePage)>;
 	using WriteDone = FnMut<void(Storage::Cache::Error)>;
 
 	explicit MessageArchive(not_null<Storage::Account*> account);
@@ -55,22 +47,71 @@ public:
 		QByteArray value,
 		WriteDone done);
 	void removeRecord(Storage::Cache::Key key, WriteDone done);
-	void readTimelinePage(
-		PeerId peer,
-		MsgId before,
-		int limit,
-		TimelinePageDone done);
+	void resolveLocalDeleteThrough(DeleteThroughDone done);
 	void removeMessage(FullMsgId id, WriteDone done);
 	void observeEdit(
-		FullMsgId id,
+		not_null<const HistoryItem*> item,
 		MessageArchiveStorage::MessageSnapshot before,
 		MessageArchiveStorage::MessageSnapshot after);
-	void observeDeletion(
-		FullMsgId id,
-		MessageArchiveStorage::MessageSnapshot snapshot);
+	void captureRemoteDeletions(
+		const std::vector<not_null<HistoryItem*>> &items);
+	void applyLocalMessageDeletion(
+		const std::vector<not_null<HistoryItem*>> &items);
+	void applyLocalMessageDeletion(
+		const std::vector<not_null<HistoryItem*>> &items,
+		bool remove);
+	void applyLocalMessageDeletion(
+		const std::vector<FullMsgId> &ids,
+		bool remove);
+	void applyLocalHistoryDeletion(
+		PeerId peer,
+		uint64 through,
+		bool remove);
+	void applyLocalDateDeletion(
+		PeerId peer,
+		TimeId minDate,
+		TimeId maxDate,
+		uint64 through,
+		bool remove);
+	void applyLocalParticipantDeletion(
+		PeerId peer,
+		PeerId from,
+		uint64 through,
+		bool remove);
+	void applyLocalTopicDeletion(
+		PeerId peer,
+		MsgId topicRootId,
+		uint64 through,
+		bool remove,
+		const std::vector<not_null<HistoryItem*>> &items);
+	void applyLocalSublistDeletion(
+		PeerId peer,
+		PeerId sublistPeer,
+		uint64 through,
+		bool remove,
+		const std::vector<not_null<HistoryItem*>> &items);
 
 private:
+	struct TimelineMetadataReadResult {
+		std::optional<MessageArchiveStorage::MessageTimelineMetadata> value;
+		Storage::Cache::Error error;
+		bool exists = false;
+	};
+	struct TimelinePage {
+		std::vector<FullMsgId> ids;
+		MsgId nextBefore;
+		Storage::Cache::Error error;
+		bool exhausted = false;
+	};
+
+	using TimelineFilter = Fn<bool(
+		FullMsgId,
+		const MessageArchiveStorage::MessageTimelineMetadata*)>;
+	using TimelineMetadataReadDone = FnMut<void(TimelineMetadataReadResult)>;
+	using TimelinePageDone = FnMut<void(TimelinePage)>;
+
 	struct IndexState;
+	struct LocalDeleteState;
 	struct OpenAttempt;
 	struct PageState;
 	struct RemovalState;
@@ -86,13 +127,44 @@ private:
 		Storage::Cache::Database &database,
 		const std::shared_ptr<OpenAttempt> &attempt,
 		FullMsgId id);
+	void captureDeletions(
+		const std::vector<not_null<HistoryItem*>> &items,
+		bool historyOnly);
+	void enqueueBoundedLocalDeleteJob(
+		MessageArchiveStorage::LocalDeleteJob job);
+	void finishLocalDeleteState(
+		not_null<LocalDeleteState*> state,
+		bool continueQueue);
+	void markHistoryOnly(FullMsgId id, WriteDone done);
+	void observeDeletion(
+		FullMsgId id,
+		MessageArchiveStorage::MessageTimelineOrigin origin,
+		MessageArchiveStorage::MessageSnapshot snapshot,
+		bool historyOnly);
 	void open();
 	void openDone(Storage::Cache::Error error);
+	void readTimelineMetadata(
+		FullMsgId id,
+		TimelineMetadataReadDone done);
+	void readTimelinePage(
+		PeerId peer,
+		MsgId before,
+		int limit,
+		TimelineFilter filter,
+		TimelinePageDone done);
+	void persistLocalDeleteJob(
+		const MessageArchiveStorage::LocalDeleteJob &job,
+		MsgId nextBefore,
+		bool finished,
+		WriteDone done);
+	void startLocalDeleteJobs();
 
 	const not_null<Storage::Account*> _account;
 	Storage::Cache::Database *_database = nullptr;
 	std::shared_ptr<OpenAttempt> _openAttempt;
+	std::shared_ptr<LocalDeleteState> _localDeleteState;
 	State _state = State::Closed;
+	bool _localDeleteJobsReading = false;
 
 };
 

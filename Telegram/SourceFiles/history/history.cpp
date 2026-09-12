@@ -56,6 +56,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_poll.h"
 #include "data/data_todo_list.h"
 #include "lang/lang_keys.h"
+#include "myowngram/message_archive.h"
 #include "apiwrap.h"
 #include "api/api_chat_participants.h"
 #include "mainwidget.h"
@@ -713,7 +714,10 @@ void History::destroyMessage(not_null<HistoryItem*> item) {
 	}
 }
 
-void History::destroyMessagesByDates(TimeId minDate, TimeId maxDate) {
+void History::destroyMessagesByDates(
+		TimeId minDate,
+		TimeId maxDate,
+		bool removeSavedHistory) {
 	auto toDestroy = std::vector<not_null<HistoryItem*>>();
 	toDestroy.reserve(_items.size());
 	for (const auto &message : _items) {
@@ -723,6 +727,9 @@ void History::destroyMessagesByDates(TimeId minDate, TimeId maxDate) {
 			toDestroy.push_back(message.get());
 		}
 	}
+	owner().messageArchive().applyLocalMessageDeletion(
+		toDestroy,
+		removeSavedHistory);
 	if (!toDestroy.empty()) {
 		owner().notifyItemsAboutToBeDestroyed(toDestroy);
 	}
@@ -731,7 +738,11 @@ void History::destroyMessagesByDates(TimeId minDate, TimeId maxDate) {
 	}
 }
 
-void History::destroyMessagesByTopic(MsgId topicRootId) {
+void History::destroyMessagesByTopic(
+		MsgId topicRootId,
+		uint64 localDeleteThrough,
+		bool locallyDeleted,
+		bool removeSavedHistory) {
 	auto toDestroy = std::vector<not_null<HistoryItem*>>();
 	toDestroy.reserve(_items.size());
 	for (const auto &message : _items) {
@@ -739,6 +750,14 @@ void History::destroyMessagesByTopic(MsgId topicRootId) {
 			toDestroy.push_back(message.get());
 		}
 	}
+	if (locallyDeleted) {
+		owner().messageArchive().applyLocalTopicDeletion(
+			peer->id,
+			topicRootId,
+			localDeleteThrough,
+			removeSavedHistory,
+			toDestroy);
+	}
 	if (!toDestroy.empty()) {
 		owner().notifyItemsAboutToBeDestroyed(toDestroy);
 	}
@@ -747,7 +766,11 @@ void History::destroyMessagesByTopic(MsgId topicRootId) {
 	}
 }
 
-void History::destroyMessagesBySublist(not_null<PeerData*> sublistPeer) {
+void History::destroyMessagesBySublist(
+		not_null<PeerData*> sublistPeer,
+		uint64 localDeleteThrough,
+		bool locallyDeleted,
+		bool removeSavedHistory) {
 	auto toDestroy = std::vector<not_null<HistoryItem*>>();
 	toDestroy.reserve(_items.size());
 	const auto peerId = sublistPeer->id;
@@ -755,6 +778,14 @@ void History::destroyMessagesBySublist(not_null<PeerData*> sublistPeer) {
 		if (message->sublistPeerId() == peerId) {
 			toDestroy.push_back(message.get());
 		}
+	}
+	if (locallyDeleted) {
+		owner().messageArchive().applyLocalSublistDeletion(
+			peer->id,
+			sublistPeer->id,
+			localDeleteThrough,
+			removeSavedHistory,
+			toDestroy);
 	}
 	if (!toDestroy.empty()) {
 		owner().notifyItemsAboutToBeDestroyed(toDestroy);
@@ -4337,6 +4368,18 @@ bool History::hasOrphanMediaGroupPart() const {
 	}
 	const auto last = blocks.front()->messages.front()->data();
 	return last->groupId() != MessageGroupId();
+}
+
+auto History::collectMessagesForLocalDeletion() const
+-> std::vector<not_null<HistoryItem*>> {
+	auto result = std::vector<not_null<HistoryItem*>>();
+	result.reserve(_items.size());
+	for (const auto &item : _items) {
+		if (item->isRegular()) {
+			result.push_back(item.get());
+		}
+	}
+	return result;
 }
 
 std::vector<MsgId> History::collectMessagesFromParticipantToDelete(

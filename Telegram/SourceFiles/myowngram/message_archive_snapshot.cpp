@@ -15,15 +15,12 @@
 
 #include <QtCore/QDataStream>
 
-#include <limits>
-
 namespace MyOwnGram::MessageArchiveStorage {
 namespace {
 
 constexpr auto kMessageMediaVisibleVersion = uint16(1);
-constexpr auto kDeletionSupportVersion = uint16(2);
-constexpr auto kEngagementSupportVersion = uint16(3);
-constexpr auto kMessageSnapshotSupportVersion = kEngagementSupportVersion;
+constexpr auto kNestedMediaVersion = uint16(1);
+constexpr auto kMessageSnapshotSupportVersion = uint16(1);
 
 struct SerializedMessageMedia {
 	MessageMediaType type = MessageMediaType::None;
@@ -69,7 +66,7 @@ bool GoodMediaRecord(const MessageMediaVisible &media) {
 		&& ParseRecord(
 			media.record,
 			*type,
-			std::numeric_limits<uint16>::max());
+			kNestedMediaVersion);
 }
 
 ParsedMessageMediaVisible ParseMediaFailure(ParseError error) {
@@ -96,6 +93,15 @@ void CheckMessageSnapshotFormat() {
 	Assert(serializedMedia.has_value());
 	const auto parsedMedia = ParseMessageMediaVisible(*serializedMedia);
 	Assert(parsedMedia && parsedMedia.value == media);
+	const auto unsupportedPhoto = SerializeRecord(
+		RecordType::PhotoMediaVisible,
+		kNestedMediaVersion + 1,
+		QByteArray("photo"));
+	Assert(unsupportedPhoto.has_value());
+	Assert(!SerializeMessageMediaVisible({
+		.type = MessageMediaType::Photo,
+		.record = *unsupportedPhoto,
+	}));
 	Assert(!SerializeMessageMediaVisible({
 		.type = MessageMediaType::None,
 		.invertMedia = true,
@@ -129,42 +135,40 @@ void CheckMessageSnapshotFormat() {
 	Assert(parsedSupport && parsedSupport.value == support);
 	Assert(ParseMessageSnapshotSupport(QByteArray()));
 
-	auto legacySupportPayload = QByteArray();
-	auto legacySupportStream = QDataStream(
-		&legacySupportPayload,
-		QIODevice::WriteOnly);
-	legacySupportStream.setVersion(QDataStream::Qt_5_1);
-	legacySupportStream.setByteOrder(QDataStream::BigEndian);
-	Assert(Binary::WriteBytes(legacySupportStream, support.media));
-	Assert(Binary::WriteBytes(legacySupportStream, support.replyMarkup));
-	const auto legacySupport = SerializeRecord(
-		RecordType::MessageSnapshotSupport,
-		1,
-		legacySupportPayload);
-	Assert(legacySupport.has_value());
-	const auto parsedLegacySupport = ParseMessageSnapshotSupport(
-		*legacySupport);
-	Assert(parsedLegacySupport);
-	Assert(parsedLegacySupport.value.media == support.media);
-	Assert(parsedLegacySupport.value.replyMarkup == support.replyMarkup);
-	Assert(parsedLegacySupport.value.deletion.isEmpty());
-	Assert(parsedLegacySupport.value.engagement.isEmpty());
+	auto editSupport = support;
+	editSupport.deletion.clear();
+	editSupport.engagement.clear();
+	const auto serializedEditSupport = SerializeMessageSnapshotSupport(
+		editSupport);
+	Assert(serializedEditSupport.has_value());
+	const auto parsedEditSupport = ParseMessageSnapshotSupport(
+		*serializedEditSupport);
+	Assert(parsedEditSupport && parsedEditSupport.value == editSupport);
 
-	auto previousSupport = support;
-	previousSupport.engagement.clear();
-	const auto serializedPreviousSupport = SerializeMessageSnapshotSupport(
-		previousSupport);
-	Assert(serializedPreviousSupport.has_value());
-	const auto previousSupportRecord = ParseRecord(
-		*serializedPreviousSupport,
+	auto deletionSupport = support;
+	deletionSupport.engagement.clear();
+	const auto serializedDeletionSupport = SerializeMessageSnapshotSupport(
+		deletionSupport);
+	Assert(serializedDeletionSupport.has_value());
+	const auto parsedDeletionSupport = ParseMessageSnapshotSupport(
+		*serializedDeletionSupport);
+	Assert(parsedDeletionSupport
+		&& parsedDeletionSupport.value == deletionSupport);
+
+	auto incompletePayload = QByteArray();
+	auto incompleteStream = QDataStream(
+		&incompletePayload,
+		QIODevice::WriteOnly);
+	incompleteStream.setVersion(QDataStream::Qt_5_1);
+	incompleteStream.setByteOrder(QDataStream::BigEndian);
+	Assert(Binary::WriteBytes(incompleteStream, support.media));
+	Assert(Binary::WriteBytes(incompleteStream, support.replyMarkup));
+	const auto incompleteSupport = SerializeRecord(
 		RecordType::MessageSnapshotSupport,
-		kMessageSnapshotSupportVersion);
-	Assert(previousSupportRecord
-		&& previousSupportRecord.version == kDeletionSupportVersion);
-	const auto parsedPreviousSupport = ParseMessageSnapshotSupport(
-		*serializedPreviousSupport);
-	Assert(parsedPreviousSupport
-		&& parsedPreviousSupport.value == previousSupport);
+		kMessageSnapshotSupportVersion,
+		incompletePayload);
+	Assert(incompleteSupport.has_value());
+	Assert(!ParseMessageSnapshotSupport(*incompleteSupport));
 
 	auto invalidSupport = support;
 	invalidSupport.deletion.chop(1);
@@ -280,29 +284,20 @@ std::optional<QByteArray> SerializeMessageSnapshotSupport(
 					support.engagement)))) {
 		return std::nullopt;
 	}
-	auto version = uint16(1);
-	if (!support.deletion.isEmpty()) {
-		version = kDeletionSupportVersion;
-	}
-	if (!support.engagement.isEmpty()) {
-		version = kEngagementSupportVersion;
-	}
 	auto payload = QByteArray();
 	auto stream = QDataStream(&payload, QIODevice::WriteOnly);
 	stream.setVersion(QDataStream::Qt_5_1);
 	stream.setByteOrder(QDataStream::BigEndian);
 	if (!Binary::WriteBytes(stream, support.media)
 		|| !Binary::WriteBytes(stream, support.replyMarkup)
-		|| (version >= kDeletionSupportVersion
-			&& !Binary::WriteBytes(stream, support.deletion))
-		|| (version >= kEngagementSupportVersion
-			&& !Binary::WriteBytes(stream, support.engagement))
+		|| !Binary::WriteBytes(stream, support.deletion)
+		|| !Binary::WriteBytes(stream, support.engagement)
 		|| stream.status() != QDataStream::Ok) {
 		return std::nullopt;
 	}
 	return SerializeRecord(
 		RecordType::MessageSnapshotSupport,
-		version,
+		kMessageSnapshotSupportVersion,
 		payload);
 }
 
@@ -326,22 +321,14 @@ ParsedMessageSnapshotSupport ParseMessageSnapshotSupport(
 	stream.setByteOrder(QDataStream::BigEndian);
 	const auto media = Binary::ReadBytes(stream);
 	const auto replyMarkup = Binary::ReadBytes(stream);
-	const auto deletion = (record.version >= kDeletionSupportVersion)
-		? Binary::ReadBytes(stream)
-		: std::optional<QByteArray>(QByteArray());
-	const auto engagement = (record.version >= kEngagementSupportVersion)
-		? Binary::ReadBytes(stream)
-		: std::optional<QByteArray>(QByteArray());
+	const auto deletion = Binary::ReadBytes(stream);
+	const auto engagement = Binary::ReadBytes(stream);
 	if (stream.status() != QDataStream::Ok
 		|| !stream.atEnd()
 		|| !media
 		|| !replyMarkup
 		|| !deletion
 		|| !engagement
-		|| (record.version >= kDeletionSupportVersion
-			&& deletion->isEmpty())
-		|| (record.version >= kEngagementSupportVersion
-			&& engagement->isEmpty())
 		|| (!deletion->isEmpty()
 			&& !ParseDeletedMessageContext(*deletion))
 		|| (!engagement->isEmpty()

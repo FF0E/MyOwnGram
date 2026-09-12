@@ -66,6 +66,10 @@ public:
 		TimeId date,
 		bool my);
 	void applyTopicDeleted(MsgId rootId);
+	void applyLocalTopicDeleted(
+		MsgId rootId,
+		uint64 archiveThrough,
+		bool removeSavedHistory);
 	[[nodiscard]] ForumTopic *topicFor(MsgId rootId);
 	[[nodiscard]] ForumTopic *enforceTopicFor(MsgId rootId);
 	[[nodiscard]] bool topicDeleted(MsgId rootId) const;
@@ -113,6 +117,12 @@ public:
 	}
 
 private:
+	void applyTopicDeleted(
+		MsgId rootId,
+		uint64 archiveThrough,
+		bool locallyDeleted,
+		bool removeSavedHistory);
+
 	struct TopicRequest {
 		mtpRequestId id = 0;
 		std::vector<Fn<void()>> callbacks;

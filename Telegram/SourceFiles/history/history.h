@@ -116,6 +116,8 @@ public:
 	[[nodiscard]] Element *findLastNonEmpty() const;
 	[[nodiscard]] Element *findLastDisplayed() const;
 	[[nodiscard]] bool hasOrphanMediaGroupPart() const;
+	[[nodiscard]] auto collectMessagesForLocalDeletion() const
+	-> std::vector<not_null<HistoryItem*>>;
 	[[nodiscard]] std::vector<MsgId> collectMessagesFromParticipantToDelete(
 		not_null<PeerData*> participant) const;
 
@@ -151,9 +153,20 @@ public:
 	}
 
 	void destroyMessage(not_null<HistoryItem*> item);
-	void destroyMessagesByDates(TimeId minDate, TimeId maxDate);
-	void destroyMessagesByTopic(MsgId topicRootId);
-	void destroyMessagesBySublist(not_null<PeerData*> sublistPeer);
+	void destroyMessagesByDates(
+		TimeId minDate,
+		TimeId maxDate,
+		bool removeSavedHistory);
+	void destroyMessagesByTopic(
+		MsgId topicRootId,
+		uint64 localDeleteThrough,
+		bool locallyDeleted,
+		bool removeSavedHistory);
+	void destroyMessagesBySublist(
+		not_null<PeerData*> sublistPeer,
+		uint64 localDeleteThrough,
+		bool locallyDeleted,
+		bool removeSavedHistory);
 
 	void unpinMessagesFor(MsgId topicRootId, PeerId monoforumPeerId);
 

@@ -7,6 +7,7 @@
 #include "myowngram/message_archive_timeline.h"
 
 #include "lang/lang_keys.h"
+#include "myowngram/message_archive_peer.h"
 
 #include <QtCore/QDataStream>
 
@@ -18,9 +19,19 @@ namespace MyOwnGram::MessageArchiveStorage {
 namespace {
 
 constexpr auto kMessageTimelineVersion = uint16(1);
+constexpr auto kDeletedTimelineFlag = uint8(MessageTimelineFlag::Deleted);
+constexpr auto kHistoryOnlyTimelineFlag = uint8(
+	MessageTimelineFlag::HistoryOnly);
 constexpr auto kKnownTimelineFlags = uint8(
-	uint8(MessageTimelineFlag::Deleted)
-	| uint8(MessageTimelineFlag::Expired));
+	kDeletedTimelineFlag
+	| uint8(MessageTimelineFlag::Expired)
+	| kHistoryOnlyTimelineFlag);
+constexpr auto kMessageTimelineOriginSize = int(
+	sizeof(quint64)
+	+ sizeof(qint64)
+	+ sizeof(quint64)
+	+ sizeof(quint64)
+	+ sizeof(quint64));
 constexpr auto kMinimumEntitySize = int(
 	sizeof(quint8) + sizeof(qint32) * 2 + sizeof(quint32));
 constexpr auto kMinimumSnapshotSize = int(
@@ -190,6 +201,63 @@ std::optional<MessageSnapshot> ReadSnapshot(QDataStream &stream) {
 	};
 }
 
+bool GoodTimelineFlags(uint8 flags) {
+	return (flags & kKnownTimelineFlags) == flags
+		&& (!(flags & kHistoryOnlyTimelineFlag)
+			|| (flags & kDeletedTimelineFlag));
+}
+
+bool GoodTimelineOrigin(const MessageTimelineOrigin &origin) {
+	return IsValidArchivePeerId(origin.from)
+		&& origin.date > 0
+		&& origin.archiveSequence > 0
+		&& (!origin.topicRootId || IsServerMsgId(origin.topicRootId))
+		&& (!origin.sublistPeer
+			|| IsValidArchivePeerId(origin.sublistPeer))
+		&& (!origin.topicRootId || !origin.sublistPeer);
+}
+
+std::optional<MessageTimelineOrigin> ReadTimelineOrigin(QDataStream &stream) {
+	auto serializedFrom = quint64();
+	auto date = qint64();
+	auto topicRootId = quint64();
+	auto serializedSublistPeer = quint64();
+	auto archiveSequence = quint64();
+	stream
+		>> serializedFrom
+		>> date
+		>> topicRootId
+		>> serializedSublistPeer
+		>> archiveSequence;
+	const auto from = DeserializeArchivePeerId(serializedFrom);
+	auto sublistPeer = std::optional<PeerId>();
+	if (serializedSublistPeer) {
+		sublistPeer = DeserializeArchivePeerId(serializedSublistPeer);
+	}
+	const auto result = MessageTimelineOrigin{
+		.from = from.value_or(PeerId()),
+		.date = (date > 0 && date <= std::numeric_limits<TimeId>::max())
+			? TimeId(date)
+			: TimeId(),
+		.topicRootId = (topicRootId < uint64(ServerMaxMsgId.bare))
+			? MsgId(int64(topicRootId))
+			: MsgId(),
+		.sublistPeer = sublistPeer.value_or(PeerId()),
+		.archiveSequence = archiveSequence,
+	};
+	return (stream.status() == QDataStream::Ok
+		&& from
+		&& topicRootId < uint64(ServerMaxMsgId.bare)
+		&& (!serializedSublistPeer || sublistPeer)
+		&& GoodTimelineOrigin(result))
+		? std::make_optional(result)
+		: std::nullopt;
+}
+
+ParsedMessageTimelineMetadata ParseMetadataFailure(ParseError error) {
+	return { .error = error };
+}
+
 ParsedMessageTimeline ParseFailure(ParseError error) {
 	return { .error = error };
 }
@@ -223,14 +291,19 @@ ObserveResult ObserveVersion(
 
 std::optional<QByteArray> SerializeMessageTimeline(
 		const MessageTimeline &timeline) {
-	// ponytail: Version 1 keeps one message timeline in one 1 MiB record.
-	// Once it is full, serialization fails and leaves the prior record intact.
-	// This bounds reads and writes but caps revisions for one heavily
-	// edited message.
-	// Add linked timeline pages before raising the shared record-size limit.
+	// ponytail: One message timeline stays in one 1 MiB record. Once it is
+	// full, serialization fails and leaves the prior record intact. This
+	// bounds reads and writes but caps revisions for one heavily edited
+	// message. Add linked timeline pages before raising the shared limit.
+	const auto serializedFrom = SerializeArchivePeerId(timeline.origin.from);
+	const auto serializedSublistPeer = timeline.origin.sublistPeer
+		? SerializeArchivePeerId(timeline.origin.sublistPeer)
+		: std::optional<uint64>(0);
 	if (timeline.versions.empty()
-		|| (timeline.flags.value() & kKnownTimelineFlags)
-			!= timeline.flags.value()
+		|| !GoodTimelineFlags(timeline.flags.value())
+		|| !GoodTimelineOrigin(timeline.origin)
+		|| !serializedFrom
+		|| !serializedSublistPeer
 		|| uint64(timeline.versions.size())
 			> std::numeric_limits<quint32>::max()) {
 		return std::nullopt;
@@ -247,6 +320,12 @@ std::optional<QByteArray> SerializeMessageTimeline(
 			return std::nullopt;
 		}
 	}
+	stream
+		<< *serializedFrom
+		<< qint64(timeline.origin.date)
+		<< quint64(timeline.origin.topicRootId.bare)
+		<< *serializedSublistPeer
+		<< quint64(timeline.origin.archiveSequence);
 	if (stream.status() != QDataStream::Ok) {
 		return std::nullopt;
 	}
@@ -254,6 +333,56 @@ std::optional<QByteArray> SerializeMessageTimeline(
 		RecordType::MessageTimeline,
 		kMessageTimelineVersion,
 		payload);
+}
+
+ParsedMessageTimelineMetadata ParseMessageTimelineMetadata(
+		const QByteArray &serialized) {
+	const auto header = ParseRecordHeader(
+		serialized,
+		RecordType::MessageTimeline,
+		kMessageTimelineVersion);
+	if (!header) {
+		return ParseMetadataFailure(header.error);
+	} else if (header.payloadSize < int(
+			sizeof(quint8)
+			+ sizeof(quint32)
+			+ kMinimumSnapshotSize
+			+ kMessageTimelineOriginSize)) {
+		return ParseMetadataFailure(ParseError::Corrupt);
+	}
+	auto stream = QDataStream(serialized);
+	stream.setVersion(QDataStream::Qt_5_1);
+	stream.setByteOrder(QDataStream::BigEndian);
+	if (!stream.device()->seek(header.payloadOffset)) {
+		return ParseMetadataFailure(ParseError::Corrupt);
+	}
+	auto flags = quint8();
+	auto count = quint32();
+	stream >> flags >> count;
+	const auto snapshotsSize = header.payloadSize
+		- int(sizeof(quint8) + sizeof(quint32))
+		- kMessageTimelineOriginSize;
+	if (stream.status() != QDataStream::Ok
+		|| !GoodTimelineFlags(flags)
+		|| !count
+		|| count > quint64(snapshotsSize) / kMinimumSnapshotSize
+		|| !stream.device()->seek(
+			header.payloadOffset
+			+ header.payloadSize
+			- kMessageTimelineOriginSize)) {
+		return ParseMetadataFailure(ParseError::Corrupt);
+	}
+	const auto origin = ReadTimelineOrigin(stream);
+	if (!origin || !stream.atEnd()) {
+		return ParseMetadataFailure(ParseError::Corrupt);
+	}
+	return {
+		.value = {
+			.flags = MessageTimelineFlags::from_raw(flags),
+			.origin = *origin,
+		},
+		.error = ParseError::None,
+	};
 }
 
 ParsedMessageTimeline ParseMessageTimeline(const QByteArray &serialized) {
@@ -270,10 +399,12 @@ ParsedMessageTimeline ParseMessageTimeline(const QByteArray &serialized) {
 	auto flags = quint8();
 	auto count = quint32();
 	stream >> flags >> count;
+	const auto available = stream.device()->bytesAvailable();
 	if (stream.status() != QDataStream::Ok
-		|| (flags & kKnownTimelineFlags) != flags
+		|| !GoodTimelineFlags(flags)
 		|| !count
-		|| count > quint64(stream.device()->bytesAvailable())
+		|| available < kMessageTimelineOriginSize
+		|| count > quint64(available - kMessageTimelineOriginSize)
 			/ kMinimumSnapshotSize) {
 		return ParseFailure(ParseError::Corrupt);
 	}
@@ -288,9 +419,11 @@ ParsedMessageTimeline ParseMessageTimeline(const QByteArray &serialized) {
 		}
 		result.versions.push_back(std::move(*snapshot));
 	}
-	if (stream.status() != QDataStream::Ok || !stream.atEnd()) {
+	const auto origin = ReadTimelineOrigin(stream);
+	if (!origin || !stream.atEnd()) {
 		return ParseFailure(ParseError::Corrupt);
 	}
+	result.origin = *origin;
 	return {
 		.value = std::move(result),
 		.error = ParseError::None,
@@ -321,24 +454,102 @@ void ValidateMessageTimelineFormat() {
 		auto second = refreshed;
 		second.versionDate = 3;
 		second.text.text = u"second"_q;
-		auto timeline = MessageTimeline();
+		auto timeline = MessageTimeline{
+			.origin = {
+				.from = peerFromUser(UserId(123)),
+				.date = 456,
+				.topicRootId = MsgId(7),
+				.archiveSequence = 789,
+			},
+		};
 		Assert(ObserveVersion(timeline, first) == ObserveResult::Appended);
 		Assert(ObserveVersion(timeline, refreshed) == ObserveResult::Refreshed);
 		Assert(timeline.versions.size() == 1);
 		Assert(timeline.versions.front().versionDate == 1);
 		Assert(ObserveVersion(timeline, second) == ObserveResult::Appended);
 		timeline.flags |= MessageTimelineFlag::Deleted;
+		timeline.flags |= MessageTimelineFlag::HistoryOnly;
 		const auto serialized = SerializeMessageTimeline(timeline);
 		Assert(serialized.has_value());
 		const auto parsed = ParseMessageTimeline(*serialized);
 		Assert(parsed && parsed.value == timeline);
+		const auto metadata = ParseMessageTimelineMetadata(*serialized);
+		Assert(metadata
+			&& metadata.value.flags == timeline.flags
+			&& metadata.value.origin == timeline.origin);
 		Assert(!ParseMessageTimeline(serialized->chopped(1)));
+		Assert(!ParseMessageTimelineMetadata(serialized->chopped(1)));
+		auto invalid = timeline;
+		invalid.flags.remove(MessageTimelineFlag::Deleted);
+		Assert(!SerializeMessageTimeline(invalid));
+		invalid = timeline;
+		invalid.origin.from = PeerId();
+		Assert(!SerializeMessageTimeline(invalid));
+		invalid = timeline;
+		invalid.origin.date = 0;
+		Assert(!SerializeMessageTimeline(invalid));
+		invalid = timeline;
+		invalid.origin.archiveSequence = 0;
+		Assert(!SerializeMessageTimeline(invalid));
+		invalid = timeline;
+		invalid.origin.topicRootId = ServerMaxMsgId;
+		Assert(!SerializeMessageTimeline(invalid));
+		invalid = timeline;
+		invalid.origin.sublistPeer = peerFromUser(UserId(321));
+		Assert(!SerializeMessageTimeline(invalid));
+		invalid.origin.topicRootId = MsgId();
+		const auto sublistSerialized = SerializeMessageTimeline(invalid);
+		Assert(sublistSerialized.has_value());
+		Assert(ParseMessageTimeline(*sublistSerialized).value == invalid);
+		Assert(ParseMessageTimelineMetadata(*sublistSerialized).value.origin
+			== invalid.origin);
+		const auto record = ParseRecord(
+			*serialized,
+			RecordType::MessageTimeline,
+			kMessageTimelineVersion);
+		Assert(record);
+		Assert(ParseRecord(
+			*serialized,
+			RecordType::MessageTimeline,
+			kMessageTimelineVersion + 1).error
+			== ParseError::UnsupportedVersion);
+		auto invalidFlags = record.payload;
+		invalidFlags[0] = char(kHistoryOnlyTimelineFlag);
+		const auto invalidFlagsRecord = SerializeRecord(
+			RecordType::MessageTimeline,
+			kMessageTimelineVersion,
+			invalidFlags);
+		Assert(invalidFlagsRecord.has_value());
+		Assert(!ParseMessageTimeline(*invalidFlagsRecord));
+		const auto missingOriginRecord = SerializeRecord(
+			RecordType::MessageTimeline,
+			kMessageTimelineVersion,
+			record.payload.chopped(kMessageTimelineOriginSize));
+		Assert(missingOriginRecord.has_value());
+		Assert(!ParseMessageTimeline(*missingOriginRecord));
+		Assert(!ParseMessageTimelineMetadata(*missingOriginRecord));
+		auto invalidOrigin = record.payload;
+		invalidOrigin.replace(
+			invalidOrigin.size()
+				- kMessageTimelineOriginSize
+				+ int(sizeof(quint64)),
+			int(sizeof(qint64)),
+			QByteArray(int(sizeof(qint64)), 0));
+		const auto invalidOriginRecord = SerializeRecord(
+			RecordType::MessageTimeline,
+			kMessageTimelineVersion,
+			invalidOrigin);
+		Assert(invalidOriginRecord.has_value());
+		Assert(!ParseMessageTimeline(*invalidOriginRecord));
+		Assert(!ParseMessageTimelineMetadata(*invalidOriginRecord));
 		const auto future = SerializeRecord(
 			RecordType::MessageTimeline,
 			kMessageTimelineVersion + 1,
 			QByteArray());
 		Assert(future.has_value());
 		Assert(ParseMessageTimeline(*future).error
+			== ParseError::UnsupportedVersion);
+		Assert(ParseMessageTimelineMetadata(*future).error
 			== ParseError::UnsupportedVersion);
 		return true;
 	}();

@@ -192,6 +192,11 @@ private:
 		}
 	}
 
+	void deleteMessagesByDatesSend(
+		not_null<History*> history,
+		TimeId minDate,
+		TimeId maxDate,
+		bool revoke);
 	void readInboxTill(not_null<History*> history, MsgId tillId, bool force);
 	void sendReadRequests();
 	void sendReadRequest(not_null<History*> history, State &state);

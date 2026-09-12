@@ -500,9 +500,36 @@ void SavedMessages::apply(const MTPDupdateSavedDialogPinned &update) {
 	});
 }
 
-void SavedMessages::applySublistDeleted(not_null<PeerData*> sublistPeer) {
+void SavedMessages::applySublistDeleted(
+		not_null<PeerData*> sublistPeer) {
+	applySublistDeleted(sublistPeer, 0, false, false);
+}
+
+void SavedMessages::applyLocalSublistDeleted(
+		not_null<PeerData*> sublistPeer,
+		uint64 archiveThrough,
+		bool removeSavedHistory) {
+	applySublistDeleted(
+		sublistPeer,
+		archiveThrough,
+		true,
+		removeSavedHistory);
+}
+
+void SavedMessages::applySublistDeleted(
+		not_null<PeerData*> sublistPeer,
+		uint64 archiveThrough,
+		bool locallyDeleted,
+		bool removeSavedHistory) {
 	const auto i = _sublists.find(sublistPeer);
 	if (i == end(_sublists)) {
+		if (locallyDeleted) {
+			owningHistory()->destroyMessagesBySublist(
+				sublistPeer,
+				archiveThrough,
+				locallyDeleted,
+				removeSavedHistory);
+		}
 		return;
 	}
 	const auto raw = i->second.get();
@@ -527,7 +554,11 @@ void SavedMessages::applySublistDeleted(not_null<PeerData*> sublistPeer) {
 	_sublists.erase(i);
 
 	const auto history = owningHistory();
-	history->destroyMessagesBySublist(sublistPeer);
+	history->destroyMessagesBySublist(
+		sublistPeer,
+		archiveThrough,
+		locallyDeleted,
+		removeSavedHistory);
 	session().storage().unload(Storage::SharedMediaUnloadThread(
 		_owningHistory->peer->id,
 		MsgId(),

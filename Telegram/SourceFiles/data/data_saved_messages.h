@@ -68,6 +68,10 @@ public:
 	void apply(const MTPDupdatePinnedSavedDialogs &update);
 	void apply(const MTPDupdateSavedDialogPinned &update);
 	void applySublistDeleted(not_null<PeerData*> sublistPeer);
+	void applyLocalSublistDeleted(
+		not_null<PeerData*> sublistPeer,
+		uint64 archiveThrough,
+		bool removeSavedHistory);
 
 	void listMessageChanged(HistoryItem *from, HistoryItem *to);
 	[[nodiscard]] int recentSublistsListVersion() const;
@@ -88,6 +92,12 @@ public:
 	[[nodiscard]] rpl::lifetime &lifetime();
 
 private:
+	void applySublistDeleted(
+		not_null<PeerData*> sublistPeer,
+		uint64 archiveThrough,
+		bool locallyDeleted,
+		bool removeSavedHistory);
+
 	struct SublistRequest {
 		mtpRequestId id = 0;
 		std::vector<Fn<void()>> callbacks;

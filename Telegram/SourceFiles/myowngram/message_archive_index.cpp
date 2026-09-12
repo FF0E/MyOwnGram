@@ -9,8 +9,11 @@
 #include "data/data_msg_id.h"
 #include "data/data_peer_id.h"
 
+#include <QtCore/QDataStream>
+
 #include <algorithm>
 #include <array>
+#include <limits>
 #include <optional>
 #include <utility>
 
@@ -22,8 +25,10 @@ namespace {
 // keeping sparse private-chat IDs compact while allowing chronological
 // traversal without database key iteration or per-chat limits.
 constexpr auto kMessagePositionIndexVersion = uint16(1);
+constexpr auto kMessageArchiveSequenceVersion = uint16(1);
 constexpr auto kMessagePositionNodeBits = 1 << 8;
 static_assert(uint8(RecordType::MessagePositionIndex) == 12);
+static_assert(uint8(RecordType::MessageArchiveSequence) == 14);
 
 struct ParsedMessagePositionBits {
 	QByteArray value;
@@ -216,6 +221,30 @@ void CheckMessagePositionIndexFormat() {
 	Assert(!MessagePositionContains(*wrongType, path.front()));
 	Assert(FindMessagePosition(*wrongType, 0xFF).error
 		== ParseError::WrongType);
+
+	const auto emptySequence = ParseMessageArchiveSequence({});
+	Assert(emptySequence && emptySequence.value == 0);
+	const auto firstSequence = NextMessageArchiveSequence({});
+	Assert(firstSequence.result == MessagePositionUpdateResult::Updated);
+	const auto parsedSequence = ParseMessageArchiveSequence(firstSequence.value);
+	Assert(parsedSequence && parsedSequence.value == 1);
+	const auto nextSequence = NextMessageArchiveSequence(firstSequence.value);
+	Assert(nextSequence.result == MessagePositionUpdateResult::Updated);
+	Assert(ParseMessageArchiveSequence(nextSequence.value).value == 2);
+	const auto maximumSequence = SerializeRecord(
+		RecordType::MessageArchiveSequence,
+		kMessageArchiveSequenceVersion,
+		QByteArray::fromHex("ffffffffffffffff"));
+	Assert(maximumSequence.has_value());
+	Assert(NextMessageArchiveSequence(*maximumSequence).result
+		== MessagePositionUpdateResult::Invalid);
+	const auto futureSequence = SerializeRecord(
+		RecordType::MessageArchiveSequence,
+		kMessageArchiveSequenceVersion + 1,
+		QByteArray(sizeof(quint64), 0));
+	Assert(futureSequence.has_value());
+	Assert(ParseMessageArchiveSequence(*futureSequence).error
+		== ParseError::UnsupportedVersion);
 }
 #endif // _DEBUG
 
@@ -315,6 +344,63 @@ MessagePositionUpdate RemoveMessagePosition(
 		RecordType::MessagePositionIndex,
 		kMessagePositionIndexVersion,
 		parsed.value);
+	return result
+		? MessagePositionUpdate{
+			.value = std::move(*result),
+			.result = MessagePositionUpdateResult::Updated,
+		}
+		: MessagePositionUpdate();
+}
+
+ParsedMessageArchiveSequence ParseMessageArchiveSequence(
+		const QByteArray &serialized) {
+	if (serialized.isEmpty()) {
+		return { .error = ParseError::None };
+	}
+	const auto record = ParseRecord(
+		serialized,
+		RecordType::MessageArchiveSequence,
+		kMessageArchiveSequenceVersion);
+	if (!record) {
+		return { .error = record.error };
+	} else if (record.payload.size() != int(sizeof(quint64))) {
+		return {};
+	}
+	auto stream = QDataStream(record.payload);
+	stream.setVersion(QDataStream::Qt_5_1);
+	stream.setByteOrder(QDataStream::BigEndian);
+	auto value = quint64();
+	stream >> value;
+	if (stream.status() != QDataStream::Ok
+		|| !stream.atEnd()
+		|| !value) {
+		return {};
+	}
+	return {
+		.value = value,
+		.error = ParseError::None,
+	};
+}
+
+MessagePositionUpdate NextMessageArchiveSequence(
+		const QByteArray &serialized) {
+	const auto parsed = ParseMessageArchiveSequence(serialized);
+	if (!parsed || parsed.value == std::numeric_limits<uint64>::max()) {
+		return {};
+	}
+	const auto next = parsed.value + 1;
+	auto payload = QByteArray();
+	auto stream = QDataStream(&payload, QIODevice::WriteOnly);
+	stream.setVersion(QDataStream::Qt_5_1);
+	stream.setByteOrder(QDataStream::BigEndian);
+	stream << quint64(next);
+	if (stream.status() != QDataStream::Ok) {
+		return {};
+	}
+	auto result = SerializeRecord(
+		RecordType::MessageArchiveSequence,
+		kMessageArchiveSequenceVersion,
+		payload);
 	return result
 		? MessagePositionUpdate{
 			.value = std::move(*result),

@@ -83,6 +83,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session.h"
 #include "main/main_session_settings.h"
 #include "main/main_account.h"
+#include "myowngram/message_archive.h"
+#include "myowngram/message_history_settings.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/boxes/emoji_stake_box.h"
 #include "ui/controls/ton_common.h"
@@ -1487,14 +1489,32 @@ void ApiWrap::deleteAllFromParticipant(
 	const auto ids = history
 		? history->collectMessagesFromParticipantToDelete(from)
 		: std::vector<MsgId>();
+	auto items = std::vector<not_null<HistoryItem*>>();
+	items.reserve(ids.size());
 	for (const auto &msgId : ids) {
 		if (const auto item = _session->data().message(channel->id, msgId)) {
-			item->destroy();
+			items.push_back(item);
 		}
+	}
+	const auto removeSavedHistory
+		= MyOwnGram::MessageHistory::RemoveSavedHistoryOnDelete();
+	_session->data().messageArchive().applyLocalMessageDeletion(
+		items,
+		removeSavedHistory);
+	for (const auto &item : items) {
+		item->destroy();
 	}
 
 	_session->data().sendHistoryChangeNotifications();
 
+	_session->data().messageArchive().resolveLocalDeleteThrough(
+		[=](uint64 archiveThrough) {
+			_session->data().messageArchive().applyLocalParticipantDeletion(
+				channel->id,
+				from->id,
+				archiveThrough,
+				removeSavedHistory);
+		});
 	deleteAllFromParticipantSend(channel, from);
 }
 
@@ -1554,12 +1574,49 @@ void ApiWrap::deleteParticipantReaction(
 void ApiWrap::deleteSublistHistory(
 		not_null<ChannelData*> channel,
 		not_null<PeerData*> sublistPeer) {
-	deleteSublistHistorySend(channel, sublistPeer);
+	const auto removeSavedHistory
+		= MyOwnGram::MessageHistory::RemoveSavedHistoryOnDelete();
+	struct ArchiveState {
+		uint64 through = 0;
+		bool resolved = false;
+		bool finished = false;
+	};
+	const auto state = std::make_shared<ArchiveState>();
+	_session->data().messageArchive().resolveLocalDeleteThrough(
+		[=](uint64 archiveThrough) {
+			state->through = archiveThrough;
+			state->resolved = true;
+			if (state->finished) {
+				_session->data().messageArchive().applyLocalSublistDeletion(
+					channel->id,
+					sublistPeer->id,
+					archiveThrough,
+					removeSavedHistory,
+					{});
+			}
+		});
+	deleteSublistHistorySend(channel, sublistPeer, [=] {
+		state->finished = true;
+		if (const auto monoforum = channel->monoforum()) {
+			monoforum->applyLocalSublistDeleted(
+				sublistPeer,
+				state->resolved ? state->through : uint64(0),
+				removeSavedHistory);
+		} else if (state->resolved) {
+			_session->data().messageArchive().applyLocalSublistDeletion(
+				channel->id,
+				sublistPeer->id,
+				state->through,
+				removeSavedHistory,
+				{});
+		}
+	});
 }
 
 void ApiWrap::deleteSublistHistorySend(
 		not_null<ChannelData*> parentChat,
-		not_null<PeerData*> sublistPeer) {
+		not_null<PeerData*> sublistPeer,
+		Fn<void()> done) {
 	request(MTPmessages_DeleteSavedHistory(
 		MTP_flags(MTPmessages_DeleteSavedHistory::Flag::f_parent_peer),
 		parentChat->input(),
@@ -1570,9 +1627,9 @@ void ApiWrap::deleteSublistHistorySend(
 	)).done([=](const MTPmessages_AffectedHistory &result) {
 		const auto offset = applyAffectedHistory(parentChat, result);
 		if (offset > 0) {
-			deleteSublistHistorySend(parentChat, sublistPeer);
-		} else if (const auto monoforum = parentChat->monoforum()) {
-			monoforum->applySublistDeleted(sublistPeer);
+			deleteSublistHistorySend(parentChat, sublistPeer, done);
+		} else {
+			done();
 		}
 	}).send();
 }
@@ -2180,16 +2237,63 @@ void ApiWrap::clearHistory(not_null<PeerData*> peer, bool revoke) {
 
 void ApiWrap::deleteConversation(not_null<PeerData*> peer, bool revoke) {
 	if (const auto chat = peer->asChat()) {
+		const auto removeSavedHistory
+			= MyOwnGram::MessageHistory::RemoveSavedHistoryOnDelete();
+		const auto history = _session->data().history(peer);
+		const auto items = history->collectMessagesForLocalDeletion();
+		_session->data().messageArchive().applyLocalMessageDeletion(
+			items,
+			removeSavedHistory);
+		auto archiveIds = std::vector<FullMsgId>();
+		archiveIds.reserve(items.size());
+		for (const auto &item : items) {
+			if (item->isRegular()) {
+				archiveIds.push_back(item->fullId());
+			}
+		}
+		struct ArchiveState {
+			uint64 through = 0;
+			bool resolved = false;
+			bool finished = false;
+		};
+		const auto state = std::make_shared<ArchiveState>();
+		_session->data().messageArchive().resolveLocalDeleteThrough(
+			[=](uint64 archiveThrough) {
+				state->through = archiveThrough;
+				state->resolved = true;
+				if (state->finished) {
+					_session->data().messageArchive()
+						.applyLocalHistoryDeletion(
+							peer->id,
+							archiveThrough,
+							removeSavedHistory);
+				}
+			});
+		const auto finish = [=] {
+			state->finished = true;
+			if (state->resolved) {
+				_session->data().messageArchive().applyLocalHistoryDeletion(
+					peer->id,
+					state->through,
+					removeSavedHistory);
+			}
+			deleteHistoryResolved(
+				peer,
+				false,
+				revoke,
+				removeSavedHistory);
+		};
 		request(MTPmessages_DeleteChatUser(
 			MTP_flags(0),
 			chat->inputChat(),
 			_session->user()->inputUser()
 		)).done([=](const MTPUpdates &result) {
 			applyUpdates(result);
-			deleteHistory(peer, false, revoke);
-		}).fail([=] {
-			deleteHistory(peer, false, revoke);
-		}).send();
+			_session->data().messageArchive().applyLocalMessageDeletion(
+				archiveIds,
+				removeSavedHistory);
+			finish();
+		}).fail(finish).send();
 	} else {
 		deleteHistory(peer, false, revoke);
 	}
@@ -2199,6 +2303,36 @@ void ApiWrap::deleteHistory(
 		not_null<PeerData*> peer,
 		bool justClear,
 		bool revoke) {
+	if ((justClear || revoke) && peer->asChannel()) {
+		if (const auto migrated = peer->migrateFrom()) {
+			deleteHistory(migrated, justClear, revoke);
+		}
+	}
+	const auto removeSavedHistory
+		= MyOwnGram::MessageHistory::RemoveSavedHistoryOnDelete();
+	const auto history = _session->data().history(peer);
+	_session->data().messageArchive().applyLocalMessageDeletion(
+		history->collectMessagesForLocalDeletion(),
+		removeSavedHistory);
+	_session->data().messageArchive().resolveLocalDeleteThrough(
+		[=](uint64 archiveThrough) {
+			_session->data().messageArchive().applyLocalHistoryDeletion(
+				peer->id,
+				archiveThrough,
+				removeSavedHistory);
+		});
+	deleteHistoryResolved(
+		peer,
+		justClear,
+		revoke,
+		removeSavedHistory);
+}
+
+void ApiWrap::deleteHistoryResolved(
+		not_null<PeerData*> peer,
+		bool justClear,
+		bool revoke,
+		bool removeSavedHistory) {
 	auto deleteTillId = MsgId(0);
 	const auto history = _session->data().history(peer);
 	if (justClear) {
@@ -2219,27 +2353,29 @@ void ApiWrap::deleteHistory(
 			history->owner().histories().requestDialogEntry(history, [=] {
 				Expects(history->lastMessageKnown());
 
-				deleteHistory(peer, justClear, revoke);
+				deleteHistoryResolved(
+					peer,
+					justClear,
+					revoke,
+					removeSavedHistory);
 			});
 			return;
 		}
 		deleteTillId = history->lastMessage()->id;
 	}
+	_session->data().messageArchive().applyLocalMessageDeletion(
+		history->collectMessagesForLocalDeletion(),
+		removeSavedHistory);
 	if (const auto channel = peer->asChannel()) {
 		if (!justClear && !revoke) {
 			channel->ptsSetWaitingForShortPoll(-1);
 			leaveChannel(channel);
-		} else {
-			if (const auto migrated = peer->migrateFrom()) {
-				deleteHistory(migrated, justClear, revoke);
-			}
-			if (deleteTillId || (!justClear && revoke)) {
-				history->owner().histories().deleteAllMessages(
-					history,
-					deleteTillId,
-					justClear,
-					revoke);
-			}
+		} else if (deleteTillId || (!justClear && revoke)) {
+			history->owner().histories().deleteAllMessages(
+				history,
+				deleteTillId,
+				justClear,
+				revoke);
 		}
 	} else {
 		history->owner().histories().deleteAllMessages(
