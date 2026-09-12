@@ -1507,14 +1507,13 @@ void ApiWrap::deleteAllFromParticipant(
 
 	_session->data().sendHistoryChangeNotifications();
 
-	_session->data().messageArchive().resolveLocalDeleteThrough(
-		[=](uint64 archiveThrough) {
-			_session->data().messageArchive().applyLocalParticipantDeletion(
-				channel->id,
-				from->id,
-				archiveThrough,
-				removeSavedHistory);
-		});
+	const auto archiveThrough
+		= _session->data().messageArchive().resolveLocalDeleteThrough();
+	_session->data().messageArchive().applyLocalParticipantDeletion(
+		channel->id,
+		from->id,
+		archiveThrough,
+		removeSavedHistory);
 	deleteAllFromParticipantSend(channel, from);
 }
 
@@ -1576,37 +1575,19 @@ void ApiWrap::deleteSublistHistory(
 		not_null<PeerData*> sublistPeer) {
 	const auto removeSavedHistory
 		= MyOwnGram::MessageHistory::RemoveSavedHistoryOnDelete();
-	struct ArchiveState {
-		uint64 through = 0;
-		bool resolved = false;
-		bool finished = false;
-	};
-	const auto state = std::make_shared<ArchiveState>();
-	_session->data().messageArchive().resolveLocalDeleteThrough(
-		[=](uint64 archiveThrough) {
-			state->through = archiveThrough;
-			state->resolved = true;
-			if (state->finished) {
-				_session->data().messageArchive().applyLocalSublistDeletion(
-					channel->id,
-					sublistPeer->id,
-					archiveThrough,
-					removeSavedHistory,
-					{});
-			}
-		});
+	const auto archiveThrough
+		= _session->data().messageArchive().resolveLocalDeleteThrough();
 	deleteSublistHistorySend(channel, sublistPeer, [=] {
-		state->finished = true;
 		if (const auto monoforum = channel->monoforum()) {
 			monoforum->applyLocalSublistDeleted(
 				sublistPeer,
-				state->resolved ? state->through : uint64(0),
+				archiveThrough,
 				removeSavedHistory);
-		} else if (state->resolved) {
+		} else {
 			_session->data().messageArchive().applyLocalSublistDeletion(
 				channel->id,
 				sublistPeer->id,
-				state->through,
+				archiveThrough,
 				removeSavedHistory,
 				{});
 		}
@@ -2251,32 +2232,13 @@ void ApiWrap::deleteConversation(not_null<PeerData*> peer, bool revoke) {
 				archiveIds.push_back(item->fullId());
 			}
 		}
-		struct ArchiveState {
-			uint64 through = 0;
-			bool resolved = false;
-			bool finished = false;
-		};
-		const auto state = std::make_shared<ArchiveState>();
-		_session->data().messageArchive().resolveLocalDeleteThrough(
-			[=](uint64 archiveThrough) {
-				state->through = archiveThrough;
-				state->resolved = true;
-				if (state->finished) {
-					_session->data().messageArchive()
-						.applyLocalHistoryDeletion(
-							peer->id,
-							archiveThrough,
-							removeSavedHistory);
-				}
-			});
+		const auto archiveThrough
+			= _session->data().messageArchive().resolveLocalDeleteThrough();
 		const auto finish = [=] {
-			state->finished = true;
-			if (state->resolved) {
-				_session->data().messageArchive().applyLocalHistoryDeletion(
-					peer->id,
-					state->through,
-					removeSavedHistory);
-			}
+			_session->data().messageArchive().applyLocalHistoryDeletion(
+				peer->id,
+				archiveThrough,
+				removeSavedHistory);
 			deleteHistoryResolved(
 				peer,
 				false,
@@ -2314,13 +2276,12 @@ void ApiWrap::deleteHistory(
 	_session->data().messageArchive().applyLocalMessageDeletion(
 		history->collectMessagesForLocalDeletion(),
 		removeSavedHistory);
-	_session->data().messageArchive().resolveLocalDeleteThrough(
-		[=](uint64 archiveThrough) {
-			_session->data().messageArchive().applyLocalHistoryDeletion(
-				peer->id,
-				archiveThrough,
-				removeSavedHistory);
-		});
+	const auto archiveThrough
+		= _session->data().messageArchive().resolveLocalDeleteThrough();
+	_session->data().messageArchive().applyLocalHistoryDeletion(
+		peer->id,
+		archiveThrough,
+		removeSavedHistory);
 	deleteHistoryResolved(
 		peer,
 		justClear,

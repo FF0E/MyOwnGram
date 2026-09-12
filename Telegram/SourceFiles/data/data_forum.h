@@ -9,12 +9,18 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "dialogs/dialogs_main_list.h"
 
+#include <memory>
+
 class History;
 class ChannelData;
 
 namespace Main {
 class Session;
 } // namespace Main
+
+namespace MyOwnGram {
+struct MessageArchiveDeleteBound;
+} // namespace MyOwnGram
 
 namespace Window {
 class SessionController;
@@ -68,7 +74,7 @@ public:
 	void applyTopicDeleted(MsgId rootId);
 	void applyLocalTopicDeleted(
 		MsgId rootId,
-		uint64 archiveThrough,
+		const std::shared_ptr<MyOwnGram::MessageArchiveDeleteBound> &archiveThrough,
 		bool removeSavedHistory);
 	[[nodiscard]] ForumTopic *topicFor(MsgId rootId);
 	[[nodiscard]] ForumTopic *enforceTopicFor(MsgId rootId);
@@ -119,7 +125,7 @@ public:
 private:
 	void applyTopicDeleted(
 		MsgId rootId,
-		uint64 archiveThrough,
+		const std::shared_ptr<MyOwnGram::MessageArchiveDeleteBound> &archiveThrough,
 		bool locallyDeleted,
 		bool removeSavedHistory);
 

@@ -9,6 +9,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "dialogs/dialogs_main_list.h"
 
+#include <memory>
+
 namespace Dialogs {
 struct UnreadState;
 } // namespace Dialogs
@@ -16,6 +18,10 @@ struct UnreadState;
 namespace Main {
 class Session;
 } // namespace Main
+
+namespace MyOwnGram {
+struct MessageArchiveDeleteBound;
+} // namespace MyOwnGram
 
 namespace Data {
 
@@ -70,7 +76,7 @@ public:
 	void applySublistDeleted(not_null<PeerData*> sublistPeer);
 	void applyLocalSublistDeleted(
 		not_null<PeerData*> sublistPeer,
-		uint64 archiveThrough,
+		const std::shared_ptr<MyOwnGram::MessageArchiveDeleteBound> &archiveThrough,
 		bool removeSavedHistory);
 
 	void listMessageChanged(HistoryItem *from, HistoryItem *to);
@@ -94,7 +100,7 @@ public:
 private:
 	void applySublistDeleted(
 		not_null<PeerData*> sublistPeer,
-		uint64 archiveThrough,
+		const std::shared_ptr<MyOwnGram::MessageArchiveDeleteBound> &archiveThrough,
 		bool locallyDeleted,
 		bool removeSavedHistory);
 

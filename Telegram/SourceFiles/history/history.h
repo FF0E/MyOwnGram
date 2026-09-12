@@ -16,6 +16,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/flat_set.h"
 #include "base/flags.h"
 
+#include <memory>
+
 class History;
 class HistoryBlock;
 class HistoryTranslation;
@@ -47,6 +49,10 @@ class IndexedList;
 namespace HistoryView {
 class Element;
 } // namespace HistoryView
+
+namespace MyOwnGram {
+struct MessageArchiveDeleteBound;
+} // namespace MyOwnGram
 
 enum class NewMessageType {
 	Unread,
@@ -159,12 +165,12 @@ public:
 		bool removeSavedHistory);
 	void destroyMessagesByTopic(
 		MsgId topicRootId,
-		uint64 localDeleteThrough,
+		const std::shared_ptr<MyOwnGram::MessageArchiveDeleteBound> &localDeleteThrough,
 		bool locallyDeleted,
 		bool removeSavedHistory);
 	void destroyMessagesBySublist(
 		not_null<PeerData*> sublistPeer,
-		uint64 localDeleteThrough,
+		const std::shared_ptr<MyOwnGram::MessageArchiveDeleteBound> &localDeleteThrough,
 		bool locallyDeleted,
 		bool removeSavedHistory);
 

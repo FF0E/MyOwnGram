@@ -27,6 +27,8 @@ struct LocalDeleteJob;
 
 namespace MyOwnGram {
 
+struct MessageArchiveDeleteBound;
+
 class MessageArchive final : public base::has_weak_ptr {
 public:
 	struct ReadResult {
@@ -51,7 +53,6 @@ public:
 		bool exhausted = false;
 	};
 
-	using DeleteThroughDone = FnMut<void(uint64)>;
 	using ReadDone = FnMut<void(ReadResult)>;
 	using TimelineReadDone = FnMut<void(TimelineReadResult)>;
 	using TimelinePageDone = FnMut<void(TimelinePage)>;
@@ -72,7 +73,8 @@ public:
 		QByteArray value,
 		WriteDone done);
 	void removeRecord(Storage::Cache::Key key, WriteDone done);
-	void resolveLocalDeleteThrough(DeleteThroughDone done);
+	[[nodiscard]] auto resolveLocalDeleteThrough()
+		-> std::shared_ptr<MessageArchiveDeleteBound>;
 	void removeMessage(FullMsgId id, WriteDone done);
 	void observeEdit(
 		not_null<const HistoryItem*> item,
@@ -90,29 +92,29 @@ public:
 		bool remove);
 	void applyLocalHistoryDeletion(
 		PeerId peer,
-		uint64 through,
+		const std::shared_ptr<MessageArchiveDeleteBound> &through,
 		bool remove);
 	void applyLocalDateDeletion(
 		PeerId peer,
 		TimeId minDate,
 		TimeId maxDate,
-		uint64 through,
+		const std::shared_ptr<MessageArchiveDeleteBound> &through,
 		bool remove);
 	void applyLocalParticipantDeletion(
 		PeerId peer,
 		PeerId from,
-		uint64 through,
+		const std::shared_ptr<MessageArchiveDeleteBound> &through,
 		bool remove);
 	void applyLocalTopicDeletion(
 		PeerId peer,
 		MsgId topicRootId,
-		uint64 through,
+		const std::shared_ptr<MessageArchiveDeleteBound> &through,
 		bool remove,
 		const std::vector<not_null<HistoryItem*>> &items);
 	void applyLocalSublistDeletion(
 		PeerId peer,
 		PeerId sublistPeer,
-		uint64 through,
+		const std::shared_ptr<MessageArchiveDeleteBound> &through,
 		bool remove,
 		const std::vector<not_null<HistoryItem*>> &items);
 
@@ -145,7 +147,8 @@ private:
 		const std::vector<not_null<HistoryItem*>> &items,
 		bool historyOnly);
 	void enqueueBoundedLocalDeleteJob(
-		MessageArchiveStorage::LocalDeleteJob job);
+		MessageArchiveStorage::LocalDeleteJob job,
+		const std::shared_ptr<MessageArchiveDeleteBound> &through);
 	void finishLocalDeleteState(
 		not_null<LocalDeleteState*> state,
 		bool continueQueue);

@@ -502,12 +502,12 @@ void SavedMessages::apply(const MTPDupdateSavedDialogPinned &update) {
 
 void SavedMessages::applySublistDeleted(
 		not_null<PeerData*> sublistPeer) {
-	applySublistDeleted(sublistPeer, 0, false, false);
+	applySublistDeleted(sublistPeer, nullptr, false, false);
 }
 
 void SavedMessages::applyLocalSublistDeleted(
 		not_null<PeerData*> sublistPeer,
-		uint64 archiveThrough,
+		const std::shared_ptr<MyOwnGram::MessageArchiveDeleteBound> &archiveThrough,
 		bool removeSavedHistory) {
 	applySublistDeleted(
 		sublistPeer,
@@ -518,7 +518,7 @@ void SavedMessages::applyLocalSublistDeleted(
 
 void SavedMessages::applySublistDeleted(
 		not_null<PeerData*> sublistPeer,
-		uint64 archiveThrough,
+		const std::shared_ptr<MyOwnGram::MessageArchiveDeleteBound> &archiveThrough,
 		bool locallyDeleted,
 		bool removeSavedHistory) {
 	const auto i = _sublists.find(sublistPeer);

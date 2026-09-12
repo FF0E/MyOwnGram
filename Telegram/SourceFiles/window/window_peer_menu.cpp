@@ -2211,38 +2211,19 @@ void PeerMenuDeleteTopic(
 		MsgId rootId) {
 	const auto removeSavedHistory
 		= MyOwnGram::MessageHistory::RemoveSavedHistoryOnDelete();
-	struct ArchiveState {
-		uint64 through = 0;
-		bool resolved = false;
-		bool finished = false;
-	};
-	const auto state = std::make_shared<ArchiveState>();
-	navigation->session().data().messageArchive().resolveLocalDeleteThrough(
-		[=](uint64 archiveThrough) {
-			state->through = archiveThrough;
-			state->resolved = true;
-			if (state->finished) {
-				peer->session().data().messageArchive()
-					.applyLocalTopicDeletion(
-						peer->id,
-						rootId,
-						archiveThrough,
-						removeSavedHistory,
-						{});
-			}
-		});
+	const auto archiveThrough
+		= navigation->session().data().messageArchive().resolveLocalDeleteThrough();
 	PeerMenuDeleteTopicRequest(peer, rootId, [=] {
-		state->finished = true;
 		if (const auto forum = peer->forum()) {
 			forum->applyLocalTopicDeleted(
 				rootId,
-				state->resolved ? state->through : uint64(0),
+				archiveThrough,
 				removeSavedHistory);
-		} else if (state->resolved) {
+		} else {
 			peer->session().data().messageArchive().applyLocalTopicDeletion(
 				peer->id,
 				rootId,
-				state->through,
+				archiveThrough,
 				removeSavedHistory,
 				{});
 		}

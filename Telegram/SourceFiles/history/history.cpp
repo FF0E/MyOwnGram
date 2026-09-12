@@ -740,7 +740,7 @@ void History::destroyMessagesByDates(
 
 void History::destroyMessagesByTopic(
 		MsgId topicRootId,
-		uint64 localDeleteThrough,
+		const std::shared_ptr<MyOwnGram::MessageArchiveDeleteBound> &localDeleteThrough,
 		bool locallyDeleted,
 		bool removeSavedHistory) {
 	auto toDestroy = std::vector<not_null<HistoryItem*>>();
@@ -768,7 +768,7 @@ void History::destroyMessagesByTopic(
 
 void History::destroyMessagesBySublist(
 		not_null<PeerData*> sublistPeer,
-		uint64 localDeleteThrough,
+		const std::shared_ptr<MyOwnGram::MessageArchiveDeleteBound> &localDeleteThrough,
 		bool locallyDeleted,
 		bool removeSavedHistory) {
 	auto toDestroy = std::vector<not_null<HistoryItem*>>();

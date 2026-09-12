@@ -933,15 +933,14 @@ void Histories::deleteMessagesByDates(
 		minDate,
 		maxDate,
 		removeSavedHistory);
-	session().data().messageArchive().resolveLocalDeleteThrough(
-		[=](uint64 archiveThrough) {
-			session().data().messageArchive().applyLocalDateDeletion(
-				history->peer->id,
-				minDate,
-				maxDate,
-				archiveThrough,
-				removeSavedHistory);
-		});
+	const auto archiveThrough
+		= session().data().messageArchive().resolveLocalDeleteThrough();
+	session().data().messageArchive().applyLocalDateDeletion(
+		history->peer->id,
+		minDate,
+		maxDate,
+		archiveThrough,
+		removeSavedHistory);
 	deleteMessagesByDatesSend(
 		history,
 		minDate,

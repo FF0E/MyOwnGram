@@ -28,6 +28,15 @@
 
 namespace MyOwnGram {
 
+// The sequence read and job mutation enter the account FIFO on the main
+// thread, but access the bound only from their database callbacks. A caller
+// may keep this handle across an RPC without reading its fields or waiting
+// for the read to complete. Queued work owns it through session shutdown.
+struct MessageArchiveDeleteBound {
+	Storage::Cache::Error error;
+	uint64 sequence = 0;
+};
+
 struct MessageArchive::IndexState {
 	[[nodiscard]] bool failed() const {
 		return invalid || error.type != Storage::Cache::Error::Type::None;
@@ -873,18 +882,12 @@ void MessageArchive::PageState::readTimeline() {
 				}
 				self->_target = uint64(id.msg.bare - 1);
 				if (result.exists) {
+					Assert(result.value.has_value());
 					++self->_visited;
-					const auto metadata = result.value
-						? &*result.value
-						: nullptr;
-					if (!metadata) {
-						LOG(("Message Archive Error: Could not parse timeline metadata."));
-					} else {
-						self->_result.entries.push_back({
-							.id = id,
-							.metadata = *metadata,
-						});
-					}
+					self->_result.entries.push_back({
+						.id = id,
+						.metadata = *result.value,
+					});
 				}
 				if (!self->_target) {
 					self->finish(Storage::Cache::Error::NoError(), true);
@@ -1123,6 +1126,11 @@ void MessageArchive::readTimelineMetadata(
 					= MessageArchiveStorage::ParseMessageTimelineMetadata(value);
 				if (parsed) {
 					result.value = parsed.value;
+				} else {
+					LOG(("Message Archive Error: Could not parse timeline metadata."));
+					result.error = Storage::Cache::Error{
+						.type = Storage::Cache::Error::Type::IO,
+					};
 				}
 			}
 			crl::on_main(
@@ -1343,29 +1351,42 @@ void MessageArchive::removeMessage(FullMsgId id, WriteDone done) {
 	}
 }
 
-void MessageArchive::resolveLocalDeleteThrough(DeleteThroughDone done) {
-	Expects(done != nullptr);
-
-	readRecord(
+auto MessageArchive::resolveLocalDeleteThrough()
+-> std::shared_ptr<MessageArchiveDeleteBound> {
+	if (_state == State::Closed && !_account->messageArchiveExists()) {
+		return nullptr;
+	}
+	auto &database = databaseForOperation();
+	const auto attempt = _openAttempt;
+	const auto through = std::make_shared<MessageArchiveDeleteBound>();
+	_account->readMessageArchiveRecord(
+		database,
 		MessageArchiveStorage::MessageArchiveSequenceKey(),
-		[done = std::move(done)](ReadResult result) mutable {
-			if (result.error.type != Storage::Cache::Error::Type::None) {
+		[attempt, through](QByteArray &&value) {
+			if (attempt
+				&& attempt->error.type != Storage::Cache::Error::Type::None) {
+				through->error = attempt->error;
 				LOG(("Message Archive Error: Could not read deletion bound."));
-				done(0);
 				return;
 			}
 			const auto parsed = MessageArchiveStorage::ParseMessageArchiveSequence(
-				result.value);
+				value);
 			if (!parsed) {
 				LOG(("Message Archive Error: Could not parse deletion bound."));
-				done(0);
+				through->error = Storage::Cache::Error{
+					.type = Storage::Cache::Error::Type::IO,
+				};
 			} else {
-				done(parsed.value);
+				through->sequence = parsed.value;
 			}
 		});
+	return through;
 }
 
-void MessageArchive::enqueueBoundedLocalDeleteJob(LocalDeleteJob job) {
+void MessageArchive::enqueueBoundedLocalDeleteJob(
+		LocalDeleteJob job,
+		const std::shared_ptr<MessageArchiveDeleteBound> &through) {
+	Expects(through != nullptr);
 	Expects(job.before > MsgId() && job.before <= ServerMaxMsgId);
 
 	auto &database = databaseForOperation();
@@ -1375,18 +1396,21 @@ void MessageArchive::enqueueBoundedLocalDeleteJob(LocalDeleteJob job) {
 	_account->mutateMessageArchiveRecord(
 		database,
 		MessageArchiveStorage::LocalDeleteJobsKey(),
-		[attempt, state, job](QByteArray &&serialized) {
-			if (attempt
-				&& attempt->error.type
-					!= Storage::Cache::Error::Type::None) {
+		[attempt, state, job, through](QByteArray &&serialized) mutable {
+			if ((attempt
+					&& attempt->error.type
+						!= Storage::Cache::Error::Type::None)
+				|| through->error.type != Storage::Cache::Error::Type::None
+				|| !through->sequence) {
 				return Storage::MessageArchiveRecordMutation();
 			}
+			job.throughSequence = through->sequence;
 			return EnqueueLocalDeleteJobMutation(
 				std::move(serialized),
 				job,
 				state->invalid);
 		},
-		[weak, attempt, state](Storage::Cache::Error error) mutable {
+		[weak, attempt, state, through](Storage::Cache::Error error) mutable {
 			if (attempt
 				&& attempt->error.type
 					!= Storage::Cache::Error::Type::None) {
@@ -1397,13 +1421,16 @@ void MessageArchive::enqueueBoundedLocalDeleteJob(LocalDeleteJob job) {
 					.type = Storage::Cache::Error::Type::IO,
 				};
 			}
-			crl::on_main(weak, [weak, error = std::move(error)] {
-				if (error.type != Storage::Cache::Error::Type::None) {
-					LOG(("Message Archive Error: Could not queue local deletion."));
-				} else {
+			if (through->error.type != Storage::Cache::Error::Type::None) {
+				error = through->error;
+			}
+			if (error.type != Storage::Cache::Error::Type::None) {
+				LOG(("Message Archive Error: Could not queue local deletion."));
+			} else if (through->sequence) {
+				crl::on_main(weak, [weak] {
 					weak->startLocalDeleteJobs();
-				}
-			});
+				});
+			}
 		});
 }
 
@@ -1502,7 +1529,7 @@ void MessageArchive::applyLocalMessageDeletion(
 
 void MessageArchive::applyLocalHistoryDeletion(
 		PeerId peer,
-		uint64 through,
+		const std::shared_ptr<MessageArchiveDeleteBound> &through,
 		bool remove) {
 	Expects(MessageArchiveStorage::IsValidArchivePeerId(peer));
 
@@ -1510,12 +1537,12 @@ void MessageArchive::applyLocalHistoryDeletion(
 		enqueueBoundedLocalDeleteJob({
 			.peer = peer,
 			.before = ServerMaxMsgId,
-			.throughSequence = through,
 			.action = remove
 				? LocalDeleteAction::Remove
 				: LocalDeleteAction::HistoryOnly,
 			.scope = LocalDeleteScope::All,
-		});
+		},
+		through);
 	}
 }
 
@@ -1523,7 +1550,7 @@ void MessageArchive::applyLocalDateDeletion(
 		PeerId peer,
 		TimeId minDate,
 		TimeId maxDate,
-		uint64 through,
+		const std::shared_ptr<MessageArchiveDeleteBound> &through,
 		bool remove) {
 	Expects(MessageArchiveStorage::IsValidArchivePeerId(peer));
 	Expects(minDate < maxDate);
@@ -1532,21 +1559,21 @@ void MessageArchive::applyLocalDateDeletion(
 		enqueueBoundedLocalDeleteJob({
 			.peer = peer,
 			.before = ServerMaxMsgId,
-			.throughSequence = through,
 			.minDate = minDate,
 			.maxDate = maxDate,
 			.action = remove
 				? LocalDeleteAction::Remove
 				: LocalDeleteAction::HistoryOnly,
 			.scope = LocalDeleteScope::Dates,
-		});
+		},
+		through);
 	}
 }
 
 void MessageArchive::applyLocalParticipantDeletion(
 		PeerId peer,
 		PeerId from,
-		uint64 through,
+		const std::shared_ptr<MessageArchiveDeleteBound> &through,
 		bool remove) {
 	Expects(MessageArchiveStorage::IsValidArchivePeerId(peer));
 	Expects(MessageArchiveStorage::IsValidArchivePeerId(from));
@@ -1556,19 +1583,19 @@ void MessageArchive::applyLocalParticipantDeletion(
 			.peer = peer,
 			.from = from,
 			.before = ServerMaxMsgId,
-			.throughSequence = through,
 			.action = remove
 				? LocalDeleteAction::Remove
 				: LocalDeleteAction::HistoryOnly,
 			.scope = LocalDeleteScope::Participant,
-		});
+		},
+		through);
 	}
 }
 
 void MessageArchive::applyLocalTopicDeletion(
 		PeerId peer,
 		MsgId topicRootId,
-		uint64 through,
+		const std::shared_ptr<MessageArchiveDeleteBound> &through,
 		bool remove,
 		const std::vector<not_null<HistoryItem*>> &items) {
 	Expects(MessageArchiveStorage::IsValidArchivePeerId(peer));
@@ -1579,12 +1606,12 @@ void MessageArchive::applyLocalTopicDeletion(
 			.peer = peer,
 			.before = ServerMaxMsgId,
 			.topicRootId = topicRootId,
-			.throughSequence = through,
 			.action = remove
 				? LocalDeleteAction::Remove
 				: LocalDeleteAction::HistoryOnly,
 			.scope = LocalDeleteScope::Topic,
-		});
+		},
+		through);
 	}
 	applyLocalMessageDeletion(items, remove);
 }
@@ -1592,7 +1619,7 @@ void MessageArchive::applyLocalTopicDeletion(
 void MessageArchive::applyLocalSublistDeletion(
 		PeerId peer,
 		PeerId sublistPeer,
-		uint64 through,
+		const std::shared_ptr<MessageArchiveDeleteBound> &through,
 		bool remove,
 		const std::vector<not_null<HistoryItem*>> &items) {
 	Expects(MessageArchiveStorage::IsValidArchivePeerId(peer));
@@ -1603,12 +1630,12 @@ void MessageArchive::applyLocalSublistDeletion(
 			.peer = peer,
 			.sublistPeer = sublistPeer,
 			.before = ServerMaxMsgId,
-			.throughSequence = through,
 			.action = remove
 				? LocalDeleteAction::Remove
 				: LocalDeleteAction::HistoryOnly,
 			.scope = LocalDeleteScope::Sublist,
-		});
+		},
+		through);
 	}
 	applyLocalMessageDeletion(items, remove);
 }

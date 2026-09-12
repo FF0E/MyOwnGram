@@ -205,12 +205,12 @@ void Forum::requestTopics() {
 }
 
 void Forum::applyTopicDeleted(MsgId rootId) {
-	applyTopicDeleted(rootId, 0, false, false);
+	applyTopicDeleted(rootId, nullptr, false, false);
 }
 
 void Forum::applyLocalTopicDeleted(
 		MsgId rootId,
-		uint64 archiveThrough,
+		const std::shared_ptr<MyOwnGram::MessageArchiveDeleteBound> &archiveThrough,
 		bool removeSavedHistory) {
 	applyTopicDeleted(
 		rootId,
@@ -221,7 +221,7 @@ void Forum::applyLocalTopicDeleted(
 
 void Forum::applyTopicDeleted(
 		MsgId rootId,
-		uint64 archiveThrough,
+		const std::shared_ptr<MyOwnGram::MessageArchiveDeleteBound> &archiveThrough,
 		bool locallyDeleted,
 		bool removeSavedHistory) {
 	_topicsDeleted.emplace(rootId);
