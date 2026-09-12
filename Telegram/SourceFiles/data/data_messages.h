@@ -29,7 +29,18 @@ struct MessagePosition {
 		} else if (other.date < date) {
 			return false;
 		}
-		return (fullId < other.fullId);
+		if (fullId.peer != other.fullId.peer) {
+			return fullId.peer < other.fullId.peer;
+		} else if (IsClientMsgId(fullId.msg) != IsClientMsgId(other.fullId.msg)) {
+			return !IsClientMsgId(fullId.msg);
+		}
+		const auto id = IsArchivedMsgId(fullId.msg)
+			? OriginalMsgId(fullId.msg)
+			: fullId.msg;
+		const auto otherId = IsArchivedMsgId(other.fullId.msg)
+			? OriginalMsgId(other.fullId.msg)
+			: other.fullId.msg;
+		return (id != otherId) ? (id < otherId) : (fullId < other.fullId);
 	}
 	inline constexpr bool operator>(const MessagePosition &other) const {
 		return other < *this;

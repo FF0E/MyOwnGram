@@ -39,6 +39,9 @@ QString MessageAccessibilityName(
 
 	QStringList lines;
 
+	if (IsArchivedMsgId(item->id)) {
+		lines.push_back(tr::lng_myowngram_message_deleted_accessible(tr::now));
+	}
 	if (item->out()) {
 		lines.push_back(item->unread(history)
 			? tr::lng_sr_message_not_seen(tr::now)

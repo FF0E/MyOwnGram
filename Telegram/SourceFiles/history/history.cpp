@@ -225,7 +225,7 @@ void History::itemRemoved(not_null<HistoryItem*> item) {
 	}
 	checkChatListMessageRemoved(item);
 	itemVanished(item);
-	if (IsClientMsgId(item->id)) {
+	if (IsClientMsgId(item->id) || IsArchivedMsgId(item->id)) {
 		unregisterClientSideMessage(item);
 	}
 	if (const auto topic = item->topic()) {
@@ -721,7 +721,7 @@ void History::destroyMessagesByDates(
 	auto toDestroy = std::vector<not_null<HistoryItem*>>();
 	toDestroy.reserve(_items.size());
 	for (const auto &message : _items) {
-		if (message->isRegular()
+		if ((message->isRegular() || IsArchivedMsgId(message->id))
 			&& message->date() > minDate
 			&& message->date() < maxDate) {
 			toDestroy.push_back(message.get());
@@ -955,6 +955,34 @@ not_null<HistoryItem*> History::addNewLocalMessage(
 	Expects(item->isLocal());
 
 	return addNewItem(item, true);
+}
+
+not_null<HistoryItem*> History::addArchivedMessage(
+		HistoryItemCommonFields &&fields,
+		const TextWithEntities &text,
+		TimeId editDate,
+		bool displayInline) {
+	Expects(IsArchivedMsgId(fields.id));
+	Expects(!(fields.flags & MessageFlag::Outgoing));
+
+	if (const auto existing = owner().message(peer->id, fields.id)) {
+		return existing;
+	}
+	const auto item = makeMessage(
+		WithLocalFlag(std::move(fields)),
+		text,
+		MTP_messageMediaEmpty());
+	if (editDate) {
+		item->AddComponents(HistoryMessageEdited::Bit());
+		item->Get<HistoryMessageEdited>()->date = editDate;
+	}
+	if (displayInline) {
+		insertMessageToBlocks(item);
+	} else {
+		checkLocalMessages();
+	}
+	owner().notifyHistoryChangeDelayed(this);
+	return item;
 }
 
 not_null<HistoryItem*> History::addSponsoredMessage(
@@ -1759,7 +1787,7 @@ void History::newItemAdded(not_null<HistoryItem*> item, NewAddType type) {
 
 void History::registerClientSideMessage(not_null<HistoryItem*> item) {
 	Expects(item->isHistoryEntry());
-	Expects(IsClientMsgId(item->id));
+	Expects(IsClientMsgId(item->id) || IsArchivedMsgId(item->id));
 
 	_clientSideMessages.emplace(item);
 	session().changes().historyUpdated(this, UpdateFlag::ClientSideMessages);
@@ -2284,7 +2312,18 @@ MsgId History::outboxReadTillId() const {
 }
 
 HistoryItem *History::lastAvailableMessage() const {
-	return isEmpty() ? nullptr : blocks.back()->messages.back()->data().get();
+	// ponytail: Chat-list fallback scans past retained rows in O(n).
+	// Repeated removals can reach O(n^2) in an archive-heavy tail.
+	// Cache the non-archived tail if this becomes costly for large chats,
+	// invalidating it whenever block membership changes.
+	for (const auto &block : ranges::views::reverse(blocks)) {
+		for (const auto &view : ranges::views::reverse(block->messages)) {
+			if (!IsArchivedMsgId(view->data()->id)) {
+				return view->data();
+			}
+		}
+	}
+	return nullptr;
 }
 
 int History::unreadCount() const {
@@ -4165,7 +4204,12 @@ void History::insertMessageToBlocks(not_null<HistoryItem*> item) {
 	Expects(item->mainView() == nullptr);
 
 	if (isEmpty()) {
-		addNewToBack(item, false);
+		if (IsArchivedMsgId(item->id)) {
+			addItemToBlock(item);
+			owner().notifyHistoryChangeDelayed(this);
+		} else {
+			addNewToBack(item, false);
+		}
 		return;
 	}
 
@@ -4173,11 +4217,17 @@ void History::insertMessageToBlocks(not_null<HistoryItem*> item) {
 	for (auto blockIndex = blocks.size(); blockIndex > 0;) {
 		const auto &block = blocks[--blockIndex];
 		for (auto itemIndex = block->messages.size(); itemIndex > 0;) {
-			if (block->messages[--itemIndex]->data()->date() <= itemDate) {
+			const auto check = block->messages[--itemIndex]->data();
+			const auto ordered = (IsArchivedMsgId(item->id)
+				|| IsArchivedMsgId(check->id))
+				? (check->position() < item->position())
+				: (check->date() <= itemDate);
+			if (ordered) {
 				++itemIndex;
 				addNewInTheMiddle(item, blockIndex, itemIndex);
 				const auto lastDate = chatListTimeId();
-				if (!lastDate || itemDate >= lastDate) {
+				if (!IsArchivedMsgId(item->id)
+					&& (!lastDate || itemDate >= lastDate)) {
 					setLastMessage(item);
 					owner().notifyHistoryChangeDelayed(this);
 				}
@@ -4375,7 +4425,7 @@ auto History::collectMessagesForLocalDeletion() const
 	auto result = std::vector<not_null<HistoryItem*>>();
 	result.reserve(_items.size());
 	for (const auto &item : _items) {
-		if (item->isRegular()) {
+		if (item->isRegular() || IsArchivedMsgId(item->id)) {
 			result.push_back(item.get());
 		}
 	}
@@ -4385,12 +4435,9 @@ auto History::collectMessagesForLocalDeletion() const
 std::vector<MsgId> History::collectMessagesFromParticipantToDelete(
 		not_null<PeerData*> participant) const {
 	auto result = std::vector<MsgId>();
-	for (const auto &block : blocks) {
-		for (const auto &message : block->messages) {
-			const auto item = message->data();
-			if (item->from() == participant && item->canDelete()) {
-				result.push_back(item->id);
-			}
+	for (const auto &item : _items) {
+		if (item->from() == participant && item->canDelete()) {
+			result.push_back(item->id);
 		}
 	}
 	return result;

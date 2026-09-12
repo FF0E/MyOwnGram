@@ -6,6 +6,8 @@
 //
 #include "myowngram/message_archive_snapshot.h"
 
+#include "data/data_peer.h"
+#include "history/history.h"
 #include "history/history_item.h"
 #include "history/history_item_components.h"
 #include "myowngram/message_archive_deletion.h"
@@ -454,6 +456,52 @@ std::optional<MessageSnapshot> MakeDeletedMessageSnapshot(
 		(edited && edited->date) ? edited->date : item->date(),
 		*deletion,
 		*engagement);
+}
+
+void RestoreDeletedTextMessage(
+		not_null<History*> history,
+		MsgId originalId,
+		const MessageSnapshot &snapshot,
+		bool displayInline) {
+	Expects(IsServerMsgId(originalId));
+
+	if (snapshot.service
+		|| snapshot.text.text.isEmpty()
+		|| !snapshot.replyMarkup.isEmpty()
+		|| history->peer->forum()
+		|| history->peer->isMonoforum()) {
+		return;
+	}
+	const auto media = ParseMessageMediaVisible(snapshot.media);
+	const auto support = ParseMessageSnapshotSupport(snapshot.support);
+	if (!media
+		|| media.value.type != MessageMediaType::None
+		|| !support
+		|| !support.value.media.isEmpty()
+		|| !support.value.replyMarkup.isEmpty()) {
+		return;
+	}
+	const auto context = ParseDeletedMessageContext(support.value.deletion);
+	const auto engagement = ParseDeletedMessageEngagement(
+		support.value.engagement);
+	if (!context
+		|| context.value.post
+		|| context.value.groupedId
+		|| !engagement
+		|| engagement.value != DeletedMessageEngagement()) {
+		return;
+	}
+	history->addArchivedMessage({
+		.id = ArchivedMsgId(originalId),
+		.flags = MessageFlag::HasFromId
+			| (context.value.noForwards ? MessageFlag::NoForwards : MessageFlag())
+			| (context.value.hideEdited ? MessageFlag::HideEdited : MessageFlag()),
+		.from = context.value.from,
+		.date = context.value.date,
+	},
+	snapshot.text,
+	context.value.editDate,
+	displayInline);
 }
 
 #ifdef _DEBUG

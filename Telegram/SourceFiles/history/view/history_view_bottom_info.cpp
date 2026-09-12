@@ -150,7 +150,7 @@ int BottomInfo::firstLineWidth() const {
 }
 
 bool BottomInfo::isWide() const {
-	return (_data.flags & Data::Flag::Edited)
+	return (_data.flags & (Data::Flag::Edited | Data::Flag::Archived))
 		|| _data.scheduleRepeatPeriod
 		|| !_data.author.isEmpty()
 		|| !_views.isEmpty()
@@ -495,11 +495,14 @@ void BottomInfo::layoutDateText() {
 		: QString();
 	const auto author = _data.author;
 	const auto prefix = !author.isEmpty() ? u", "_q : QString();
-	const auto date = editedPrimary
+	const auto archived = (_data.flags & Data::Flag::Archived)
+		? tr::lng_myowngram_message_deleted(tr::now) + ' '
+		: QString();
+	const auto date = archived + (editedPrimary
 		? FormatEditedDate(_data.date, _data.editedDate)
 		: edited + ((_data.flags & Data::Flag::ForwardedDate)
 		? Ui::FormatDateTimeSavedFrom(_data.date)
-		: QLocale().toString(_data.date.time(), QLocale::ShortFormat));
+		: QLocale().toString(_data.date.time(), QLocale::ShortFormat)));
 	const auto afterAuthor = prefix + date;
 	const auto afterAuthorWidth = st::msgDateFont->width(afterAuthor);
 	const auto authorWidth = st::msgDateFont->width(author);
@@ -659,6 +662,9 @@ BottomInfo::Data BottomInfoDataFromMessage(not_null<Message*> message) {
 	auto result = BottomInfo::Data();
 	result.date = message->dateTime();
 	result.effectId = item->effectId();
+	if (IsArchivedMsgId(item->id)) {
+		result.flags |= Flag::Archived;
+	}
 	if (message->hasOutLayout()) {
 		result.flags |= Flag::OutLayout;
 	}

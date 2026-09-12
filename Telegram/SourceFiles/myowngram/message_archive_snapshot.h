@@ -8,6 +8,7 @@
 
 #include "myowngram/message_archive_timeline.h"
 
+class History;
 class HistoryItem;
 
 namespace MyOwnGram::MessageArchiveStorage {
@@ -71,6 +72,12 @@ struct ParsedMessageSnapshotSupport {
 	not_null<const HistoryItem*> item);
 [[nodiscard]] std::optional<MessageSnapshot> MakeDeletedMessageSnapshot(
 	not_null<const HistoryItem*> item);
+
+void RestoreDeletedTextMessage(
+	not_null<History*> history,
+	MsgId originalId,
+	const MessageSnapshot &snapshot,
+	bool displayInline);
 
 #ifdef _DEBUG
 void ValidateMessageSnapshotFormat();

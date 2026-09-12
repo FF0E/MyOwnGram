@@ -34,7 +34,16 @@ void AppendClientSideMessages(
 		for (const auto &item : messages) {
 			slice.ids.push_back(item->fullId());
 		}
-		ranges::sort(slice.ids);
+		const auto archived = ranges::any_of(slice.ids, [](FullMsgId id) {
+			return IsArchivedMsgId(id.msg);
+		});
+		if (archived) {
+			ranges::sort(slice.ids, ranges::less(), [&](FullMsgId id) {
+				return history->owner().message(id)->position();
+			});
+		} else {
+			ranges::sort(slice.ids);
+		}
 		return;
 	}
 	auto &owner = history->owner();
@@ -46,7 +55,29 @@ void AppendClientSideMessages(
 
 		dates.push_back(message->date());
 	}
+	const auto first = MessagePosition{
+		.fullId = slice.ids.front(),
+		.date = dates.front(),
+	};
+	const auto last = MessagePosition{
+		.fullId = slice.ids.back(),
+		.date = dates.back(),
+	};
 	for (const auto &item : messages) {
+		if (IsArchivedMsgId(item->id)) {
+			const auto position = item->position();
+			const auto skipped = (position < first)
+				? &slice.skippedBefore
+				: (position > last)
+				? &slice.skippedAfter
+				: nullptr;
+			if (skipped && *skipped != 0) {
+				if (*skipped) {
+					++**skipped;
+				}
+				continue;
+			}
+		}
 		const auto date = item->date();
 		if (date < dates.front()) {
 			if (slice.skippedBefore != 0) {
@@ -61,11 +92,15 @@ void AppendClientSideMessages(
 			auto to = dates.size();
 			for (; to != 0; --to) {
 				const auto checkId = slice.ids[to - 1].msg;
-				if (dates[to - 1] > date) {
-					continue;
-				} else if (dates[to - 1] < date
-					|| IsServerMsgId(checkId)
-					|| checkId < item->id) {
+				const auto before = (IsArchivedMsgId(checkId)
+					|| IsArchivedMsgId(item->id))
+					? (MessagePosition{
+						.fullId = slice.ids[to - 1],
+						.date = dates[to - 1],
+					} < item->position())
+					: (IsServerMsgId(checkId) || checkId < item->id);
+				if (dates[to - 1] < date
+					|| (dates[to - 1] == date && before)) {
 					break;
 				}
 			}

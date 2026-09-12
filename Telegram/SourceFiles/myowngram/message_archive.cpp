@@ -10,9 +10,11 @@
 #include "data/data_document.h"
 #include "data/data_media.h"
 #include "data/data_peer.h"
+#include "data/data_session.h"
 #include "history/history.h"
 #include "history/history_item.h"
 #include "lang/lang_keys.h"
+#include "main/main_session.h"
 #include "myowngram/message_archive_cleanup.h"
 #include "myowngram/message_archive_deletion.h"
 #include "myowngram/message_archive_engagement.h"
@@ -31,12 +33,21 @@
 namespace MyOwnGram {
 
 // The sequence read and job mutation enter the account FIFO on the main
-// thread, but access the bound only from their database callbacks. A caller
-// may keep this handle across an RPC without reading its fields or waiting
-// for the read to complete. Queued work owns it through session shutdown.
+// thread; error and sequence are accessed only from database callbacks.
+// Pending restorations are captured and inspected on the main thread.
+// RPCs may retain this handle; queued work owns it through shutdown.
 struct MessageArchiveDeleteBound {
 	Storage::Cache::Error error;
 	uint64 sequence = 0;
+	std::vector<std::weak_ptr<MessageArchiveRestore>> pendingRestores;
+};
+
+struct MessageArchiveRestore {
+	FullMsgId id;
+	MessageArchiveStorage::MessageTimelineOrigin origin;
+	bool cancelled = false;
+	bool displayInline = false;
+	rpl::lifetime lifetime;
 };
 
 struct MessageArchive::IndexState {
@@ -929,8 +940,9 @@ void MessageArchive::PageState::finish(
 	done(std::move(_result));
 }
 
-MessageArchive::MessageArchive(not_null<Storage::Account*> account)
-: _account(account) {
+MessageArchive::MessageArchive(not_null<Data::Session*> owner)
+: _owner(owner)
+, _account(&owner->session().local()) {
 #ifdef _DEBUG
 	MessageArchiveStorage::ValidateLocalDeleteJobsFormat();
 	ValidateLocalDeleteJobMutations();
@@ -1252,6 +1264,7 @@ void MessageArchive::removeMessage(FullMsgId id, WriteDone done) {
 	Expects(IsServerMsgId(id.msg));
 	Expects(done != nullptr);
 
+	removeInlineMessage(id);
 	const auto weak = base::make_weak(this);
 	if (_state == State::Closed && !_account->messageArchiveExists()) {
 		crl::on_main(
@@ -1361,6 +1374,9 @@ auto MessageArchive::resolveLocalDeleteThrough()
 	auto &database = databaseForOperation();
 	const auto attempt = _openAttempt;
 	const auto through = std::make_shared<MessageArchiveDeleteBound>();
+	for (const auto &[id, pending] : _pendingRestores) {
+		through->pendingRestores.push_back(pending);
+	}
 	_account->readMessageArchiveRecord(
 		database,
 		MessageArchiveStorage::MessageArchiveSequenceKey(),
@@ -1391,6 +1407,18 @@ void MessageArchive::enqueueBoundedLocalDeleteJob(
 	Expects(through != nullptr);
 	Expects(job.before > MsgId() && job.before <= ServerMaxMsgId);
 
+	// These readers and their timeline writes were queued before the bound
+	// read. Their pending origins have no assigned sequence on the main
+	// thread yet, but are already inside this action's FIFO boundary.
+	// Only these captured tokens are cancelled, not later restoration work.
+	for (const auto &weak : through->pendingRestores) {
+		if (const auto pending = weak.lock()) {
+			if (pending->id.peer == job.peer
+				&& MatchesLocalDeleteJob(job, { .origin = pending->origin })) {
+				pending->cancelled = true;
+			}
+		}
+	}
 	auto &database = databaseForOperation();
 	const auto attempt = _openAttempt;
 	const auto state = std::make_shared<MutationState>();
@@ -1510,7 +1538,7 @@ void MessageArchive::applyLocalMessageDeletion(
 	auto ids = std::vector<FullMsgId>();
 	ids.reserve(items.size());
 	for (const auto &item : items) {
-		if (item->isRegular()) {
+		if (item->isRegular() || IsArchivedMsgId(item->id)) {
 			ids.push_back(item->fullId());
 		}
 	}
@@ -1520,7 +1548,10 @@ void MessageArchive::applyLocalMessageDeletion(
 void MessageArchive::applyLocalMessageDeletion(
 		const std::vector<FullMsgId> &ids,
 		bool remove) {
-	for (const auto &id : ids) {
+	for (auto id : ids) {
+		if (IsArchivedMsgId(id.msg)) {
+			id.msg = OriginalMsgId(id.msg);
+		}
 		if (remove) {
 			removeMessage(id, [](Storage::Cache::Error) {});
 		} else {
@@ -1767,13 +1798,85 @@ void MessageArchive::captureDeletions(
 			if (const auto document = media ? media->document() : nullptr) {
 				document->keepDownloadOnMessageRemoval();
 			}
+			const auto restore = !historyOnly && !item->media();
+			auto expected = restore ? *snapshot : MessageSnapshot();
 			observeDeletion(
 				item->fullId(),
 				*origin,
 				std::move(*snapshot),
 				historyOnly);
+			if (restore) {
+				restoreDeletedMessage(item, *origin, std::move(expected));
+			}
 		}
 	}
+}
+
+void MessageArchive::restoreDeletedMessage(
+		not_null<HistoryItem*> item,
+		MessageTimelineOrigin origin,
+		MessageSnapshot expected) {
+	const auto id = item->fullId();
+	const auto state = std::make_shared<MessageArchiveRestore>();
+	state->id = id;
+	state->origin = origin;
+	state->displayInline = (item->mainView() != nullptr);
+	_pendingRestores[id] = state;
+	_owner->historyUnloaded() | rpl::on_next([state = state.get()](
+			not_null<History*> history) {
+		if (history->peer->id == state->id.peer) {
+			state->displayInline = false;
+		}
+	}, state->lifetime);
+	readTimeline(id, [=, this, expected = std::move(expected)](
+			TimelineReadResult result) {
+		restoreDeletedMessageDone(state, expected, std::move(result));
+	});
+}
+
+void MessageArchive::restoreDeletedMessageDone(
+		const std::shared_ptr<MessageArchiveRestore> &state,
+		const MessageSnapshot &expected,
+		TimelineReadResult result) {
+	const auto id = state->id;
+	const auto i = _pendingRestores.find(id);
+	if (i == _pendingRestores.end() || i->second != state) {
+		return;
+	}
+	_pendingRestores.erase(i);
+	if (state->cancelled
+		|| _owner->message(id)
+		|| !result.value
+		|| result.value->flags != MessageTimelineFlag::Deleted
+		|| result.value->versions.empty()) {
+		return;
+	}
+	const auto &saved = result.value->versions.back();
+	if (!MessageArchiveStorage::SameVisibleContent(expected, saved)
+		|| expected.support != saved.support) {
+		return;
+	}
+	if (const auto history = _owner->historyLoaded(id.peer)) {
+		MessageArchiveStorage::RestoreDeletedTextMessage(
+			history,
+			id.msg,
+			saved,
+			state->displayInline);
+	}
+}
+
+void MessageArchive::removeInlineMessage(FullMsgId id) {
+	const auto i = _pendingRestores.find(id);
+	if (i != _pendingRestores.end()) {
+		i->second->cancelled = true;
+		_pendingRestores.erase(i);
+	}
+	crl::on_main(base::make_weak(this), [=, this] {
+		if (const auto local = _owner->message(id.peer, ArchivedMsgId(id.msg))) {
+			_owner->notifyItemsAboutToBeDestroyed({ local });
+			local->destroy();
+		}
+	});
 }
 
 void MessageArchive::markHistoryOnly(FullMsgId id, WriteDone done) {
@@ -1781,6 +1884,7 @@ void MessageArchive::markHistoryOnly(FullMsgId id, WriteDone done) {
 	Expects(IsServerMsgId(id.msg));
 	Expects(done != nullptr);
 
+	removeInlineMessage(id);
 	const auto weak = base::make_weak(this);
 	if (_state == State::Closed && !_account->messageArchiveExists()) {
 		crl::on_main(

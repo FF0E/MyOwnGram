@@ -8730,4 +8730,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_sponsored_click_reports" = "Send sponsored click confirmations";
 "lng_myowngram_sponsored_reporting_about" = "These controls apply to every account on this installation. The When shown and visible option uses Telegram's normal on-screen checks and only applies to ads set to Show normally. Random mode selects 75% of received ads for a view confirmation after a random 1–30 second delay, whether or not they become visible. Blocking sponsored destinations also prevents their click confirmations.";
 
+"lng_myowngram_message_deleted" = "deleted";
+"lng_myowngram_message_deleted_accessible" = "Deleted message saved locally";
+
 // Keys finished

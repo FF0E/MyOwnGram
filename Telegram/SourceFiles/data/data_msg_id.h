@@ -83,6 +83,8 @@ constexpr auto ServerMaxStoryId = StoryId(1 << 30);
 constexpr auto StoryMsgIds = int64(ServerMaxStoryId);
 constexpr auto EndStoryMsgId = MsgId(StartStoryMsgId.bare + StoryMsgIds);
 constexpr auto ServerMaxMsgId = MsgId(1LL << 56);
+constexpr auto StartArchivedMsgId = MsgId(-(3LL << 56));
+constexpr auto EndArchivedMsgId = StartArchivedMsgId + ServerMaxMsgId;
 constexpr auto ScheduledMaxMsgId = MsgId(ServerMaxMsgId + (1LL << 32));
 constexpr auto ShortcutMaxMsgId = MsgId(ScheduledMaxMsgId + (1LL << 32));
 constexpr auto ShowAtUnreadMsgId = MsgId(0);
@@ -129,6 +131,25 @@ static_assert(-(SpecialMsgIdShift + 0xFF) > ServerMaxMsgId);
 [[nodiscard]] constexpr inline bool IsServerMsgId(MsgId id) noexcept {
 	return (id > 0 && id < ServerMaxMsgId);
 }
+
+[[nodiscard]] constexpr inline bool IsArchivedMsgId(MsgId id) noexcept {
+	return (id > StartArchivedMsgId && id < EndArchivedMsgId);
+}
+
+[[nodiscard]] constexpr inline MsgId ArchivedMsgId(MsgId original) noexcept {
+	Expects(IsServerMsgId(original));
+
+	return StartArchivedMsgId + original;
+}
+
+[[nodiscard]] constexpr inline MsgId OriginalMsgId(MsgId archived) noexcept {
+	Expects(IsArchivedMsgId(archived));
+
+	return archived - StartArchivedMsgId;
+}
+
+static_assert(SpecialMsgIdShift + 0xFF < StartArchivedMsgId);
+static_assert(-EndArchivedMsgId >= ShortcutMaxMsgId);
 
 struct MsgRange {
 	constexpr MsgRange() noexcept = default;

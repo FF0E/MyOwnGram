@@ -35,6 +35,7 @@ ParsedDeletedMessageContext ParseFailure(ParseError error) {
 bool GoodContext(const DeletedMessageContext &context) {
 	return IsValidArchivePeerId(context.from)
 		&& context.date > 0
+		&& context.editDate >= 0
 		&& (!context.authorHidden || context.post);
 }
 
@@ -69,6 +70,7 @@ void CheckDeletedMessageContextFormat() {
 	const auto context = DeletedMessageContext{
 		.from = peerFromUser(UserId(123)),
 		.date = 456,
+		.editDate = 456,
 		.groupedId = 789,
 		.post = true,
 		.authorHidden = true,
@@ -93,6 +95,12 @@ void CheckDeletedMessageContextFormat() {
 	invalid = context;
 	invalid.post = false;
 	Assert(!SerializeDeletedMessageContext(invalid));
+	invalid = context;
+	invalid.editDate = -1;
+	Assert(!SerializeDeletedMessageContext(invalid));
+	invalid.editDate = 0;
+	const auto unedited = SerializeDeletedMessageContext(invalid);
+	Assert(unedited && ParseDeletedMessageContext(*unedited).value == invalid);
 
 	const auto record = ParseRecord(
 		*serialized,
@@ -100,7 +108,7 @@ void CheckDeletedMessageContextFormat() {
 		kDeletedMessageContextVersion);
 	Assert(record);
 	auto payload = record.payload;
-	payload[sizeof(quint64) + sizeof(qint64) + sizeof(quint64)] = char(255);
+	payload[payload.size() - 1] = char(255);
 	const auto unknownFlags = SerializeRecord(
 		RecordType::DeletedMessageContext,
 		kDeletedMessageContextVersion,
@@ -117,6 +125,7 @@ void CheckDeletedMessageContextFormat() {
 	unknownPeerStream
 		<< quint64((uint64(UserId::kReservedBit | 3) << 48) | 123)
 		<< qint64(context.date)
+		<< qint64(context.editDate)
 		<< quint64(context.groupedId)
 		<< ContextFlags(context);
 	Assert(unknownPeerStream.status() == QDataStream::Ok);
@@ -148,6 +157,7 @@ std::optional<QByteArray> SerializeDeletedMessageContext(
 	stream
 		<< quint64(*from)
 		<< qint64(context.date)
+		<< qint64(context.editDate)
 		<< quint64(context.groupedId)
 		<< ContextFlags(context);
 	if (stream.status() != QDataStream::Ok) {
@@ -164,9 +174,11 @@ std::optional<QByteArray> SerializeDeletedMessageContext(
 	if (HasUnsupportedContext(item)) {
 		return std::nullopt;
 	}
+	const auto edited = item->Get<HistoryMessageEdited>();
 	return SerializeDeletedMessageContext({
 		.from = item->from()->id,
 		.date = item->date(),
+		.editDate = edited ? edited->date : 0,
 		.groupedId = item->groupId().raw(),
 		.post = item->isPost(),
 		.authorHidden = item->isPostHidingAuthor(),
@@ -189,20 +201,24 @@ ParsedDeletedMessageContext ParseDeletedMessageContext(
 	stream.setByteOrder(QDataStream::BigEndian);
 	auto from = quint64();
 	auto date = qint64();
+	auto editDate = qint64();
 	auto groupedId = quint64();
 	auto flags = quint8();
-	stream >> from >> date >> groupedId >> flags;
+	stream >> from >> date >> editDate >> groupedId >> flags;
 	const auto fromId = DeserializeArchivePeerId(from);
 	if (stream.status() != QDataStream::Ok
 		|| (flags & ~kKnownFlags)
 		|| date <= 0
 		|| date > std::numeric_limits<TimeId>::max()
+		|| editDate < 0
+		|| editDate > std::numeric_limits<TimeId>::max()
 		|| !fromId) {
 		return ParseFailure(ParseError::Corrupt);
 	}
 	auto result = DeletedMessageContext{
 		.from = *fromId,
 		.date = TimeId(date),
+		.editDate = TimeId(editDate),
 		.groupedId = groupedId,
 		.post = (flags & kFlagPost) != 0,
 		.authorHidden = (flags & kFlagAuthorHidden) != 0,

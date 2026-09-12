@@ -235,8 +235,7 @@ Session::Session(not_null<Main::Session*> session)
 , _bigFileCache(Core::App().databases().get(
 	_session->local().cacheBigFilePath(),
 	_session->local().cacheBigFileSettings()))
-, _messageArchive(std::make_unique<MyOwnGram::MessageArchive>(
-	&_session->local()))
+, _messageArchive(std::make_unique<MyOwnGram::MessageArchive>(this))
 , _groupFreeTranscribeLevel(session->appConfig().value(
 ) | rpl::map([limits = Data::LevelLimits(session)] {
 	return limits.groupTranscribeLevelMin();

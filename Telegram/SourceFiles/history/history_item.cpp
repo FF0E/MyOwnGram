@@ -875,7 +875,7 @@ HistoryItem::HistoryItem(
 		|| isSending()
 		|| _history->owner().shortcutMessages().lookupId(this));
 
-	if (isHistoryEntry() && IsClientMsgId(id)) {
+	if (isHistoryEntry() && (IsClientMsgId(id) || IsArchivedMsgId(id))) {
 		_history->registerClientSideMessage(this);
 	}
 	if (_effectId) {
@@ -3104,7 +3104,9 @@ bool HistoryItem::forbidsSaving() const {
 }
 
 bool HistoryItem::canDelete() const {
-	if (isSponsored()) {
+	if (IsArchivedMsgId(id)) {
+		return true;
+	} else if (isSponsored()) {
 		return false;
 	} else if (isEphemeral()) {
 		return false;

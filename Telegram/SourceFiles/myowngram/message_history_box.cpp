@@ -254,10 +254,14 @@ void MaybeAddEditHistoryAction(
 		not_null<Window::SessionController*> controller,
 		bool copyRestricted,
 		QPoint position) {
-	if (!item->isRegular() || item->out() || item->history()->peer->isSelf()) {
+	if ((!item->isRegular() && !IsArchivedMsgId(item->id))
+		|| item->out()
+		|| item->history()->peer->isSelf()) {
 		return;
 	}
-	const auto id = item->fullId();
+	const auto id = FullMsgId(
+		item->history()->peer->id,
+		IsArchivedMsgId(item->id) ? OriginalMsgId(item->id) : item->id);
 	const auto weak = base::make_weak(controller.get());
 	controller->session().data().messageArchive().readTimeline(
 		id,

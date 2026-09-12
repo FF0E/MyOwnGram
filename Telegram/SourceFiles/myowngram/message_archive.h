@@ -11,11 +11,16 @@
 #include "myowngram/message_archive_timeline.h"
 #include "storage/cache/storage_cache_database.h"
 
+#include <map>
 #include <memory>
 #include <optional>
 #include <vector>
 
 class HistoryItem;
+
+namespace Data {
+class Session;
+} // namespace Data
 
 namespace Storage {
 class Account;
@@ -28,6 +33,7 @@ struct LocalDeleteJob;
 namespace MyOwnGram {
 
 struct MessageArchiveDeleteBound;
+struct MessageArchiveRestore;
 
 class MessageArchive final : public base::has_weak_ptr {
 public:
@@ -58,7 +64,7 @@ public:
 	using TimelinePageDone = FnMut<void(TimelinePage)>;
 	using WriteDone = FnMut<void(Storage::Cache::Error)>;
 
-	explicit MessageArchive(not_null<Storage::Account*> account);
+	explicit MessageArchive(not_null<Data::Session*> owner);
 	~MessageArchive();
 
 	void readRecord(Storage::Cache::Key key, ReadDone done);
@@ -153,6 +159,15 @@ private:
 		not_null<LocalDeleteState*> state,
 		bool continueQueue);
 	void markHistoryOnly(FullMsgId id, WriteDone done);
+	void removeInlineMessage(FullMsgId id);
+	void restoreDeletedMessage(
+		not_null<HistoryItem*> item,
+		MessageArchiveStorage::MessageTimelineOrigin origin,
+		MessageArchiveStorage::MessageSnapshot expected);
+	void restoreDeletedMessageDone(
+		const std::shared_ptr<MessageArchiveRestore> &state,
+		const MessageArchiveStorage::MessageSnapshot &expected,
+		TimelineReadResult result);
 	void observeDeletion(
 		FullMsgId id,
 		MessageArchiveStorage::MessageTimelineOrigin origin,
@@ -170,7 +185,9 @@ private:
 		WriteDone done);
 	void startLocalDeleteJobs();
 
+	const not_null<Data::Session*> _owner;
 	const not_null<Storage::Account*> _account;
+	std::map<FullMsgId, std::shared_ptr<MessageArchiveRestore>> _pendingRestores;
 	Storage::Cache::Database *_database = nullptr;
 	std::shared_ptr<OpenAttempt> _openAttempt;
 	std::shared_ptr<LocalDeleteState> _localDeleteState;

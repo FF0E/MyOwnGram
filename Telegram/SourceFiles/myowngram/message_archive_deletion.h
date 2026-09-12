@@ -19,6 +19,7 @@ namespace MyOwnGram::MessageArchiveStorage {
 struct DeletedMessageContext {
 	PeerId from;
 	TimeId date = 0;
+	TimeId editDate = 0;
 	uint64 groupedId = 0;
 	bool post = false;
 	bool authorHidden = false;
