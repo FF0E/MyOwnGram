@@ -11,6 +11,7 @@
 #include "myowngram/message_archive_index.h"
 #include "myowngram/message_archive_timeline.h"
 #include "rpl/lifetime.h"
+#include "rpl/producer.h"
 #include "storage/cache/storage_cache_database.h"
 
 #include <map>
@@ -23,6 +24,7 @@ class HistoryItem;
 
 namespace Data {
 class Session;
+struct MessagesRange;
 } // namespace Data
 
 namespace Storage {
@@ -84,6 +86,12 @@ public:
 		MessageArchiveStorage::MessagePositionDirection direction,
 		int limit,
 		bool rangeExpanded = false);
+	[[nodiscard]] rpl::producer<bool> restorePreviewMessages(
+		not_null<History*> history,
+		MsgId cursor,
+		MessageArchiveStorage::MessagePositionDirection direction,
+		int limit,
+		Data::MessagesRange range);
 	void interruptLoadedMessages(PeerId peer, bool resume = true);
 	void writeRecord(
 		Storage::Cache::Key key,
@@ -203,6 +211,7 @@ private:
 	std::map<
 		std::pair<PeerId, MessageArchiveStorage::MessagePositionDirection>,
 		std::shared_ptr<LoadedHistoryState>> _loadedHistories;
+	std::vector<std::weak_ptr<LoadedHistoryState>> _previewHistories;
 	Storage::Cache::Database *_database = nullptr;
 	std::shared_ptr<OpenAttempt> _openAttempt;
 	std::shared_ptr<LocalDeleteState> _localDeleteState;

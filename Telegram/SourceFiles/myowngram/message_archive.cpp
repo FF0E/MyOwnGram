@@ -9,6 +9,7 @@
 #include "base/flat_map.h"
 #include "data/data_document.h"
 #include "data/data_media.h"
+#include "data/data_messages.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"
 #include "history/history.h"
@@ -140,6 +141,10 @@ struct MessageArchive::LoadedHistoryState final
 		= MessageArchiveStorage::MessagePositionDirection::Older;
 	MsgId cursor;
 	TimelinePage page;
+	std::optional<Data::MessagesRange> previewRange;
+	Fn<void(bool)> previewDone;
+	MsgId previewCursor;
+	int previewLimit = 0;
 	size_t index = 0;
 	int remaining = 0;
 	int restartLimit = 0;
@@ -1089,6 +1094,13 @@ void MessageArchive::LoadedHistoryState::pageRead(TimelinePage result) {
 
 bool MessageArchive::LoadedHistoryState::inLoadedRange(
 		const TimelinePageEntry &entry) const {
+	if (previewRange) {
+		const auto position = Data::MessagePosition{
+			entry.id,
+			entry.metadata.origin.date,
+		};
+		return position >= previewRange->from && position <= previewRange->till;
+	}
 	const auto &owner = history->owner();
 	const auto first = owner.message(history->peer->id, history->minMsgId());
 	const auto last = owner.message(history->peer->id, history->maxMsgId());
@@ -1166,7 +1178,7 @@ void MessageArchive::LoadedHistoryState::timelineRead(
 			history,
 			entry.id.msg,
 			result.value->versions.back(),
-			true);
+			!previewRange);
 		if (owner->_owner->message(entry.id.peer, ArchivedMsgId(entry.id.msg))) {
 			--remaining;
 		}
@@ -1184,9 +1196,77 @@ void MessageArchive::LoadedHistoryState::finish(bool commit) {
 	loading = false;
 	if (const auto limit = base::take(restartLimit)) {
 		if (!unloaded && archive.get()) {
+			if (previewRange && interrupted) {
+				cursor = previewCursor;
+				exhausted = false;
+			}
 			start(limit);
+			return;
 		}
 	}
+	if (!unloaded && previewDone) {
+		const auto done = previewDone;
+		done(exhausted);
+	}
+}
+
+rpl::producer<bool> MessageArchive::restorePreviewMessages(
+		not_null<History*> history,
+		MsgId cursor,
+		MessagePositionDirection direction,
+		int limit,
+		Data::MessagesRange range) {
+	Expects(&history->owner() == _owner);
+	Expects(limit >= 0);
+	Expects(direction == MessagePositionDirection::Older
+		|| direction == MessagePositionDirection::Newer);
+
+	const auto weak = base::make_weak(this);
+	return [=](auto consumer) {
+		auto lifetime = rpl::lifetime();
+		const auto archive = weak.get();
+		if (!archive) {
+			consumer.put_next(false);
+			consumer.put_done();
+			return lifetime;
+		} else if (!limit
+			|| range.till < range.from
+			|| history->peer->isSelf()
+			|| history->peer->forum()
+			|| history->peer->isMonoforum()
+			|| (archive->_state == State::Closed
+				&& !archive->_account->messageArchiveExists())) {
+			consumer.put_next(true);
+			consumer.put_done();
+			return lifetime;
+		}
+		const auto state = std::make_shared<LoadedHistoryState>();
+		state->archive = weak;
+		state->history = history;
+		state->direction = direction;
+		state->cursor = cursor;
+		state->previewRange = range;
+		state->previewCursor = cursor;
+		state->previewLimit = limit;
+		state->previewDone = [=](bool exhausted) {
+			consumer.put_next(exhausted);
+		};
+		std::erase_if(archive->_previewHistories, [](const auto &entry) {
+			const auto state = entry.lock();
+			return !state || state->unloaded;
+		});
+		archive->_previewHistories.push_back(state);
+		const auto cancel = [state] {
+			state->unloaded = true;
+			state->previewDone = nullptr;
+		};
+		lifetime.add(cancel);
+		archive->_owner->sessionDataAboutToBeCleared(
+		) | rpl::on_next(cancel, lifetime);
+		consumer.put_next(false);
+		state->start(limit);
+		return lifetime;
+	};
 }
 
 void MessageArchive::restoreLoadedMessages(
@@ -1223,6 +1303,22 @@ void MessageArchive::restoreLoadedMessages(
 }
 
 void MessageArchive::interruptLoadedMessages(PeerId peer, bool resume) {
+	if (resume) {
+		for (const auto &weak : _previewHistories) {
+			const auto state = weak.lock();
+			if (state && !state->unloaded && state->history->peer->id == peer) {
+				state->restartLimit = state->previewLimit;
+				state->interrupted = true;
+				if (!state->loading) {
+					crl::on_main(base::make_weak(this), [state] {
+						if (!state->unloaded && !state->loading && state->interrupted) {
+							state->finish(false);
+						}
+					});
+				}
+			}
+		}
+	}
 	for (const auto &[key, state] : _loadedHistories) {
 		if (key.first != peer) {
 			continue;
@@ -1278,6 +1374,15 @@ void MessageArchive::startLocalDeleteJobs() {
 				if (state->waitingLimit && !ranges::any_of(
 						parsed.value,
 						[&](const auto &job) { return job.peer == key.first; })) {
+					state->start(base::take(state->waitingLimit));
+				}
+			}
+			for (const auto &entry : weak->_previewHistories) {
+				const auto state = entry.lock();
+				if (state && !state->unloaded && state->waitingLimit
+					&& !ranges::any_of(parsed.value, [&](const auto &job) {
+						return job.peer == state->history->peer->id;
+					})) {
 					state->start(base::take(state->waitingLimit));
 				}
 			}

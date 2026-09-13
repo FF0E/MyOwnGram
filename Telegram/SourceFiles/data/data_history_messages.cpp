@@ -16,6 +16,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history.h"
 #include "history/history_item.h"
 #include "main/main_session.h"
+#include "myowngram/message_archive.h"
 
 namespace Data {
 namespace {
@@ -23,7 +24,15 @@ namespace {
 void AppendClientSideMessages(
 		not_null<History*> history,
 		MessagesSlice &slice) {
-	const auto &messages = history->clientSideMessages();
+	const auto &local = history->clientSideMessages();
+	auto messages = std::vector<not_null<HistoryItem*>>(local.begin(), local.end());
+	if (const auto migrated = history->migrateFrom()) {
+		for (const auto item : migrated->clientSideMessages()) {
+			if (IsArchivedMsgId(item->id)) {
+				messages.push_back(item);
+			}
+		}
+	}
 	if (messages.empty()) {
 		return;
 	} else if (slice.ids.empty()) {
@@ -108,6 +117,58 @@ void AppendClientSideMessages(
 			slice.ids.insert(slice.ids.begin() + to, item->fullId());
 		}
 	}
+}
+
+void LimitRetainedMessages(
+		MessagesSlice &slice,
+		int limitBefore,
+		int limitAfter,
+		bool olderExhausted,
+		bool newerExhausted) {
+	const auto archived = ranges::any_of(slice.ids, [](FullMsgId id) {
+		return IsArchivedMsgId(id.msg);
+	});
+	if (archived || !olderExhausted || !newerExhausted) {
+		slice.fullCount = std::nullopt;
+	}
+	if (!olderExhausted) {
+		slice.skippedBefore = std::nullopt;
+	}
+	if (!newerExhausted) {
+		slice.skippedAfter = std::nullopt;
+	}
+	if (!archived) {
+		return;
+	}
+	auto count = 0;
+	auto around = -1;
+	for (const auto id : slice.ids) {
+		if (IsServerMsgId(id.msg) || IsArchivedMsgId(id.msg)) {
+			if (id == slice.nearestToAround) {
+				around = count;
+			}
+			++count;
+		}
+	}
+	if (around < 0) {
+		return;
+	}
+	const auto from = std::max(0, around - limitBefore);
+	const auto till = around + std::min(count - around, limitAfter + 1);
+	if (from) {
+		slice.skippedBefore = std::nullopt;
+	}
+	if (till < count) {
+		slice.skippedAfter = std::nullopt;
+	}
+	auto index = 0;
+	std::erase_if(slice.ids, [&](FullMsgId id) {
+		if (!IsServerMsgId(id.msg) && !IsArchivedMsgId(id.msg)) {
+			return false;
+		}
+		const auto position = index++;
+		return position < from || position >= till;
+	});
 }
 
 } // namespace
@@ -316,30 +377,31 @@ rpl::producer<MessagesSlice> HistoryMessagesViewer(
 		}
 		return result;
 	});
-	return rpl::combine(
-		std::move(server),
-		rpl::single(rpl::empty) | rpl::then(
-			history->session().changes().historyUpdates(
-				history,
-				HistoryUpdate::Flag::ClientSideMessages
-			) | rpl::to_empty)
-	) | rpl::map([=](MessagesSlice slice, rpl::empty_value) {
+	const auto merge = [=](MessagesSlice slice, rpl::empty_value) {
 		AppendClientSideMessages(history, slice);
 		if (archivedAroundId
 			&& ranges::find(slice.ids, archivedAroundId) != end(slice.ids)) {
 			slice.nearestToAround = archivedAroundId;
-		} else if (!slice.nearestToAround) {
-			auto nearestDistance = MsgId();
+		} else {
+			const auto distanceToAround = [&](FullMsgId id) {
+				const auto original = IsArchivedMsgId(id.msg)
+					? OriginalMsgId(id.msg)
+					: id.msg;
+				const auto universal = (id.peer == history->peer->id)
+					? original
+					: (original - ServerMaxMsgId);
+				return (universal < messageId)
+					? (messageId - universal)
+					: (universal - messageId);
+			};
+			auto nearestDistance = slice.nearestToAround
+				? distanceToAround(slice.nearestToAround)
+				: MsgId();
 			for (const auto id : slice.ids) {
 				if (!IsArchivedMsgId(id.msg)) {
 					continue;
 				}
-				const auto universal = (id.peer == history->peer->id)
-					? OriginalMsgId(id.msg)
-					: (OriginalMsgId(id.msg) - ServerMaxMsgId);
-				const auto distance = (universal < messageId)
-					? (messageId - universal)
-					: (universal - messageId);
+				const auto distance = distanceToAround(id);
 				if (!slice.nearestToAround || distance < nearestDistance) {
 					slice.nearestToAround = id;
 					nearestDistance = distance;
@@ -347,7 +409,82 @@ rpl::producer<MessagesSlice> HistoryMessagesViewer(
 			}
 		}
 		return slice;
-	});
+	};
+	return std::move(server) | rpl::map([=](MessagesSlice slice) {
+		using Direction = MyOwnGram::MessageArchiveStorage::MessagePositionDirection;
+		const auto migrated = history->migrateFrom();
+		const auto canRead = !slice.ids.empty()
+			|| (slice.skippedBefore == 0 && slice.skippedAfter == 0);
+		auto range = FullMessagesRange;
+		if (!slice.ids.empty()) {
+			if (slice.skippedBefore != 0) {
+				range.from = history->owner().message(slice.ids.front())->position();
+			}
+			if (slice.skippedAfter != 0) {
+				range.till = history->owner().message(slice.ids.back())->position();
+			}
+		}
+		const auto restore = [&](History *chosen, bool newer)
+		-> rpl::producer<bool> {
+			if (!chosen) {
+				return rpl::single(true);
+			} else if (!canRead) {
+				return rpl::single(false);
+			}
+			const auto current = (chosen == history);
+			const auto same = current ? (messageId > 0) : (messageId < 0);
+			const auto anchor = current ? messageId : (messageId + ServerMaxMsgId);
+			const auto limit = same || (newer == current)
+				? ((newer ? limitAfter : limitBefore) + 1)
+				: 0;
+			auto cursor = same
+				? (newer ? anchor : anchor + 1)
+				: (newer ? MsgId(0) : ServerMaxMsgId);
+			if (newer && range.from.fullId.peer == chosen->peer->id) {
+				cursor = std::max(cursor, range.from.fullId.msg - 1);
+			} else if (!newer && range.till.fullId.peer == chosen->peer->id) {
+				cursor = std::min(cursor, range.till.fullId.msg + 1);
+			}
+			return chosen->owner().messageArchive().restorePreviewMessages(
+				chosen,
+				cursor,
+				newer ? Direction::Newer : Direction::Older,
+				limit,
+				range);
+		};
+		auto changes = rpl::producer<rpl::empty_value>(
+			history->session().changes().historyUpdates(
+				history,
+				HistoryUpdate::Flag::ClientSideMessages) | rpl::to_empty);
+		if (migrated) {
+			changes = rpl::merge(
+				std::move(changes),
+				history->session().changes().historyUpdates(
+					migrated,
+					HistoryUpdate::Flag::ClientSideMessages) | rpl::to_empty);
+		}
+		return rpl::combine(
+			restore(history, false),
+			restore(history, true),
+			restore(migrated, false),
+			restore(migrated, true),
+			rpl::single(rpl::empty) | rpl::then(std::move(changes))
+		) | rpl::map([=](
+				bool older,
+				bool newer,
+				bool oldOlder,
+				bool oldNewer,
+				rpl::empty_value) {
+			auto result = merge(slice, {});
+			LimitRetainedMessages(
+				result,
+				limitBefore,
+				limitAfter,
+				older && oldOlder,
+				newer && oldNewer);
+			return result;
+		});
+	}) | rpl::flatten_latest();
 }
 
 } // namespace Data
