@@ -271,6 +271,12 @@ rpl::producer<MessagesSlice> HistoryMessagesViewer(
 		MessagePosition aroundId,
 		int limitBefore,
 		int limitAfter) {
+	const auto archivedAroundId = IsArchivedMsgId(aroundId.fullId.msg)
+		? aroundId.fullId
+		: FullMsgId();
+	if (archivedAroundId) {
+		aroundId.fullId.msg = OriginalMsgId(archivedAroundId.msg);
+	}
 	const auto computeUnreadAroundId = [&] {
 		if (const auto migrated = history->migrateFrom()) {
 			if (const auto around = migrated->loadAroundId()) {
@@ -319,6 +325,27 @@ rpl::producer<MessagesSlice> HistoryMessagesViewer(
 			) | rpl::to_empty)
 	) | rpl::map([=](MessagesSlice slice, rpl::empty_value) {
 		AppendClientSideMessages(history, slice);
+		if (archivedAroundId
+			&& ranges::find(slice.ids, archivedAroundId) != end(slice.ids)) {
+			slice.nearestToAround = archivedAroundId;
+		} else if (!slice.nearestToAround) {
+			auto nearestDistance = MsgId();
+			for (const auto id : slice.ids) {
+				if (!IsArchivedMsgId(id.msg)) {
+					continue;
+				}
+				const auto universal = (id.peer == history->peer->id)
+					? OriginalMsgId(id.msg)
+					: (OriginalMsgId(id.msg) - ServerMaxMsgId);
+				const auto distance = (universal < messageId)
+					? (messageId - universal)
+					: (universal - messageId);
+				if (!slice.nearestToAround || distance < nearestDistance) {
+					slice.nearestToAround = id;
+					nearestDistance = distance;
+				}
+			}
+		}
 		return slice;
 	});
 }

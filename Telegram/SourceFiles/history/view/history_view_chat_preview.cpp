@@ -780,7 +780,9 @@ bool Item::listElementShownUnread(not_null<const Element*> view) {
 }
 
 bool Item::listIsGoodForAroundPosition(not_null<const Element*> view) {
-	return view->data()->isRegular();
+	const auto item = view->data();
+	return item->isRegular()
+		|| (!_replies && !_sublist && IsArchivedMsgId(item->id));
 }
 
 void Item::listSendBotCommand(
