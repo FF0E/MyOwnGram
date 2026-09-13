@@ -185,6 +185,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session.h"
 #include "main/main_session_settings.h"
 #include "main/session/send_as_peers.h"
+#include "myowngram/message_archive.h"
 #include "myowngram/sponsored_content_settings.h"
 #include "webrtc/webrtc_environment.h"
 #include "window/notifications_manager.h"
@@ -3583,6 +3584,13 @@ void HistoryWidget::clearAllLoadRequests() {
 	Expects(_history != nullptr);
 
 	auto &histories = _history->owner().histories();
+	for (const auto history : { _history, _migrated }) {
+		if (history) {
+			session().data().messageArchive().interruptLoadedMessages(
+				history->peer->id,
+				false);
+		}
+	}
 	clearDelayedShowAtRequest();
 	if (_firstLoadRequest) {
 		histories.cancelRequest(_firstLoadRequest);
@@ -4535,10 +4543,12 @@ void HistoryWidget::messagesReceived(
 	if (_preloadRequest == requestId) {
 		addMessagesToFront(peer, *histList);
 		_preloadRequest = 0;
+		restoreArchivedMessages(false, toMigrated ? _migrated : _history);
 		preloadHistoryIfNeeded();
 	} else if (_preloadDownRequest == requestId) {
 		addMessagesToBack(peer, *histList);
 		_preloadDownRequest = 0;
+		restoreArchivedMessages(true, toMigrated ? _migrated : _history);
 		preloadHistoryIfNeeded();
 		if (_history->loadedAtBottom()) {
 			checkActivation();
@@ -4606,6 +4616,23 @@ void HistoryWidget::messagesReceived(
 void HistoryWidget::historyLoaded() {
 	_historyInited = false;
 	doneShow();
+	restoreArchivedMessages(false);
+	restoreArchivedMessages(true);
+}
+
+void HistoryWidget::restoreArchivedMessages(
+		bool newer,
+		History *updatedHistory) {
+	using Direction = MyOwnGram::MessageArchiveStorage::MessagePositionDirection;
+	for (const auto history : { _history, _migrated }) {
+		if (history && (!updatedHistory || history == updatedHistory)) {
+			session().data().messageArchive().restoreLoadedMessages(
+				history,
+				newer ? Direction::Newer : Direction::Older,
+				kMessagesPerPage,
+				updatedHistory != nullptr);
+		}
+	}
 }
 
 bool HistoryWidget::clearMaybeSendStart() {
@@ -4727,6 +4754,7 @@ void HistoryWidget::loadMessages() {
 	if (!_history || _preloadRequest) {
 		return;
 	}
+	restoreArchivedMessages(false);
 
 	if (_history->isEmpty() && _migrated && _migrated->isEmpty()) {
 		return firstLoadMessages();
@@ -4819,6 +4847,7 @@ void HistoryWidget::loadMessagesDown() {
 	if (!_history || _preloadDownRequest) {
 		return;
 	}
+	restoreArchivedMessages(true);
 
 	if (_history->isEmpty() && _migrated && _migrated->isEmpty()) {
 		return firstLoadMessages();

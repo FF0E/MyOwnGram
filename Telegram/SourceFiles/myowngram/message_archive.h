@@ -10,6 +10,7 @@
 #include "data/data_msg_id.h"
 #include "myowngram/message_archive_index.h"
 #include "myowngram/message_archive_timeline.h"
+#include "rpl/lifetime.h"
 #include "storage/cache/storage_cache_database.h"
 
 #include <map>
@@ -17,6 +18,7 @@
 #include <optional>
 #include <vector>
 
+class History;
 class HistoryItem;
 
 namespace Data {
@@ -77,6 +79,12 @@ public:
 		TimelinePageDone done,
 		MessageArchiveStorage::MessagePositionDirection direction
 			= MessageArchiveStorage::MessagePositionDirection::Older);
+	void restoreLoadedMessages(
+		not_null<History*> history,
+		MessageArchiveStorage::MessagePositionDirection direction,
+		int limit,
+		bool rangeExpanded = false);
+	void interruptLoadedMessages(PeerId peer, bool resume = true);
 	void writeRecord(
 		Storage::Cache::Key key,
 		QByteArray value,
@@ -137,6 +145,7 @@ private:
 
 	struct IndexState;
 	struct LocalDeleteState;
+	struct LoadedHistoryState;
 	struct OpenAttempt;
 	struct PageState;
 	struct RemovalState;
@@ -191,11 +200,15 @@ private:
 	const not_null<Data::Session*> _owner;
 	const not_null<Storage::Account*> _account;
 	std::map<FullMsgId, std::shared_ptr<MessageArchiveRestore>> _pendingRestores;
+	std::map<
+		std::pair<PeerId, MessageArchiveStorage::MessagePositionDirection>,
+		std::shared_ptr<LoadedHistoryState>> _loadedHistories;
 	Storage::Cache::Database *_database = nullptr;
 	std::shared_ptr<OpenAttempt> _openAttempt;
 	std::shared_ptr<LocalDeleteState> _localDeleteState;
 	State _state = State::Closed;
 	bool _localDeleteJobsReading = false;
+	rpl::lifetime _lifetime;
 
 };
 

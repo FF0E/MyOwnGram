@@ -736,6 +736,7 @@ private:
 	int countInitialScrollTop();
 	int countAutomaticScrollTop();
 	void preloadHistoryByScroll();
+	void restoreArchivedMessages(bool newer, History *updatedHistory = nullptr);
 	void checkReplyReturns();
 	void scrollToAnimationCallback(FullMsgId attachToId, int relativeTo);
 
