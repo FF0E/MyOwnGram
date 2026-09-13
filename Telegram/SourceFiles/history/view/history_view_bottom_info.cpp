@@ -495,14 +495,11 @@ void BottomInfo::layoutDateText() {
 		: QString();
 	const auto author = _data.author;
 	const auto prefix = !author.isEmpty() ? u", "_q : QString();
-	const auto archived = (_data.flags & Data::Flag::Archived)
-		? tr::lng_myowngram_message_deleted(tr::now) + ' '
-		: QString();
-	const auto date = archived + (editedPrimary
+	const auto date = editedPrimary
 		? FormatEditedDate(_data.date, _data.editedDate)
 		: edited + ((_data.flags & Data::Flag::ForwardedDate)
 		? Ui::FormatDateTimeSavedFrom(_data.date)
-		: QLocale().toString(_data.date.time(), QLocale::ShortFormat)));
+		: QLocale().toString(_data.date.time(), QLocale::ShortFormat));
 	const auto afterAuthor = prefix + date;
 	const auto afterAuthorWidth = st::msgDateFont->width(afterAuthor);
 	const auto authorWidth = st::msgDateFont->width(author);
@@ -539,6 +536,9 @@ void BottomInfo::layoutDateText() {
 			.margin = QMargins(0, st::stakeIconEmojiTop, 0, 0),
 			.textColor = false,
 		})).append("  ");
+	}
+	if (_data.flags & Data::Flag::Archived) {
+		marked.append(Ui::Text::IconEmoji(&st::myowngramDeletedIconEmoji));
 	}
 	marked.append(full);
 	_authorEditedDate.setMarkedText(

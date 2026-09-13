@@ -733,6 +733,9 @@ QString DateTooltipText(not_null<Element*> view) {
 	if (const auto stars = item->out() ? item->starsPaid() : 0) {
 		dateText += '\n' + tr::lng_you_paid_stars(tr::now, lt_count, stars);
 	}
+	if (IsArchivedMsgId(item->id)) {
+		dateText += '\n' + tr::lng_myowngram_message_deleted_accessible(tr::now);
+	}
 	return dateText;
 }
 
