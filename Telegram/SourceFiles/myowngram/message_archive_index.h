@@ -10,6 +10,11 @@
 
 namespace MyOwnGram::MessageArchiveStorage {
 
+enum class MessagePositionDirection : uint8 {
+	Older,
+	Newer,
+};
+
 enum class MessagePositionUpdateResult : uint8 {
 	Invalid,
 	Unchanged,
@@ -43,7 +48,8 @@ struct ParsedMessageArchiveSequence {
 
 [[nodiscard]] MessagePositionLookup FindMessagePosition(
 	const QByteArray &serialized,
-	uint8 till);
+	uint8 bound,
+	MessagePositionDirection direction = MessagePositionDirection::Older);
 [[nodiscard]] MessagePositionUpdate AddMessagePosition(
 	const QByteArray &serialized,
 	const MessagePositionEntry &entry);

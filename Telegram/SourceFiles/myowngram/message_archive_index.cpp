@@ -145,6 +145,27 @@ void CheckMessagePositionIndexFormat() {
 		secondAdded.value,
 		uint8(first.bit - 1));
 	Assert(beforeFirst && !beforeFirst.found);
+	for (auto bound = 0; bound != kMessagePositionNodeBits; ++bound) {
+		const auto next = FindMessagePosition(
+			secondAdded.value,
+			uint8(bound),
+			MessagePositionDirection::Newer);
+		const auto expected = (bound <= first.bit)
+			? int(first.bit)
+			: (bound <= second.bit) ? int(second.bit) : -1;
+		Assert(next && next.found == (expected >= 0));
+		Assert(!next.found || next.bit == expected);
+	}
+	for (auto bit = 0; bit != kMessagePositionNodeBits; ++bit) {
+		auto entry = first;
+		entry.bit = uint8(bit);
+		const auto added = AddMessagePosition({}, entry);
+		const auto next = FindMessagePosition(
+			added.value,
+			0,
+			MessagePositionDirection::Newer);
+		Assert(next && next.found && next.bit == bit);
+	}
 
 	const auto firstRemoved = RemoveMessagePosition(secondAdded.value, first);
 	Assert(firstRemoved.result == MessagePositionUpdateResult::Updated);
@@ -252,26 +273,25 @@ void CheckMessagePositionIndexFormat() {
 
 MessagePositionLookup FindMessagePosition(
 		const QByteArray &serialized,
-		uint8 till) {
+		uint8 bound,
+		MessagePositionDirection direction) {
+	Expects(direction == MessagePositionDirection::Older
+		|| direction == MessagePositionDirection::Newer);
+
 	const auto parsed = ParseMessagePositionBits(serialized);
 	if (!parsed) {
 		return { .error = parsed.error };
 	}
-	for (auto byte = std::min(till / 8, int(parsed.value.size()) - 1);
-			byte >= 0;
-			--byte) {
-		auto value = uint8(parsed.value[byte]);
-		if (byte == (till / 8)) {
-			value &= uint8((uint16(1) << ((till % 8) + 1)) - 1);
-		}
-		for (auto bit = 7; bit >= 0; --bit) {
-			if (value & (1U << bit)) {
-				return {
-					.error = ParseError::None,
-					.bit = uint8((byte * 8) + bit),
-					.found = true,
-				};
-			}
+	const auto ascending = (direction == MessagePositionDirection::Newer);
+	const auto end = int(parsed.value.size()) * 8;
+	const auto start = ascending ? int(bound) : std::min(int(bound), end - 1);
+	for (auto bit = start; bit >= 0 && bit < end; bit += ascending ? 1 : -1) {
+		if (uint8(parsed.value[bit / 8]) & (1U << (bit % 8))) {
+			return {
+				.error = ParseError::None,
+				.bit = uint8(bit),
+				.found = true,
+			};
 		}
 	}
 	return { .error = ParseError::None };

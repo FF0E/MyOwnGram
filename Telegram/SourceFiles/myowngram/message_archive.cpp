@@ -68,18 +68,19 @@ struct MessageArchive::OpenAttempt {
 	Storage::Cache::Error error;
 };
 
-// A page is a predecessor walk through prefix bitmaps. Choosing an earlier
-// byte fills the remaining suffix with 0xFF; an empty descendant backtracks
-// to the nearest earlier parent byte. Index nodes are cached for the page,
-// while absent timelines are skipped as crash-safe dangling entries.
+// A page walks prefix bitmaps in the requested direction. Choosing a new
+// byte fills the remaining suffix with 0xFF for older entries, or zero for
+// newer entries. Empty descendants backtrack to the next parent byte.
+// Nodes are cached for the page; absent timelines are dangling entries.
 struct MessageArchive::PageState final
 	: public std::enable_shared_from_this<PageState> {
 	PageState(
 		base::weak_ptr<MessageArchive> archive,
 		PeerId peer,
-		MsgId before,
+		MsgId cursor,
 		int limit,
-		TimelinePageDone done);
+		TimelinePageDone done,
+		MessageArchiveStorage::MessagePositionDirection direction);
 
 	void start();
 
@@ -99,6 +100,7 @@ private:
 	int _level = 0;
 	int _limit = 0;
 	int _visited = 0;
+	bool _ascending = false;
 	TimelinePageDone _done;
 	TimelinePage _result;
 	base::flat_map<Storage::Cache::Key, QByteArray> _nodes;
@@ -148,6 +150,7 @@ namespace {
 using MessageArchiveStorage::LocalDeleteAction;
 using MessageArchiveStorage::LocalDeleteJob;
 using MessageArchiveStorage::LocalDeleteScope;
+using MessageArchiveStorage::MessagePositionDirection;
 using MessageArchiveStorage::MessagePositionUpdateResult;
 using MessageArchiveStorage::MessageSnapshot;
 using MessageArchiveStorage::MessageTimeline;
@@ -748,7 +751,7 @@ void MessageArchive::LocalDeleteState::processPage(TimelinePage page) {
 		finish(false);
 		return;
 	}
-	_nextBefore = page.nextBefore;
+	_nextBefore = page.nextCursor;
 	_exhausted = page.exhausted;
 	_pending.clear();
 	_pending.reserve(page.entries.size());
@@ -785,19 +788,22 @@ void MessageArchive::LocalDeleteState::readPage() {
 MessageArchive::PageState::PageState(
 		base::weak_ptr<MessageArchive> archive,
 		PeerId peer,
-		MsgId before,
+		MsgId cursor,
 		int limit,
-		TimelinePageDone done)
+		TimelinePageDone done,
+		MessageArchiveStorage::MessagePositionDirection direction)
 : _archive(archive)
 , _peer(peer)
-, _target(uint64(before.bare - 1))
+, _target(uint64(cursor.bare
+	+ (direction == MessagePositionDirection::Newer ? 1 : -1)))
 , _limit(limit)
+, _ascending(direction == MessagePositionDirection::Newer)
 , _done(std::move(done)) {
 	_result.entries.reserve(limit);
 }
 
 void MessageArchive::PageState::start() {
-	if (_target) {
+	if (_target && _target < uint64(ServerMaxMsgId.bare)) {
 		descend();
 	} else {
 		finish(Storage::Cache::Error::NoError(), true);
@@ -805,7 +811,7 @@ void MessageArchive::PageState::start() {
 }
 
 void MessageArchive::PageState::descend() {
-	Expects(_target != 0);
+	Expects(_target != 0 && _target < uint64(ServerMaxMsgId.bare));
 	Expects(_level >= 0
 		&& _level < MessageArchiveStorage::kMessagePositionLevels);
 
@@ -840,7 +846,10 @@ void MessageArchive::PageState::applyNode(
 		const MessageArchiveStorage::MessagePositionEntry &entry) {
 	const auto found = MessageArchiveStorage::FindMessagePosition(
 		serialized,
-		entry.bit);
+		entry.bit,
+		_ascending
+			? MessagePositionDirection::Newer
+			: MessagePositionDirection::Older);
 	if (!found) {
 		LOG(("Message Archive Error: Could not parse position index."));
 		finish(Storage::Cache::Error{
@@ -868,8 +877,8 @@ void MessageArchive::PageState::backtrack() {
 		const auto shift = (MessageArchiveStorage::kMessagePositionLevels
 			- level - 1) * 8;
 		const auto bit = uint8(_target >> shift);
-		if (bit) {
-			setTargetAt(level, uint8(bit - 1));
+		if (_ascending ? (bit < 0xFF) : (bit > 0)) {
+			setTargetAt(level, uint8(bit + (_ascending ? 1 : -1)));
 			descend();
 			return;
 		}
@@ -893,7 +902,8 @@ void MessageArchive::PageState::readTimeline() {
 					self->finish(std::move(result.error), false);
 					return;
 				}
-				self->_target = uint64(id.msg.bare - 1);
+				self->_target = uint64(id.msg.bare
+					+ (self->_ascending ? 1 : -1));
 				if (result.exists) {
 					Assert(result.value.has_value());
 					++self->_visited;
@@ -902,7 +912,8 @@ void MessageArchive::PageState::readTimeline() {
 						.metadata = *result.value,
 					});
 				}
-				if (!self->_target) {
+				if (!self->_target
+					|| self->_target >= uint64(ServerMaxMsgId.bare)) {
 					self->finish(Storage::Cache::Error::NoError(), true);
 				} else if (self->_visited >= self->_limit) {
 					self->finish(Storage::Cache::Error::NoError(), false);
@@ -917,11 +928,15 @@ void MessageArchive::PageState::readTimeline() {
 void MessageArchive::PageState::setTargetAt(int level, uint8 bit) {
 	const auto shift = (MessageArchiveStorage::kMessagePositionLevels
 		- level - 1) * 8;
-	Expects(bit < uint8(_target >> shift));
+	Expects(_ascending
+		? (bit > uint8(_target >> shift))
+		: (bit < uint8(_target >> shift)));
 	const auto lower = shift ? ((uint64(1) << shift) - 1) : 0;
 	const auto through = shift + 8;
 	const auto upper = ~((uint64(1) << through) - 1);
-	_target = (_target & upper) | (uint64(bit) << shift) | lower;
+	_target = (_target & upper)
+		| (uint64(bit) << shift)
+		| (_ascending ? 0 : lower);
 }
 
 void MessageArchive::PageState::finish(
@@ -934,7 +949,7 @@ void MessageArchive::PageState::finish(
 	_result.exhausted = exhausted;
 	if (!exhausted
 		&& _result.error.type == Storage::Cache::Error::Type::None) {
-		_result.nextBefore = MsgId(int64(_target + 1));
+		_result.nextCursor = MsgId(int64(_target) + (_ascending ? -1 : 1));
 	}
 	auto done = base::take(_done);
 	done(std::move(_result));
@@ -1239,11 +1254,16 @@ void MessageArchive::removeRecord(
 
 void MessageArchive::readTimelinePage(
 		PeerId peer,
-		MsgId before,
+		MsgId cursor,
 		int limit,
-		TimelinePageDone done) {
+		TimelinePageDone done,
+		MessageArchiveStorage::MessagePositionDirection direction) {
 	Expects(peer != 0);
-	Expects(before > MsgId() && before <= ServerMaxMsgId);
+	Expects(direction == MessagePositionDirection::Older
+		|| direction == MessagePositionDirection::Newer);
+	Expects(direction == MessagePositionDirection::Older
+		? (cursor > MsgId() && cursor <= ServerMaxMsgId)
+		: (cursor >= MsgId() && cursor < ServerMaxMsgId));
 	Expects(limit > 0);
 	Expects(done != nullptr);
 
@@ -1251,9 +1271,10 @@ void MessageArchive::readTimelinePage(
 	const auto state = std::make_shared<PageState>(
 		weak,
 		peer,
-		before,
+		cursor,
 		limit,
-		std::move(done));
+		std::move(done),
+		direction);
 	crl::on_main(weak, [state] {
 		state->start();
 	});

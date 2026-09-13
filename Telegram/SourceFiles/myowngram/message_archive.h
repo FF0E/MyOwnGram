@@ -8,6 +8,7 @@
 
 #include "base/weak_ptr.h"
 #include "data/data_msg_id.h"
+#include "myowngram/message_archive_index.h"
 #include "myowngram/message_archive_timeline.h"
 #include "storage/cache/storage_cache_database.h"
 
@@ -54,7 +55,7 @@ public:
 	};
 	struct TimelinePage {
 		std::vector<TimelinePageEntry> entries;
-		MsgId nextBefore;
+		MsgId nextCursor;
 		Storage::Cache::Error error;
 		bool exhausted = false;
 	};
@@ -71,9 +72,11 @@ public:
 	void readTimeline(FullMsgId id, TimelineReadDone done);
 	void readTimelinePage(
 		PeerId peer,
-		MsgId before,
+		MsgId cursor,
 		int limit,
-		TimelinePageDone done);
+		TimelinePageDone done,
+		MessageArchiveStorage::MessagePositionDirection direction
+			= MessageArchiveStorage::MessagePositionDirection::Older);
 	void writeRecord(
 		Storage::Cache::Key key,
 		QByteArray value,
