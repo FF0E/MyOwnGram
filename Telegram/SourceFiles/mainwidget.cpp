@@ -1390,7 +1390,7 @@ void MainWidget::showHistory(
 		if (peer->migrateTo()) {
 			peer = peer->migrateTo();
 			peerId = peer->id;
-			if (showAtMsgId > 0) {
+			if (showAtMsgId > 0 || IsArchivedMsgId(showAtMsgId)) {
 				showAtMsgId = -showAtMsgId;
 			}
 		}

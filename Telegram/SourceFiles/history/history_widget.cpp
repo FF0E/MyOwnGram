@@ -2946,7 +2946,8 @@ void HistoryWidget::showHistory(
 			}
 			if (!IsServerMsgId(showAtMsgId)
 				&& !IsClientMsgId(showAtMsgId)
-				&& !IsServerMsgId(-showAtMsgId)) {
+				&& !IsArchivedMsgId(showAtMsgId)
+				&& !IsMigratedMsgId(showAtMsgId)) {
 				// To end or to unread.
 				destroyUnreadBar();
 			}
@@ -2972,9 +2973,9 @@ void HistoryWidget::showHistory(
 				}
 
 				clearDelayedShowAt();
-				const auto skipId = (_migrated && showAtMsgId < 0)
+				const auto skipId = (_migrated && IsMigratedMsgId(showAtMsgId))
 					? FullMsgId(_migrated->peer->id, -showAtMsgId)
-					: (showAtMsgId > 0)
+					: (showAtMsgId > 0 || IsArchivedMsgId(showAtMsgId))
 					? FullMsgId(_history->peer->id, showAtMsgId)
 					: FullMsgId();
 				if (skipId) {
@@ -4595,9 +4596,9 @@ void HistoryWidget::messagesReceived(
 			firstLoadMessages();
 			return;
 		}
-		const auto skipId = (_migrated && _delayedShowAtMsgId < 0)
+		const auto skipId = (_migrated && IsMigratedMsgId(_delayedShowAtMsgId))
 			? FullMsgId(_migrated->peer->id, -_delayedShowAtMsgId)
-			: (_delayedShowAtMsgId > 0)
+			: (_delayedShowAtMsgId > 0 || IsArchivedMsgId(_delayedShowAtMsgId))
 			? FullMsgId(_history->peer->id, _delayedShowAtMsgId)
 			: FullMsgId();
 		if (skipId) {
@@ -4614,6 +4615,10 @@ void HistoryWidget::messagesReceived(
 }
 
 void HistoryWidget::historyLoaded() {
+	const auto item = getItemFromHistoryOrMigrated(_showAtMsgId);
+	if (item && IsArchivedMsgId(item->id)) {
+		item->history()->attachArchivedMessage(item->id);
+	}
 	_historyInited = false;
 	doneShow();
 	restoreArchivedMessages(false);
@@ -4706,20 +4711,21 @@ void HistoryWidget::firstLoadMessages() {
 	} else if (_showAtMsgId == ShowAtTheEndMsgId) {
 		_history->getReadyFor(_showAtMsgId);
 		loadCount = kMessagesPerPageFirst;
-	} else if (_showAtMsgId > 0) {
+	} else if (IsMigratedMsgId(_showAtMsgId) && _migrated) {
+		_history->getReadyFor(_showAtMsgId);
+		from = _migrated;
+		offset = -loadCount / 2;
+		offsetId = -_showAtMsgId;
+	} else if (IsArchivedMsgId(_showAtMsgId)
+		|| (_showAtMsgId > 0 && !IsMigratedMsgId(_showAtMsgId))) {
 		_history->getReadyFor(_showAtMsgId);
 		offset = -loadCount / 2;
 		offsetId = _showAtMsgId;
-	} else if (_showAtMsgId < 0 && _history->peer->isChannel()) {
-		if (_showAtMsgId < 0 && -_showAtMsgId < ServerMaxMsgId && _migrated) {
-			_history->getReadyFor(_showAtMsgId);
-			from = _migrated;
-			offset = -loadCount / 2;
-			offsetId = -_showAtMsgId;
-		} else if (_showAtMsgId == SwitchAtTopMsgId) {
-			_history->getReadyFor(_showAtMsgId);
-		}
+	} else if (_showAtMsgId == SwitchAtTopMsgId
+		&& _history->peer->isChannel()) {
+		_history->getReadyFor(_showAtMsgId);
 	}
+	offsetId = IsArchivedMsgId(offsetId) ? OriginalMsgId(offsetId) : offsetId;
 
 	const auto offsetDate = 0;
 	const auto maxId = 0;
@@ -4949,18 +4955,16 @@ void HistoryWidget::delayedShowAt(
 		}
 	} else if (_delayedShowAtMsgId == ShowAtTheEndMsgId) {
 		loadCount = kMessagesPerPageFirst;
-	} else if (_delayedShowAtMsgId > 0) {
+	} else if (IsMigratedMsgId(_delayedShowAtMsgId) && _migrated) {
+		from = _migrated;
+		offset = -loadCount / 2;
+		offsetId = -_delayedShowAtMsgId;
+	} else if (IsArchivedMsgId(_delayedShowAtMsgId)
+		|| (_delayedShowAtMsgId > 0 && !IsMigratedMsgId(_delayedShowAtMsgId))) {
 		offset = -loadCount / 2;
 		offsetId = _delayedShowAtMsgId;
-	} else if (_delayedShowAtMsgId < 0 && _history->peer->isChannel()) {
-		if ((_delayedShowAtMsgId < 0)
-			&& (-_delayedShowAtMsgId < ServerMaxMsgId)
-			&& _migrated) {
-			from = _migrated;
-			offset = -loadCount / 2;
-			offsetId = -_delayedShowAtMsgId;
-		}
 	}
+	offsetId = IsArchivedMsgId(offsetId) ? OriginalMsgId(offsetId) : offsetId;
 	const auto offsetDate = 0;
 	const auto maxId = 0;
 	const auto minId = 0;
@@ -6067,9 +6071,9 @@ Data::Thread *HistoryWidget::cornerButtonsThread() {
 }
 
 FullMsgId HistoryWidget::cornerButtonsCurrentId() {
-	return (_migrated && _showAtMsgId < 0)
+	return (_migrated && IsMigratedMsgId(_showAtMsgId))
 		? FullMsgId(_migrated->peer->id, -_showAtMsgId)
-		: (_history && _showAtMsgId > 0)
+		: (_history && (_showAtMsgId > 0 || IsArchivedMsgId(_showAtMsgId)))
 		? FullMsgId(_history->peer->id, _showAtMsgId)
 		: FullMsgId();
 }
@@ -8051,7 +8055,8 @@ int HistoryWidget::countInitialScrollTop() {
 	} else if (_showAtMsgId
 		&& (IsServerMsgId(_showAtMsgId)
 			|| IsClientMsgId(_showAtMsgId)
-			|| IsServerMsgId(-_showAtMsgId))) {
+			|| IsArchivedMsgId(_showAtMsgId)
+			|| IsMigratedMsgId(_showAtMsgId))) {
 		const auto item = getItemFromHistoryOrMigrated(_showAtMsgId);
 		const auto itemTop = _list->itemTop(item);
 		if (itemTop < 0) {
@@ -8936,7 +8941,9 @@ void HistoryWidget::handlePeerMigration() {
 	if (_peer != channel) {
 		showHistory(
 			channel->id,
-			(_showAtMsgId > 0) ? (-_showAtMsgId) : _showAtMsgId);
+			(_showAtMsgId > 0 || IsArchivedMsgId(_showAtMsgId))
+				? -_showAtMsgId
+				: _showAtMsgId);
 		channel->session().api().chatParticipants().requestCountDelayed(
 			channel);
 	} else {
@@ -10665,7 +10672,7 @@ void HistoryWidget::clearSelected() {
 
 HistoryItem *HistoryWidget::getItemFromHistoryOrMigrated(
 		MsgId genericMsgId) const {
-	return (genericMsgId < 0 && -genericMsgId < ServerMaxMsgId && _migrated)
+	return (IsMigratedMsgId(genericMsgId) && _migrated)
 		? session().data().message(_migrated->peer, -genericMsgId)
 		: _peer
 		? session().data().message(_peer, genericMsgId)

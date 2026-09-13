@@ -957,6 +957,16 @@ not_null<HistoryItem*> History::addNewLocalMessage(
 	return addNewItem(item, true);
 }
 
+void History::attachArchivedMessage(MsgId id) {
+	Expects(IsArchivedMsgId(id));
+
+	const auto item = owner().message(peer, id);
+	if (item && !item->mainView()) {
+		insertMessageToBlocks(item);
+		owner().notifyHistoryChangeDelayed(this);
+	}
+}
+
 not_null<HistoryItem*> History::addArchivedMessage(
 		HistoryItemCommonFields &&fields,
 		const TextWithEntities &text,
@@ -3040,7 +3050,7 @@ void History::setHasGuestChatBotMessages() {
 }
 
 bool History::isReadyFor(MsgId msgId) {
-	if (msgId < 0 && -msgId < ServerMaxMsgId && peer->migrateFrom()) {
+	if (IsMigratedMsgId(msgId) && peer->migrateFrom()) {
 		// Old group history.
 		return owner().history(peer->migrateFrom()->id)->isReadyFor(-msgId);
 	}
@@ -3070,7 +3080,7 @@ bool History::isReadyFor(MsgId msgId) {
 }
 
 void History::getReadyFor(MsgId msgId) {
-	if (msgId < 0 && -msgId < ServerMaxMsgId && peer->migrateFrom()) {
+	if (IsMigratedMsgId(msgId) && peer->migrateFrom()) {
 		const auto migrated = owner().history(peer->migrateFrom()->id);
 		migrated->getReadyFor(-msgId);
 		if (migrated->isEmpty()) {

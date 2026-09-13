@@ -425,11 +425,11 @@ rpl::producer<MessagesSlice> HistoryMessagesViewer(
 			}
 		}
 		const auto restore = [&](History *chosen, bool newer)
-		-> rpl::producer<bool> {
+		-> rpl::producer<std::optional<bool>> {
 			if (!chosen) {
-				return rpl::single(true);
+				return rpl::single(std::optional(true));
 			} else if (!canRead) {
-				return rpl::single(false);
+				return rpl::single(std::optional(false));
 			}
 			const auto current = (chosen == history);
 			const auto same = current ? (messageId > 0) : (messageId < 0);
@@ -469,19 +469,26 @@ rpl::producer<MessagesSlice> HistoryMessagesViewer(
 			restore(migrated, false),
 			restore(migrated, true),
 			rpl::single(rpl::empty) | rpl::then(std::move(changes))
-		) | rpl::map([=](
-				bool older,
-				bool newer,
-				bool oldOlder,
-				bool oldNewer,
+		) | rpl::filter([](
+				std::optional<bool> older,
+				std::optional<bool> newer,
+				std::optional<bool> oldOlder,
+				std::optional<bool> oldNewer,
+				rpl::empty_value) {
+			return older && newer && oldOlder && oldNewer;
+		}) | rpl::map([=](
+				std::optional<bool> older,
+				std::optional<bool> newer,
+				std::optional<bool> oldOlder,
+				std::optional<bool> oldNewer,
 				rpl::empty_value) {
 			auto result = merge(slice, {});
 			LimitRetainedMessages(
 				result,
 				limitBefore,
 				limitAfter,
-				older && oldOlder,
-				newer && oldNewer);
+				*older && *oldOlder,
+				*newer && *oldNewer);
 			return result;
 		});
 	}) | rpl::flatten_latest();

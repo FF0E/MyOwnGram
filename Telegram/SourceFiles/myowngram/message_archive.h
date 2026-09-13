@@ -86,7 +86,7 @@ public:
 		MessageArchiveStorage::MessagePositionDirection direction,
 		int limit,
 		bool rangeExpanded = false);
-	[[nodiscard]] rpl::producer<bool> restorePreviewMessages(
+	[[nodiscard]] rpl::producer<std::optional<bool>> restorePreviewMessages(
 		not_null<History*> history,
 		MsgId cursor,
 		MessageArchiveStorage::MessagePositionDirection direction,

@@ -148,6 +148,11 @@ static_assert(-(SpecialMsgIdShift + 0xFF) > ServerMaxMsgId);
 	return archived - StartArchivedMsgId;
 }
 
+[[nodiscard]] constexpr inline bool IsMigratedMsgId(MsgId id) noexcept {
+	return (id > -ServerMaxMsgId && id < 0)
+		|| (id > -EndArchivedMsgId && id < -StartArchivedMsgId);
+}
+
 static_assert(SpecialMsgIdShift + 0xFF < StartArchivedMsgId);
 static_assert(-EndArchivedMsgId >= ShortcutMaxMsgId);
 

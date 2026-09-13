@@ -110,6 +110,7 @@ public:
 
 	[[nodiscard]] HistoryItem *joinedMessageInstance() const;
 	void checkLocalMessages();
+	void attachArchivedMessage(MsgId id);
 	void removeJoinedMessage();
 	void removeNewPeerMessages();
 

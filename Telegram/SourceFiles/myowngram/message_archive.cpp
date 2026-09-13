@@ -142,7 +142,7 @@ struct MessageArchive::LoadedHistoryState final
 	MsgId cursor;
 	TimelinePage page;
 	std::optional<Data::MessagesRange> previewRange;
-	Fn<void(bool)> previewDone;
+	Fn<void(std::optional<bool>)> previewDone;
 	MsgId previewCursor;
 	int previewLimit = 0;
 	size_t index = 0;
@@ -1204,13 +1204,13 @@ void MessageArchive::LoadedHistoryState::finish(bool commit) {
 			return;
 		}
 	}
-	if (!unloaded && previewDone) {
+	if (!unloaded && !waitingLimit && previewDone) {
 		const auto done = previewDone;
 		done(exhausted);
 	}
 }
 
-rpl::producer<bool> MessageArchive::restorePreviewMessages(
+rpl::producer<std::optional<bool>> MessageArchive::restorePreviewMessages(
 		not_null<History*> history,
 		MsgId cursor,
 		MessagePositionDirection direction,
@@ -1248,7 +1248,7 @@ rpl::producer<bool> MessageArchive::restorePreviewMessages(
 		state->previewRange = range;
 		state->previewCursor = cursor;
 		state->previewLimit = limit;
-		state->previewDone = [=](bool exhausted) {
+		state->previewDone = [=](std::optional<bool> exhausted) {
 			consumer.put_next(exhausted);
 		};
 		std::erase_if(archive->_previewHistories, [](const auto &entry) {
@@ -1263,7 +1263,6 @@ rpl::producer<bool> MessageArchive::restorePreviewMessages(
 		lifetime.add(cancel);
 		archive->_owner->sessionDataAboutToBeCleared(
 		) | rpl::on_next(cancel, lifetime);
-		consumer.put_next(false);
 		state->start(limit);
 		return lifetime;
 	};
@@ -1309,6 +1308,8 @@ void MessageArchive::interruptLoadedMessages(PeerId peer, bool resume) {
 			if (state && !state->unloaded && state->history->peer->id == peer) {
 				state->restartLimit = state->previewLimit;
 				state->interrupted = true;
+				const auto done = state->previewDone;
+				done(std::nullopt);
 				if (!state->loading) {
 					crl::on_main(base::make_weak(this), [state] {
 						if (!state->unloaded && !state->loading && state->interrupted) {
