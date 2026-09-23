@@ -36,8 +36,6 @@ namespace MessageHistory = ::MyOwnGram::MessageHistory;
 namespace MiniApps = ::MyOwnGram::MiniApps;
 namespace SponsoredContent = ::MyOwnGram::SponsoredContent;
 
-constexpr auto kMessageHistorySettingsExposed = false;
-
 class MyOwnGram final : public Section<MyOwnGram> {
 public:
 	MyOwnGram(
@@ -729,9 +727,6 @@ void BuildDataSharingSection(SectionBuilder &builder) {
 }
 
 void BuildMessageHistorySection(SectionBuilder &builder) {
-	if (!kMessageHistorySettingsExposed && !builder.container()) {
-		return;
-	}
 	builder.addSkip();
 	builder.addSubsectionTitle({
 		.id = u"myowngram/message_history/capture"_q,
@@ -808,19 +803,17 @@ void BuildMyOwnGramMenu(SectionBuilder &builder) {
 		.icon = { &st::menuIconEarn },
 		.keywords = { u"ads"_q, u"sponsored"_q, u"tracking"_q },
 	});
-	if (kMessageHistorySettingsExposed) {
-		builder.addSectionButton({
-			.title = tr::lng_myowngram_message_history(),
-			.targetSection = MyOwnGramMessageHistory::Id(),
-			.icon = { &st::menuIconArchive },
-			.keywords = {
-				u"messages"_q,
-				u"history"_q,
-				u"edits"_q,
-				u"deleted"_q,
-			},
-		});
-	}
+	builder.addSectionButton({
+		.title = tr::lng_myowngram_message_history(),
+		.targetSection = MyOwnGramMessageHistory::Id(),
+		.icon = { &st::menuIconArchive },
+		.keywords = {
+			u"messages"_q,
+			u"history"_q,
+			u"edits"_q,
+			u"deleted"_q,
+		},
+	});
 	builder.addSectionButton({
 		.title = tr::lng_myowngram_general(),
 		.targetSection = MyOwnGramGeneral::Id(),
@@ -868,7 +861,7 @@ const auto kSponsoredContentMeta = BuildHelper({
 
 const auto kMessageHistoryMeta = BuildHelper({
 	.id = MyOwnGramMessageHistory::Id(),
-	.parentId = kMessageHistorySettingsExposed ? MyOwnGram::Id() : nullptr,
+	.parentId = MyOwnGram::Id(),
 	.title = &tr::lng_myowngram_message_history,
 	.icon = &st::menuIconArchive,
 }, [](SectionBuilder &builder) {

@@ -8641,11 +8641,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_edit_history_unavailable" = "No readable saved edit history is available for this message.";
 "lng_myowngram_message_history_capture" = "Saved message history";
 "lng_myowngram_save_edit_history" = "Save edit history";
-"lng_myowngram_keep_deleted_messages" = "Keep deleted messages";
-"lng_myowngram_message_history_capture_about" = "Save supported incoming message versions on this device. These settings apply to every account, while saved history is encrypted and stored separately for each account. Media uses Telegram's normal cache and local file references; enabling history does not download or copy files.";
+"lng_myowngram_keep_deleted_messages" = "Keep deleted messages inline";
+"lng_myowngram_message_history_capture_about" = "Experimental: save supported incoming message changes observed on this device. These controls apply to every account; saved history is encrypted and stored separately for each account. Turning capture off keeps existing saved history.\n\nInline restoration currently supports simple text messages in ordinary chats, not replies, forwards, media, channel posts, topics, or service messages. Expired media is not retained. View edit history shows saved text and captions only, without media or buttons. Media references use Telegram's normal cache and local files; enabling history does not download or copy files.";
 "lng_myowngram_message_history_local_deletion" = "When I delete messages";
 "lng_myowngram_remove_saved_history_on_delete" = "Remove saved history";
-"lng_myowngram_message_history_local_deletion_about" = "When enabled, deleting messages on this device also removes their saved history. When disabled, saved versions remain only in Message History and are not restored in the chat.";
+"lng_myowngram_message_history_local_deletion_about" = "When enabled, deleting messages on this device also removes their saved history. When disabled, saved versions remain in the local archive but are not restored in the chat. The archive browser and clearing tools are not available yet, so those versions cannot currently be opened after local deletion.";
 "lng_myowngram_general" = "General";
 "lng_myowngram_web_content" = "Web content";
 "lng_myowngram_open_mini_apps" = "Open Mini Apps";
