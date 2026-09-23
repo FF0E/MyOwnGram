@@ -1249,7 +1249,7 @@ rpl::producer<std::optional<bool>> MessageArchive::restorePreviewMessages(
 		state->previewCursor = cursor;
 		state->previewLimit = limit;
 		state->previewDone = [=](std::optional<bool> exhausted) {
-			consumer.put_next(exhausted);
+			consumer.put_next(std::move(exhausted));
 		};
 		std::erase_if(archive->_previewHistories, [](const auto &entry) {
 			const auto state = entry.lock();
@@ -2219,7 +2219,7 @@ void MessageArchive::restoreDeletedMessage(
 	state->displayInline = (item->mainView() != nullptr);
 	_pendingRestores[id] = state;
 	_owner->historyUnloaded() | rpl::on_next([state = state.get()](
-			not_null<History*> history) {
+			not_null<const History*> history) {
 		if (history->peer->id == state->id.peer) {
 			state->displayInline = false;
 		}
