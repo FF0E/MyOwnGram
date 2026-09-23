@@ -480,7 +480,7 @@ void ValidateMessageTimelineFormat() {
 		Assert(!ParseMessageTimeline(serialized->chopped(1)));
 		Assert(!ParseMessageTimelineMetadata(serialized->chopped(1)));
 		auto invalid = timeline;
-		invalid.flags.remove(MessageTimelineFlag::Deleted);
+		invalid.flags &= ~MessageTimelineFlag::Deleted;
 		Assert(!SerializeMessageTimeline(invalid));
 		invalid = timeline;
 		invalid.origin.from = PeerId();

@@ -8,7 +8,7 @@
 
 #include "base/flat_map.h"
 #include "data/data_document.h"
-#include "data/data_media.h"
+#include "data/data_media_types.h"
 #include "data/data_messages.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"

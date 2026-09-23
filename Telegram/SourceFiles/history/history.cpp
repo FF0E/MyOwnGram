@@ -978,14 +978,11 @@ not_null<HistoryItem*> History::addArchivedMessage(
 	if (const auto existing = owner().message(peer->id, fields.id)) {
 		return existing;
 	}
+	fields.editDate = editDate;
 	const auto item = makeMessage(
 		WithLocalFlag(std::move(fields)),
 		text,
 		MTP_messageMediaEmpty());
-	if (editDate) {
-		item->AddComponents(HistoryMessageEdited::Bit());
-		item->Get<HistoryMessageEdited>()->date = editDate;
-	}
 	if (displayInline) {
 		insertMessageToBlocks(item);
 	} else {

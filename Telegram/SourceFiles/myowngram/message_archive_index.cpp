@@ -52,7 +52,7 @@ ParsedMessagePositionBits ParseMessagePositionBits(
 	if (!record) {
 		return { .error = record.error };
 	} else if (record.payload.size() > byteLimit
-		|| (!record.payload.isEmpty() && record.payload.back() == 0)) {
+		|| (!record.payload.isEmpty() && record.payload.back() == '\0')) {
 		return {};
 	}
 	return {
@@ -351,7 +351,7 @@ MessagePositionUpdate RemoveMessagePosition(
 		};
 	}
 	parsed.value[byte] = char(uint8(parsed.value[byte]) & ~mask);
-	while (!parsed.value.isEmpty() && parsed.value.back() == 0) {
+	while (!parsed.value.isEmpty() && parsed.value.back() == '\0') {
 		parsed.value.chop(1);
 	}
 	if (parsed.value.isEmpty()) {

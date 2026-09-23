@@ -345,7 +345,7 @@ void CheckDeletedMessageEngagementFormat() {
 		kDeletedMessageEngagementVersion);
 	Assert(reactionRecord);
 	payload = reactionRecord.payload;
-	payload[sizeof(quint8) + sizeof(quint32)] = char(255);
+	payload[int(sizeof(quint8) + sizeof(quint32))] = char(255);
 	const auto unknownReaction = SerializeRecord(
 		RecordType::DeletedMessageEngagement,
 		kDeletedMessageEngagementVersion,

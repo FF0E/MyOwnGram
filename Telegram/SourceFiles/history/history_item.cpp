@@ -4983,6 +4983,7 @@ TextWithEntities HistoryItem::withLocalEntities(
 void HistoryItem::createComponentsHelper(HistoryItemCommonFields &&fields) {
 	const auto &replyTo = fields.replyTo;
 	auto config = CreateConfig();
+	config.editDate = fields.editDate;
 	config.viaBotId = fields.viaBotId;
 	config.scheduleRepeatPeriod = fields.scheduleRepeatPeriod;
 	if (fields.flags & MessageFlag::HasReplyInfo) {

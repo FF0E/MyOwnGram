@@ -220,7 +220,7 @@ void EditHistoryBox(
 	}, box->lifetime());
 	const auto status = box->addRow(object_ptr<Ui::FlatLabel>(
 		box,
-		tr::lng_loading(),
+		tr::lng_contacts_loading(),
 		st::aboutLabel));
 	session->data().messageArchive().readTimeline(id, crl::guard(box, [=](
 			MessageArchive::TimelineReadResult result) {

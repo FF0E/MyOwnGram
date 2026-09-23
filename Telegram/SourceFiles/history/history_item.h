@@ -92,6 +92,7 @@ struct HistoryItemCommonFields {
 	PeerId from = 0;
 	FullReplyTo replyTo;
 	TimeId date = 0;
+	TimeId editDate = 0;
 	TimeId scheduleRepeatPeriod = 0;
 	BusinessShortcutId shortcutId = 0;
 	int starsPaid = 0;
