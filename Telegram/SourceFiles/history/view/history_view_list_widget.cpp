@@ -5103,12 +5103,49 @@ void ListWidget::itemRemoved(not_null<const HistoryItem*> item) {
 		restoreScrollState();
 	});
 
+	const auto local = (_context == Context::ChatPreview
+		&& IsServerMsgId(item->id))
+		? session().data().message(item->history()->peer, ArchivedMsgId(item->id))
+		: nullptr;
 	const auto view = i->second.get();
-	_items.erase(
-		ranges::remove(_items, view, [](auto view) { return view.get(); }),
-		end(_items));
-	viewReplaced(view, nullptr);
-	_views.erase(i);
+	auto replacement = (local && !_views.contains(local))
+		? local->createView(this, view)
+		: nullptr;
+	if (replacement
+		&& _delegate->listIsGoodForAroundPosition(replacement.get())) {
+		const auto index = ranges::find(_items, view) - begin(_items);
+		auto was = std::move(i->second);
+		_views.erase(i);
+		const auto now = _views.emplace(
+			local,
+			std::move(replacement)).first->second.get();
+		_items[index] = now;
+		for (auto &id : _slice.ids) {
+			if (id == item->fullId()) {
+				id = local->fullId();
+			}
+		}
+		if (_slice.nearestToAround == item->fullId()) {
+			_slice.nearestToAround = local->fullId();
+		}
+		for (const auto position : {
+			&_aroundPosition,
+			&_initialAroundPosition,
+			&_scrollTopState.item,
+		}) {
+			if (position->fullId == item->fullId()) {
+				*position = local->position();
+			}
+		}
+		viewReplaced(was.get(), now);
+		refreshAttachmentsAtIndex(index);
+	} else {
+		_items.erase(
+			ranges::remove(_items, view, [](auto view) { return view.get(); }),
+			end(_items));
+		viewReplaced(view, nullptr);
+		_views.erase(i);
+	}
 
 	if (_reactionsManager) {
 		_reactionsManager->remove(item->fullId());

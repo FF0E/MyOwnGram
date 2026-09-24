@@ -105,8 +105,9 @@ public:
 		not_null<const HistoryItem*> item,
 		MessageArchiveStorage::MessageSnapshot before,
 		MessageArchiveStorage::MessageSnapshot after);
-	void captureRemoteDeletions(
+	void applyRemoteDeletions(
 		const std::vector<not_null<HistoryItem*>> &items);
+	[[nodiscard]] QString deletedMessageStatus(FullMsgId id) const;
 	void applyLocalMessageDeletion(
 		const std::vector<not_null<HistoryItem*>> &items);
 	void applyLocalMessageDeletion(
@@ -169,9 +170,10 @@ private:
 		Storage::Cache::Database &database,
 		const std::shared_ptr<OpenAttempt> &attempt,
 		FullMsgId id);
-	void captureDeletions(
+	[[nodiscard]] auto captureDeletions(
 		const std::vector<not_null<HistoryItem*>> &items,
-		bool historyOnly);
+		bool historyOnly)
+		-> std::vector<std::shared_ptr<MessageArchiveRestore>>;
 	void enqueueBoundedLocalDeleteJob(
 		MessageArchiveStorage::LocalDeleteJob job,
 		const std::shared_ptr<MessageArchiveDeleteBound> &through);
@@ -180,13 +182,12 @@ private:
 		bool continueQueue);
 	void markHistoryOnly(FullMsgId id, WriteDone done);
 	void removeInlineMessage(FullMsgId id);
-	void restoreDeletedMessage(
+	[[nodiscard]] std::shared_ptr<MessageArchiveRestore> restoreDeletedMessage(
 		not_null<HistoryItem*> item,
 		MessageArchiveStorage::MessageTimelineOrigin origin,
 		MessageArchiveStorage::MessageSnapshot expected);
 	void restoreDeletedMessageDone(
 		const std::shared_ptr<MessageArchiveRestore> &state,
-		const MessageArchiveStorage::MessageSnapshot &expected,
 		TimelineReadResult result);
 	void observeDeletion(
 		FullMsgId id,

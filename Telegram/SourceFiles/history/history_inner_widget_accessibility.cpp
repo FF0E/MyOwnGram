@@ -23,6 +23,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_item.h"
 #include "history/history_item_components.h"
 #include "lang/lang_keys.h"
+#include "myowngram/message_archive.h"
 #include "ui/text/format_values.h"
 
 namespace HistoryView {
@@ -40,7 +41,8 @@ QString MessageAccessibilityName(
 	QStringList lines;
 
 	if (IsArchivedMsgId(item->id)) {
-		lines.push_back(tr::lng_myowngram_message_deleted_accessible(tr::now));
+		lines.push_back(item->history()->owner().messageArchive()
+			.deletedMessageStatus(item->fullId()));
 	}
 	if (item->out()) {
 		lines.push_back(item->unread(history)

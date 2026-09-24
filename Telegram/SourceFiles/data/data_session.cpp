@@ -3203,11 +3203,7 @@ void Session::processMessagesDeleted(
 		}
 	}
 	if (!toDestroy.empty()) {
-		messageArchive().captureRemoteDeletions(toDestroy);
-		notifyItemsAboutToBeDestroyed(toDestroy);
-		for (const auto &item : toDestroy) {
-			item->destroy();
-		}
+		messageArchive().applyRemoteDeletions(toDestroy);
 	}
 	for (const auto &history : historiesToCheck) {
 		if (!history->chatListMessageKnown()) {
@@ -3227,11 +3223,7 @@ void Session::processNonChannelMessagesDeleted(const QVector<MTPint> &data) {
 		}
 	}
 	if (!toDestroy.empty()) {
-		messageArchive().captureRemoteDeletions(toDestroy);
-		notifyItemsAboutToBeDestroyed(toDestroy);
-		for (const auto &item : toDestroy) {
-			item->destroy();
-		}
+		messageArchive().applyRemoteDeletions(toDestroy);
 	}
 	for (const auto &history : historiesToCheck) {
 		if (!history->chatListMessageKnown()) {

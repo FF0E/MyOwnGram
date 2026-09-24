@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_session.h"
 #include "main/main_session.h"
 #include "history/history_item.h"
+#include "history/history.h"
 #include "history/view/history_view_element.h"
 
 namespace Ui {
@@ -49,7 +50,11 @@ void ThanosEffectController::captureItemsBatch(
 	}
 	auto anyFound = false;
 	for (const auto &item : items) {
-		if (_delegate.viewForItem(item)) {
+		if (_delegate.viewForItem(item)
+			&& !(IsServerMsgId(item->id)
+				&& _session->data().message(
+					item->history()->peer,
+					ArchivedMsgId(item->id)))) {
 			anyFound = true;
 			break;
 		}
@@ -83,7 +88,12 @@ void ThanosEffectController::clearPreCaptured() {
 
 void ThanosEffectController::captureOnRemoval(
 		not_null<const HistoryItem*> item) {
-	if (!ThanosEffect::Supported()) {
+	if (IsServerMsgId(item->id)
+		&& _session->data().message(
+			item->history()->peer,
+			ArchivedMsgId(item->id))) {
+		return;
+	} else if (!ThanosEffect::Supported()) {
 		return;
 	} else if (!ThanosEffect::WindowVisible(_delegate.window())) {
 		clearPreCaptured();
@@ -136,7 +146,12 @@ bool ThanosEffectController::captureView(
 		int viewHeight,
 		int viewTop) {
 	const auto item = view->data();
-	if ((!item->isRegular() && !item->isEphemeral()) || item->isService()) {
+	if ((!item->isRegular() && !item->isEphemeral())
+		|| item->isService()
+		|| (IsServerMsgId(item->id)
+			&& _session->data().message(
+				item->history()->peer,
+				ArchivedMsgId(item->id)))) {
 		return false;
 	}
 	if (viewTop < 0) {

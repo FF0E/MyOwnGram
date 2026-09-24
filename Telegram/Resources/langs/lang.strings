@@ -8732,6 +8732,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 "lng_myowngram_message_deleted" = "deleted";
 "lng_myowngram_message_deleted_accessible" = "Deleted message saved locally";
+"lng_myowngram_message_deleted_saving" = "Deleted message — saving locally…";
+"lng_myowngram_message_deleted_save_unconfirmed" = "Deleted message — local save could not be confirmed. This copy may be lost when you close the app.";
 
 "lng_myowngram_message_history_appearance" = "Appearance";
 "lng_myowngram_translucent_deleted_messages" = "Translucent deleted messages";

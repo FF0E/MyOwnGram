@@ -46,9 +46,10 @@ struct MessageArchiveDeleteBound {
 struct MessageArchiveRestore {
 	FullMsgId id;
 	MessageArchiveStorage::MessageTimelineOrigin origin;
+	MessageArchiveStorage::MessageSnapshot snapshot;
 	bool cancelled = false;
 	bool displayInline = false;
-	rpl::lifetime lifetime;
+	bool failed = false;
 };
 
 struct MessageArchive::IndexState {
@@ -1005,6 +1006,17 @@ MessageArchive::MessageArchive(not_null<Data::Session*> owner)
 			}
 		}
 	}, _lifetime);
+	_owner->itemRemoved() | rpl::on_next([=, this](
+			not_null<const HistoryItem*> item) {
+		if (IsArchivedMsgId(item->id)) {
+			_pendingRestores.erase(FullMsgId(
+				item->history()->peer->id,
+				OriginalMsgId(item->id)));
+		}
+	}, _lifetime);
+	_owner->sessionDataAboutToBeCleared() | rpl::on_next([=, this] {
+		_pendingRestores.clear();
+	}, _lifetime);
 #ifdef _DEBUG
 	MessageArchiveStorage::ValidateLocalDeleteJobsFormat();
 	ValidateLocalDeleteJobMutations();
@@ -1811,7 +1823,7 @@ void MessageArchive::enqueueBoundedLocalDeleteJob(
 		if (const auto pending = weak.lock()) {
 			if (pending->id.peer == job.peer
 				&& MatchesLocalDeleteJob(job, { .origin = pending->origin })) {
-				pending->cancelled = true;
+				removeInlineMessage(pending->id);
 			}
 		}
 	}
@@ -1913,9 +1925,53 @@ void MessageArchive::persistLocalDeleteJob(
 		});
 }
 
-void MessageArchive::captureRemoteDeletions(
+void MessageArchive::applyRemoteDeletions(
 		const std::vector<not_null<HistoryItem*>> &items) {
-	captureDeletions(items, false);
+	const auto restores = captureDeletions(items, false);
+	for (const auto &state : restores) {
+		const auto i = _pendingRestores.find(state->id);
+		if (state->cancelled
+			|| i == _pendingRestores.end()
+			|| i->second != state) {
+			continue;
+		}
+		if (const auto history = _owner->historyLoaded(state->id.peer)) {
+			MessageArchiveStorage::RestoreDeletedTextMessage(
+				history,
+				state->id.msg,
+				state->snapshot,
+				state->displayInline);
+		}
+	}
+	_owner->notifyItemsAboutToBeDestroyed(items);
+	for (const auto &item : items) {
+		const auto history = item->history();
+		const auto id = item->id;
+		const auto atScrollTop = item->mainView()
+			&& history->scrollTopItem == item->mainView();
+		const auto scrollTopOffset = history->scrollTopOffset;
+		item->destroy();
+		if (atScrollTop) {
+			if (const auto local = _owner->message(history->peer, ArchivedMsgId(id))) {
+				if (const auto view = local->mainView()) {
+					history->scrollTopItem = view;
+					history->scrollTopOffset = scrollTopOffset;
+				}
+			}
+		}
+	}
+}
+
+QString MessageArchive::deletedMessageStatus(FullMsgId id) const {
+	Expects(IsArchivedMsgId(id.msg));
+
+	id.msg = OriginalMsgId(id.msg);
+	const auto i = _pendingRestores.find(id);
+	return (i == _pendingRestores.end())
+		? tr::lng_myowngram_message_deleted_accessible(tr::now)
+		: i->second->failed
+		? tr::lng_myowngram_message_deleted_save_unconfirmed(tr::now)
+		: tr::lng_myowngram_message_deleted_saving(tr::now);
 }
 
 void MessageArchive::applyLocalMessageDeletion(
@@ -1929,7 +1985,7 @@ void MessageArchive::applyLocalMessageDeletion(
 		const std::vector<not_null<HistoryItem*>> &items,
 		bool remove) {
 	if (!remove) {
-		captureDeletions(items, true);
+		(void)captureDeletions(items, true);
 	}
 	auto ids = std::vector<FullMsgId>();
 	ids.reserve(items.size());
@@ -2173,12 +2229,14 @@ void MessageArchive::observeDeletion(
 		});
 }
 
-void MessageArchive::captureDeletions(
+auto MessageArchive::captureDeletions(
 		const std::vector<not_null<HistoryItem*>> &items,
-		bool historyOnly) {
+		bool historyOnly)
+-> std::vector<std::shared_ptr<MessageArchiveRestore>> {
+	auto restores = std::vector<std::shared_ptr<MessageArchiveRestore>>();
 	if (!MessageHistory::CaptureEnabled(
 			MessageHistory::Capture::DeletedMessages)) {
-		return;
+		return restores;
 	}
 	for (const auto &item : items) {
 		if (item->out() || item->history()->peer->isSelf()) {
@@ -2202,63 +2260,69 @@ void MessageArchive::captureDeletions(
 				std::move(*snapshot),
 				historyOnly);
 			if (restore) {
-				restoreDeletedMessage(item, *origin, std::move(expected));
+				restores.push_back(restoreDeletedMessage(
+					item,
+					*origin,
+					std::move(expected)));
 			}
 		}
 	}
+	return restores;
 }
 
-void MessageArchive::restoreDeletedMessage(
+auto MessageArchive::restoreDeletedMessage(
 		not_null<HistoryItem*> item,
 		MessageTimelineOrigin origin,
-		MessageSnapshot expected) {
+		MessageSnapshot expected)
+-> std::shared_ptr<MessageArchiveRestore> {
 	const auto id = item->fullId();
 	const auto state = std::make_shared<MessageArchiveRestore>();
 	state->id = id;
 	state->origin = origin;
+	state->snapshot = std::move(expected);
 	state->displayInline = (item->mainView() != nullptr);
 	_pendingRestores[id] = state;
-	_owner->historyUnloaded() | rpl::on_next([state = state.get()](
-			not_null<const History*> history) {
-		if (history->peer->id == state->id.peer) {
-			state->displayInline = false;
-		}
-	}, state->lifetime);
-	readTimeline(id, [=, this, expected = std::move(expected)](
-			TimelineReadResult result) {
-		restoreDeletedMessageDone(state, expected, std::move(result));
+	readTimeline(id, [=, this](TimelineReadResult result) {
+		restoreDeletedMessageDone(state, std::move(result));
 	});
+	return state;
 }
 
 void MessageArchive::restoreDeletedMessageDone(
 		const std::shared_ptr<MessageArchiveRestore> &state,
-		const MessageSnapshot &expected,
 		TimelineReadResult result) {
 	const auto id = state->id;
 	const auto i = _pendingRestores.find(id);
 	if (i == _pendingRestores.end() || i->second != state) {
 		return;
 	}
-	_pendingRestores.erase(i);
-	if (state->cancelled
+	const auto local = _owner->message(id.peer, ArchivedMsgId(id.msg));
+	if (!local) {
+		_pendingRestores.erase(i);
+		return;
+	} else if (state->cancelled
 		|| _owner->message(id)
-		|| !result.value
-		|| result.value->flags != MessageTimelineFlag::Deleted
-		|| result.value->versions.empty()) {
+		|| (result.value && (result.value->flags
+			& (MessageTimelineFlag::HistoryOnly | MessageTimelineFlag::Expired)))) {
+		removeInlineMessage(id);
 		return;
 	}
-	const auto &saved = result.value->versions.back();
-	if (!MessageArchiveStorage::SameVisibleContent(expected, saved)
-		|| expected.support != saved.support) {
-		return;
+	const auto saved = result.value
+		&& result.error.type == Storage::Cache::Error::Type::None
+		&& result.value->flags == MessageTimelineFlag::Deleted
+		&& !result.value->versions.empty()
+		&& MessageArchiveStorage::SameVisibleContent(
+			state->snapshot,
+			result.value->versions.back())
+		&& state->snapshot.support == result.value->versions.back().support;
+	if (saved) {
+		_pendingRestores.erase(i);
+	} else {
+		state->failed = true;
+		state->snapshot = MessageSnapshot();
+		LOG(("Message Archive Error: Could not confirm deleted message save."));
 	}
-	if (const auto history = _owner->historyLoaded(id.peer)) {
-		MessageArchiveStorage::RestoreDeletedTextMessage(
-			history,
-			id.msg,
-			saved,
-			state->displayInline);
-	}
+	_owner->requestItemRepaint(local);
 }
 
 void MessageArchive::removeInlineMessage(FullMsgId id) {

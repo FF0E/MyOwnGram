@@ -41,6 +41,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/ui_integration.h"
 #include "main/main_app_config.h"
 #include "main/main_session.h"
+#include "myowngram/message_archive.h"
 #include "spellcheck/spellcheck_highlight_syntax.h"
 #include "chat_helpers/stickers_emoji_pack.h"
 #include "payments/payments_reaction_process.h" // TryAddingPaidReaction.
@@ -734,7 +735,8 @@ QString DateTooltipText(not_null<Element*> view) {
 		dateText += '\n' + tr::lng_you_paid_stars(tr::now, lt_count, stars);
 	}
 	if (IsArchivedMsgId(item->id)) {
-		dateText += '\n' + tr::lng_myowngram_message_deleted_accessible(tr::now);
+		dateText += '\n' + item->history()->owner().messageArchive()
+			.deletedMessageStatus(item->fullId());
 	}
 	return dateText;
 }
