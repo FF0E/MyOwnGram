@@ -5113,7 +5113,7 @@ void ListWidget::itemRemoved(not_null<const HistoryItem*> item) {
 		: nullptr;
 	if (replacement
 		&& _delegate->listIsGoodForAroundPosition(replacement.get())) {
-		const auto index = ranges::find(_items, view) - begin(_items);
+		const auto index = ranges::find(_items, not_null{ view }) - begin(_items);
 		auto was = std::move(i->second);
 		_views.erase(i);
 		const auto now = _views.emplace(
