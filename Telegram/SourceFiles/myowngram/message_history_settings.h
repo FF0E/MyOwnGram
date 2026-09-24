@@ -22,6 +22,10 @@ void SetCaptureEnabled(Capture capture, bool enabled);
 [[nodiscard]] bool AnyCaptureEnabled();
 [[nodiscard]] rpl::producer<bool> AnyCaptureEnabledValue();
 
+[[nodiscard]] bool TranslucentDeletedMessages();
+void SetTranslucentDeletedMessages(bool enabled);
+[[nodiscard]] rpl::producer<bool> TranslucentDeletedMessagesValue();
+
 [[nodiscard]] bool RemoveSavedHistoryOnDelete();
 void SetRemoveSavedHistoryOnDelete(bool enabled);
 [[nodiscard]] rpl::producer<bool> RemoveSavedHistoryOnDeleteValue();

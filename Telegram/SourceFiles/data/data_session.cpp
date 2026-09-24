@@ -298,6 +298,15 @@ Session::Session(not_null<Main::Session*> session)
 		refreshChatListUnreadOnTop();
 	}, _lifetime);
 
+	MyOwnGram::MessageHistory::TranslucentDeletedMessagesValue(
+	) | rpl::skip(1) | rpl::on_next([=] {
+		for (const auto &[item, views] : _views) {
+			if (IsArchivedMsgId(item->id)) {
+				requestItemRepaint(item);
+			}
+		}
+	}, _lifetime);
+
 	_chatsFilters->changed(
 	) | rpl::on_next([=] {
 		const auto enabled = _chatsFilters->has();

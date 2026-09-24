@@ -8733,4 +8733,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_message_deleted" = "deleted";
 "lng_myowngram_message_deleted_accessible" = "Deleted message saved locally";
 
+"lng_myowngram_message_history_appearance" = "Appearance";
+"lng_myowngram_translucent_deleted_messages" = "Translucent deleted messages";
+"lng_myowngram_message_history_appearance_about" = "Show retained deleted messages at reduced opacity in chats and chat previews. The deleted icon remains visible with this option off. Applies to all accounts without changing what is saved.";
+
 // Keys finished

@@ -243,8 +243,10 @@ historySilentTop: -13px;
 
 myowngramDeletedIconEmoji: IconEmoji {
 	icon: icon{{ "chat/myowngram_deleted", msgInDateFg }};
-	padding: margins(0px, 2px, 3px, 0px);
+	padding: margins(0px, 0px, 0px, 0px);
+	useIconColor: false;
 }
+myowngramDeletedOpacity: 0.7;
 
 historyBotMenuSkip: 8px;
 historyBotMenuMaxWidth: 160px;

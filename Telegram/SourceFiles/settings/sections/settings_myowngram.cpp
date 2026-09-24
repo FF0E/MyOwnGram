@@ -767,6 +767,23 @@ void BuildMessageHistorySection(SectionBuilder &builder) {
 
 	builder.addSkip();
 	builder.addSubsectionTitle({
+		.id = u"myowngram/message_history/appearance"_q,
+		.title = tr::lng_myowngram_message_history_appearance(),
+		.keywords = { u"messages"_q, u"deleted"_q, u"appearance"_q },
+	});
+	AddMyOwnGramToggle(
+		builder,
+		u"myowngram/message_history/translucent_deleted"_q,
+		tr::lng_myowngram_translucent_deleted_messages(),
+		MessageHistory::TranslucentDeletedMessages,
+		MessageHistory::SetTranslucentDeletedMessages,
+		{ u"deleted"_q, u"translucent"_q, u"opacity"_q, u"appearance"_q });
+	AddMyOwnGramGroupFooter(
+		builder,
+		tr::lng_myowngram_message_history_appearance_about());
+
+	builder.addSkip();
+	builder.addSubsectionTitle({
 		.id = u"myowngram/message_history/local_deletion"_q,
 		.title = tr::lng_myowngram_message_history_local_deletion(),
 		.keywords = { u"messages"_q, u"history"_q, u"delete"_q, u"remove"_q },

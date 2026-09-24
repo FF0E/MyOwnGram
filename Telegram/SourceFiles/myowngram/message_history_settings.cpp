@@ -38,6 +38,11 @@ rpl::event_stream<Capture> &CaptureChanges() {
 	return result;
 }
 
+rpl::event_stream<bool> &TranslucentDeletedMessagesChanges() {
+	static auto result = rpl::event_stream<bool>();
+	return result;
+}
+
 rpl::event_stream<bool> &RemoveSavedHistoryOnDeleteChanges() {
 	static auto result = rpl::event_stream<bool>();
 	return result;
@@ -81,6 +86,28 @@ rpl::producer<bool> AnyCaptureEnabledValue() {
 			| rpl::map([](Capture) {
 				return AnyCaptureEnabled();
 			}))
+		| rpl::distinct_until_changed();
+}
+
+bool TranslucentDeletedMessages() {
+	return Core::App().settings().readPref<bool>(
+		"myowngram.message_history.translucent_deleted_messages",
+		true);
+}
+
+void SetTranslucentDeletedMessages(bool enabled) {
+	if (TranslucentDeletedMessages() == enabled) {
+		return;
+	}
+	Core::App().settings().writePref<bool>(
+		"myowngram.message_history.translucent_deleted_messages",
+		enabled);
+	TranslucentDeletedMessagesChanges().fire_copy(enabled);
+}
+
+rpl::producer<bool> TranslucentDeletedMessagesValue() {
+	return rpl::single(TranslucentDeletedMessages())
+		| rpl::then(TranslucentDeletedMessagesChanges().events())
 		| rpl::distinct_until_changed();
 }
 

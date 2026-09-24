@@ -538,7 +538,9 @@ void BottomInfo::layoutDateText() {
 		})).append("  ");
 	}
 	if (_data.flags & Data::Flag::Archived) {
-		marked.append(Ui::Text::IconEmoji(&st::myowngramDeletedIconEmoji));
+		marked.append(
+			Ui::Text::IconEmoji(&st::myowngramDeletedIconEmoji)
+		).append(' ');
 	}
 	marked.append(full);
 	_authorEditedDate.setMarkedText(

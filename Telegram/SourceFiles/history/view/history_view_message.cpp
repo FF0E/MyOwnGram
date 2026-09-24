@@ -56,6 +56,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "mainwidget.h"
 #include "main/main_session.h"
+#include "myowngram/message_history_settings.h"
 #include "settings/sections/settings_premium.h"
 #include "ui/text/text_options.h"
 #include "ui/painter.h"
@@ -1806,6 +1807,19 @@ void Message::draw(Painter &p, const PaintContext &context) const {
 		if (selectionTranslation) {
 			p.translate(selectionTranslation, 0);
 		}
+	}
+
+	const auto translucent = IsArchivedMsgId(item->id)
+		&& this->context() != Context::AdminLog
+		&& MyOwnGram::MessageHistory::TranslucentDeletedMessages();
+	const auto opacity = p.opacity();
+	const auto restoreOpacity = gsl::finally([&] {
+		if (translucent) {
+			p.setOpacity(opacity);
+		}
+	});
+	if (translucent) {
+		p.setOpacity(opacity * st::myowngramDeletedOpacity);
 	}
 
 	const auto roll = media ? media->bubbleRoll() : Media::BubbleRoll();
