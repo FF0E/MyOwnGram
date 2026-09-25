@@ -1193,6 +1193,9 @@ void MessageArchive::LoadedHistoryState::timelineRead(
 			!previewRange);
 		if (owner->_owner->message(entry.id.peer, ArchivedMsgId(entry.id.msg))) {
 			--remaining;
+			crl::on_main(archive, [weak = archive] {
+				weak->_owner->sendHistoryChangeNotifications();
+			});
 		}
 	}
 	++index;
