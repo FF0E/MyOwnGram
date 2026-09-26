@@ -452,9 +452,9 @@ void MessageHistoryBrowser::recordRead(
 		const auto &timeline = *result.value;
 		const auto &snapshot = timeline.versions.back();
 		row.metadata = { timeline.flags, timeline.origin };
-		auto length = int(std::min(
+		auto length = int(std::min<qsizetype>(
 			snapshot.text.text.size(),
-			qsizetype(kBrowserPreviewLength)));
+			kBrowserPreviewLength));
 		if (length && snapshot.text.text.at(length - 1).isHighSurrogate()) {
 			--length;
 		}
