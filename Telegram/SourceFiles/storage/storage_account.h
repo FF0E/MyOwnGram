@@ -49,6 +49,8 @@ class DatabasePointer;
 class EncryptionKey;
 class MessageArchiveOperations;
 
+using MessageArchiveRecordReader
+	= Fn<void(Cache::Key, FnMut<void(QByteArray&&)>)>;
 using FileKey = quint64;
 
 constexpr auto kMessageArchiveMaxRecordSize = 1024 * 1024;
@@ -144,6 +146,8 @@ public:
 	[[nodiscard]] EncryptionKey messageArchiveKey() const;
 	[[nodiscard]] bool messageArchiveExists() const;
 	[[nodiscard]] Cache::Database &messageArchiveDatabase();
+	[[nodiscard]] MessageArchiveRecordReader messageArchiveRecordReader(
+		Cache::Database &database);
 	void readMessageArchiveRecord(
 		Cache::Database &database,
 		Cache::Key key,

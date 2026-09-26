@@ -14,6 +14,7 @@
 #include "rpl/producer.h"
 #include "storage/cache/storage_cache_database.h"
 
+#include <atomic>
 #include <map>
 #include <memory>
 #include <optional>
@@ -56,6 +57,7 @@ public:
 	struct TimelinePageEntry {
 		FullMsgId id;
 		MessageArchiveStorage::MessageTimelineMetadata metadata;
+		std::optional<MessageArchiveStorage::MessageSnapshot> snapshot;
 	};
 	struct TimelinePage {
 		std::vector<TimelinePageEntry> entries;
@@ -85,7 +87,8 @@ public:
 		not_null<History*> history,
 		MessageArchiveStorage::MessagePositionDirection direction,
 		int limit,
-		bool rangeExpanded = false);
+		bool rangeExpanded = false,
+		Fn<void()> ready = nullptr);
 	[[nodiscard]] rpl::producer<std::optional<bool>> restorePreviewMessages(
 		not_null<History*> history,
 		MsgId cursor,
@@ -145,13 +148,6 @@ public:
 		const std::vector<not_null<HistoryItem*>> &items);
 
 private:
-	struct TimelineMetadataReadResult {
-		std::optional<MessageArchiveStorage::MessageTimelineMetadata> value;
-		Storage::Cache::Error error;
-		bool exists = false;
-	};
-	using TimelineMetadataReadDone = FnMut<void(TimelineMetadataReadResult)>;
-
 	struct IndexState;
 	struct LocalDeleteState;
 	struct LoadedHistoryState;
@@ -196,9 +192,14 @@ private:
 		bool historyOnly);
 	void open();
 	void openDone(Storage::Cache::Error error);
-	void readTimelineMetadata(
-		FullMsgId id,
-		TimelineMetadataReadDone done);
+	void readPage(
+		PeerId peer,
+		MsgId cursor,
+		int limit,
+		TimelinePageDone done,
+		MessageArchiveStorage::MessagePositionDirection direction,
+		const Data::MessagesRange *range,
+		std::shared_ptr<std::atomic<bool>> cancelled = nullptr);
 	void persistLocalDeleteJob(
 		const MessageArchiveStorage::LocalDeleteJob &job,
 		MsgId nextBefore,
@@ -213,6 +214,8 @@ private:
 		std::pair<PeerId, MessageArchiveStorage::MessagePositionDirection>,
 		std::shared_ptr<LoadedHistoryState>> _loadedHistories;
 	std::vector<std::weak_ptr<LoadedHistoryState>> _previewHistories;
+	const std::shared_ptr<std::atomic<bool>> _readCancelled
+		= std::make_shared<std::atomic<bool>>(false);
 	Storage::Cache::Database *_database = nullptr;
 	std::shared_ptr<OpenAttempt> _openAttempt;
 	std::shared_ptr<LocalDeleteState> _localDeleteState;

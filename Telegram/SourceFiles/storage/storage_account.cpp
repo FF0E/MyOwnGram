@@ -74,7 +74,7 @@ public:
 		Update update;
 	};
 
-	void push(Cache::Database &database, Operation operation);
+	void push(not_null<Cache::Database*> database, Operation operation);
 	void drain();
 	void cancel();
 
@@ -96,17 +96,19 @@ private:
 };
 
 void MessageArchiveOperations::push(
-		Cache::Database &database,
+		not_null<Cache::Database*> database,
 		Operation operation) {
 	Expects(operation.key.valid());
 	Expects(operation.type != Type::Update || operation.update != nullptr);
 
 	const auto lock = std::lock_guard(_mutex);
-	Expects(!_cancelled);
+	if (_cancelled) {
+		return;
+	}
 	if (_database) {
-		Assert(_database == &database);
+		Assert(_database == database);
 	} else {
-		_database = &database;
+		_database = database;
 	}
 	_pending.push_back(std::move(operation));
 	if (!_current) {
@@ -2190,11 +2192,25 @@ MessageArchiveOperations &Account::messageArchiveOperations() {
 	return *_messageArchiveOperations;
 }
 
+MessageArchiveRecordReader Account::messageArchiveRecordReader(
+		Cache::Database &database) {
+	messageArchiveOperations();
+	return [operations = _messageArchiveOperations, database = &database](
+			Cache::Key key,
+			FnMut<void(QByteArray&&)> done) {
+		operations->push(database, {
+			.type = MessageArchiveOperations::Type::Read,
+			.key = key,
+			.readDone = std::move(done),
+		});
+	};
+}
+
 void Account::readMessageArchiveRecord(
 		Cache::Database &database,
 		Cache::Key key,
 		FnMut<void(QByteArray&&)> done) {
-	messageArchiveOperations().push(database, {
+	messageArchiveOperations().push(&database, {
 		.type = MessageArchiveOperations::Type::Read,
 		.key = key,
 		.readDone = std::move(done),
@@ -2206,7 +2222,7 @@ void Account::writeMessageArchiveRecord(
 		Cache::Key key,
 		QByteArray value,
 		FnMut<void(Cache::Error)> done) {
-	messageArchiveOperations().push(database, {
+	messageArchiveOperations().push(&database, {
 		.type = MessageArchiveOperations::Type::Write,
 		.key = key,
 		.value = std::move(value),
@@ -2218,7 +2234,7 @@ void Account::removeMessageArchiveRecord(
 		Cache::Database &database,
 		Cache::Key key,
 		FnMut<void(Cache::Error)> done) {
-	messageArchiveOperations().push(database, {
+	messageArchiveOperations().push(&database, {
 		.type = MessageArchiveOperations::Type::Remove,
 		.key = key,
 		.writeDone = std::move(done),
@@ -2250,7 +2266,7 @@ void Account::mutateMessageArchiveRecord(
 		Cache::Key key,
 		FnMut<MessageArchiveRecordMutation(QByteArray&&)> mutate,
 		FnMut<void(Cache::Error)> done) {
-	messageArchiveOperations().push(database, {
+	messageArchiveOperations().push(&database, {
 		.type = MessageArchiveOperations::Type::Update,
 		.key = key,
 		.writeDone = std::move(done),

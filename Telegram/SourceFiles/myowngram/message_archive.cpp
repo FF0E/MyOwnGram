@@ -82,7 +82,12 @@ struct MessageArchive::PageState final
 		MsgId cursor,
 		int limit,
 		TimelinePageDone done,
-		MessageArchiveStorage::MessagePositionDirection direction);
+		MessageArchiveStorage::MessagePositionDirection direction,
+		Storage::MessageArchiveRecordReader read,
+		std::shared_ptr<OpenAttempt> attempt,
+		const Data::MessagesRange *range,
+		std::shared_ptr<std::atomic<bool>> lifetimeCancelled,
+		std::shared_ptr<std::atomic<bool>> cancelled);
 
 	void start();
 
@@ -93,15 +98,23 @@ private:
 		const MessageArchiveStorage::MessagePositionEntry &entry);
 	void backtrack();
 	void readTimeline();
+	void timelineRead(QByteArray serialized);
 	void setTargetAt(int level, uint8 bit);
 	void finish(Storage::Cache::Error error, bool exhausted);
 
 	base::weak_ptr<MessageArchive> _archive;
+	Storage::MessageArchiveRecordReader _read;
+	std::shared_ptr<OpenAttempt> _attempt;
+	std::optional<Data::MessagesRange> _range;
+	std::shared_ptr<std::atomic<bool>> _lifetimeCancelled;
+	std::shared_ptr<std::atomic<bool>> _cancelled;
 	PeerId _peer = 0;
 	uint64 _target = 0;
 	int _level = 0;
 	int _limit = 0;
 	int _visited = 0;
+	int _reads = 0;
+	int _snapshotBytes = 0;
 	bool _ascending = false;
 	TimelinePageDone _done;
 	TimelinePage _result;
@@ -123,8 +136,8 @@ struct MessageArchive::RemovalState {
 
 // ponytail: Renderability is not indexed, so finding a visible page may
 // scan O(n) metadata and deleted snapshots when most records are unsupported.
-// Only one metadata batch and one full timeline are retained at a time;
-// a renderability index can replace this scan if sparse archives require it.
+// Each storage page has a read and snapshot-byte budget and is published
+// together; a renderability index can replace sparse scans if needed.
 struct MessageArchive::LoadedHistoryState final
 	: public std::enable_shared_from_this<LoadedHistoryState> {
 	void start(int limit, bool rangeExpanded = false);
@@ -132,11 +145,14 @@ struct MessageArchive::LoadedHistoryState final
 	void readPage();
 	void pageRead(TimelinePage result);
 	void readNext();
-	void timelineRead(TimelineReadResult result);
+	void notifyReady();
 	void finish(bool commit);
+	[[nodiscard]] std::optional<Data::MessagesRange> loadedRange() const;
 	[[nodiscard]] bool inLoadedRange(const TimelinePageEntry &entry) const;
 
 	base::weak_ptr<MessageArchive> archive;
+	std::shared_ptr<std::atomic<bool>> cancelled
+		= std::make_shared<std::atomic<bool>>(false);
 	History *history = nullptr;
 	MessageArchiveStorage::MessagePositionDirection direction
 		= MessageArchiveStorage::MessagePositionDirection::Older;
@@ -144,6 +160,7 @@ struct MessageArchive::LoadedHistoryState final
 	TimelinePage page;
 	std::optional<Data::MessagesRange> previewRange;
 	Fn<void(std::optional<bool>)> previewDone;
+	std::vector<Fn<void()>> ready;
 	MsgId previewCursor;
 	int previewLimit = 0;
 	size_t index = 0;
@@ -154,6 +171,7 @@ struct MessageArchive::LoadedHistoryState final
 	bool loading = false;
 	bool interrupted = false;
 	bool unloaded = false;
+	bool changed = false;
 };
 
 struct MessageArchive::LocalDeleteState final
@@ -197,6 +215,8 @@ using MessageArchiveStorage::MessageTimelineOrigin;
 using MessageArchiveStorage::ObserveResult;
 
 constexpr auto kLocalDeletePageSize = 100;
+constexpr auto kRestorationPageReads = 256;
+constexpr auto kRestorationPageBytes = 4 * 1024 * 1024;
 
 struct MutationState {
 	bool invalid = false;
@@ -828,8 +848,18 @@ MessageArchive::PageState::PageState(
 		MsgId cursor,
 		int limit,
 		TimelinePageDone done,
-		MessageArchiveStorage::MessagePositionDirection direction)
+		MessageArchiveStorage::MessagePositionDirection direction,
+		Storage::MessageArchiveRecordReader read,
+		std::shared_ptr<OpenAttempt> attempt,
+		const Data::MessagesRange *range,
+		std::shared_ptr<std::atomic<bool>> lifetimeCancelled,
+		std::shared_ptr<std::atomic<bool>> cancelled)
 : _archive(archive)
+, _read(std::move(read))
+, _attempt(std::move(attempt))
+, _range(range ? std::make_optional(*range) : std::nullopt)
+, _lifetimeCancelled(std::move(lifetimeCancelled))
+, _cancelled(std::move(cancelled))
 , _peer(peer)
 , _target(uint64(cursor.bare
 	+ (direction == MessagePositionDirection::Newer ? 1 : -1)))
@@ -852,6 +882,10 @@ void MessageArchive::PageState::descend() {
 	Expects(_level >= 0
 		&& _level < MessageArchiveStorage::kMessagePositionLevels);
 
+	if (_lifetimeCancelled->load() || (_cancelled && _cancelled->load())) {
+		finish(Storage::Cache::Error::NoError(), false);
+		return;
+	}
 	const auto path = MessageArchiveStorage::MessagePositionPath(FullMsgId(
 		_peer,
 		MsgId(int64(_target))));
@@ -861,21 +895,20 @@ void MessageArchive::PageState::descend() {
 		applyNode(i->second, entry);
 		return;
 	}
-	if (const auto archive = _archive.get()) {
-		archive->readRecord(
-			entry.key,
-			[self = shared_from_this(), entry](ReadResult result) mutable {
-				if (result.error.type
-						!= Storage::Cache::Error::Type::None) {
-					self->finish(std::move(result.error), false);
-					return;
-				}
-				const auto i = self->_nodes.emplace(
-					entry.key,
-					std::move(result.value)).first;
-				self->applyNode(i->second, entry);
-			});
+	if (_range && _reads >= kRestorationPageReads) {
+		finish(Storage::Cache::Error::NoError(), false);
+		return;
 	}
+	++_reads;
+	_read(entry.key, [self = shared_from_this(), entry](QByteArray &&value) {
+		if (self->_attempt
+			&& self->_attempt->error.type != Storage::Cache::Error::Type::None) {
+			self->finish(self->_attempt->error, false);
+			return;
+		}
+		const auto i = self->_nodes.emplace(entry.key, std::move(value)).first;
+		self->applyNode(i->second, entry);
+	});
 }
 
 void MessageArchive::PageState::applyNode(
@@ -924,41 +957,83 @@ void MessageArchive::PageState::backtrack() {
 }
 
 void MessageArchive::PageState::readTimeline() {
+	if (_lifetimeCancelled->load() || (_cancelled && _cancelled->load())) {
+		finish(Storage::Cache::Error::NoError(), false);
+		return;
+	}
 	if (!_target) {
 		finish(Storage::Cache::Error::NoError(), true);
 		return;
 	}
-	const auto id = FullMsgId(_peer, MsgId(int64(_target)));
-	if (const auto archive = _archive.get()) {
-		archive->readTimelineMetadata(
-			id,
-			[self = shared_from_this(), id](
-					TimelineMetadataReadResult result) mutable {
-				if (result.error.type
-						!= Storage::Cache::Error::Type::None) {
-					self->finish(std::move(result.error), false);
-					return;
-				}
-				self->_target = uint64(id.msg.bare
-					+ (self->_ascending ? 1 : -1));
-				if (result.exists) {
-					Assert(result.value.has_value());
-					++self->_visited;
-					self->_result.entries.push_back({
-						.id = id,
-						.metadata = *result.value,
-					});
-				}
-				if (!self->_target
-					|| self->_target >= uint64(ServerMaxMsgId.bare)) {
-					self->finish(Storage::Cache::Error::NoError(), true);
-				} else if (self->_visited >= self->_limit) {
-					self->finish(Storage::Cache::Error::NoError(), false);
-				} else {
-					self->_level = 0;
-					self->descend();
-				}
-			});
+	if (_range && _reads >= kRestorationPageReads) {
+		finish(Storage::Cache::Error::NoError(), false);
+		return;
+	}
+	++_reads;
+	_read(
+		MessageArchiveStorage::MessageTimelineKey(
+			FullMsgId(_peer, MsgId(int64(_target)))),
+		[self = shared_from_this()](QByteArray &&value) {
+			self->timelineRead(std::move(value));
+		});
+}
+
+void MessageArchive::PageState::timelineRead(QByteArray serialized) {
+	if (_attempt
+		&& _attempt->error.type != Storage::Cache::Error::Type::None) {
+		finish(_attempt->error, false);
+		return;
+	}
+	auto outside = false;
+	if (!serialized.isEmpty()) {
+		const auto metadata = MessageArchiveStorage::ParseMessageTimelineMetadata(
+			serialized);
+		if (!metadata) {
+			LOG(("Message Archive Error: Could not parse timeline metadata."));
+			finish(Storage::Cache::Error{
+				.type = Storage::Cache::Error::Type::IO,
+			}, false);
+			return;
+		}
+		auto entry = TimelinePageEntry{
+			.id = FullMsgId(_peer, MsgId(int64(_target))),
+			.metadata = metadata.value,
+		};
+		const auto position = Data::MessagePosition{
+			.fullId = entry.id,
+			.date = entry.metadata.origin.date,
+		};
+		outside = _range
+			&& (position < _range->from || position > _range->till);
+		if (_range
+			&& !outside
+			&& entry.metadata.flags == MessageTimelineFlag::Deleted) {
+			if (_snapshotBytes + serialized.size() > kRestorationPageBytes) {
+				finish(Storage::Cache::Error::NoError(), false);
+				return;
+			}
+			auto parsed = MessageArchiveStorage::ParseMessageTimeline(serialized);
+			if (!parsed) {
+				LOG(("Message Archive Error: Could not parse saved timeline."));
+				finish(Storage::Cache::Error{
+					.type = Storage::Cache::Error::Type::IO,
+				}, false);
+				return;
+			}
+			_snapshotBytes += serialized.size();
+			entry.snapshot = std::move(parsed.value.versions.back());
+		}
+		++_visited;
+		_result.entries.push_back(std::move(entry));
+	}
+	_target = uint64(int64(_target) + (_ascending ? 1 : -1));
+	if (!_target || _target >= uint64(ServerMaxMsgId.bare)) {
+		finish(Storage::Cache::Error::NoError(), true);
+	} else if (outside || _visited >= _limit) {
+		finish(Storage::Cache::Error::NoError(), false);
+	} else {
+		_level = 0;
+		descend();
 	}
 }
 
@@ -988,8 +1063,12 @@ void MessageArchive::PageState::finish(
 		&& _result.error.type == Storage::Cache::Error::Type::None) {
 		_result.nextCursor = MsgId(int64(_target) + (_ascending ? -1 : 1));
 	}
-	auto done = base::take(_done);
-	done(std::move(_result));
+	crl::on_main(_archive, [
+		done = base::take(_done),
+		result = std::move(_result)
+	]() mutable {
+		done(std::move(result));
+	});
 }
 
 MessageArchive::MessageArchive(not_null<Data::Session*> owner)
@@ -1000,6 +1079,7 @@ MessageArchive::MessageArchive(not_null<Data::Session*> owner)
 		for (auto i = _loadedHistories.begin(); i != _loadedHistories.end();) {
 			if (i->first.first == history->peer->id) {
 				i->second->unloaded = true;
+				i->second->cancelled->store(true);
 				i = _loadedHistories.erase(i);
 			} else {
 				++i;
@@ -1037,10 +1117,13 @@ MessageArchive::MessageArchive(not_null<Data::Session*> owner)
 	});
 }
 
-MessageArchive::~MessageArchive() = default;
+MessageArchive::~MessageArchive() {
+	_readCancelled->store(true);
+}
 
 void MessageArchive::LoadedHistoryState::start(int limit, bool rangeExpanded) {
 	if (exhausted || unloaded) {
+		notifyReady();
 		return;
 	} else if (loading) {
 		if (interrupted || rangeExpanded) {
@@ -1049,6 +1132,7 @@ void MessageArchive::LoadedHistoryState::start(int limit, bool rangeExpanded) {
 		return;
 	}
 	loading = true;
+	cancelled = std::make_shared<std::atomic<bool>>(false);
 	interrupted = false;
 	remaining = limit;
 	waitingLimit = 0;
@@ -1083,13 +1167,20 @@ void MessageArchive::LoadedHistoryState::jobsRead(ReadResult result) {
 void MessageArchive::LoadedHistoryState::readPage() {
 	Expects(remaining > 0);
 
+	const auto range = loadedRange();
+	if (!range) {
+		finish(false);
+		return;
+	}
 	const auto self = shared_from_this();
-	archive->readTimelinePage(
+	archive->readPage(
 		history->peer->id,
 		cursor,
 		remaining,
 		[self](TimelinePage result) { self->pageRead(std::move(result)); },
-		direction);
+		direction,
+		&*range,
+		cancelled);
 }
 
 void MessageArchive::LoadedHistoryState::pageRead(TimelinePage result) {
@@ -1104,26 +1195,36 @@ void MessageArchive::LoadedHistoryState::pageRead(TimelinePage result) {
 	readNext();
 }
 
-bool MessageArchive::LoadedHistoryState::inLoadedRange(
-		const TimelinePageEntry &entry) const {
+auto MessageArchive::LoadedHistoryState::loadedRange() const
+-> std::optional<Data::MessagesRange> {
 	if (previewRange) {
-		const auto position = Data::MessagePosition{
-			entry.id,
-			entry.metadata.origin.date,
-		};
-		return position >= previewRange->from && position <= previewRange->till;
+		return previewRange;
 	}
 	const auto &owner = history->owner();
 	const auto first = owner.message(history->peer->id, history->minMsgId());
 	const auto last = owner.message(history->peer->id, history->maxMsgId());
+	if ((!history->loadedAtTop() && !first)
+		|| (!history->loadedAtBottom() && !last)) {
+		return std::nullopt;
+	}
+	return Data::MessagesRange{
+		.from = history->loadedAtTop()
+			? Data::MinMessagePosition
+			: first->position(),
+		.till = history->loadedAtBottom()
+			? Data::MaxMessagePosition
+			: last->position(),
+	};
+}
+
+bool MessageArchive::LoadedHistoryState::inLoadedRange(
+		const TimelinePageEntry &entry) const {
+	const auto range = loadedRange();
 	const auto position = Data::MessagePosition{
 		entry.id,
 		entry.metadata.origin.date,
 	};
-	return (history->loadedAtTop()
-			|| (first && position >= first->position()))
-		&& (history->loadedAtBottom()
-			|| (last && position <= last->position()));
+	return range && position >= range->from && position <= range->till;
 }
 
 void MessageArchive::LoadedHistoryState::readNext() {
@@ -1147,17 +1248,27 @@ void MessageArchive::LoadedHistoryState::readNext() {
 			--remaining;
 		} else if (entry.metadata.flags == MessageTimelineFlag::Deleted
 			&& !owner->_owner->message(entry.id)) {
-			const auto self = shared_from_this();
-			owner->readTimeline(entry.id, [self](TimelineReadResult result) {
-				self->timelineRead(std::move(result));
-			});
-			return;
+			if (!entry.snapshot) {
+				page.exhausted = false;
+				page.nextCursor = index ? page.entries[index - 1].id.msg : cursor;
+				break;
+			}
+			MessageArchiveStorage::RestoreDeletedTextMessage(
+				history,
+				entry.id.msg,
+				*entry.snapshot,
+				!previewRange);
+			if (owner->_owner->message(entry.id.peer, ArchivedMsgId(entry.id.msg))) {
+				--remaining;
+				changed = true;
+			}
 		}
 		++index;
 	}
 	cursor = page.nextCursor;
 	exhausted = page.exhausted;
 	page = {};
+	notifyReady();
 	if (remaining > 0 && !exhausted) {
 		readPage();
 	} else {
@@ -1165,44 +1276,20 @@ void MessageArchive::LoadedHistoryState::readNext() {
 	}
 }
 
-void MessageArchive::LoadedHistoryState::timelineRead(
-		TimelineReadResult result) {
-	const auto owner = archive.get();
-	if (unloaded
-		|| interrupted
-		|| !owner
-		|| result.error.type != Storage::Cache::Error::Type::None
-		|| result.parseError != MessageArchiveStorage::ParseError::None) {
-		finish(false);
+void MessageArchive::LoadedHistoryState::notifyReady() {
+	if (!base::take(changed) && ready.empty()) {
 		return;
 	}
-	const auto &entry = page.entries[index];
-	if (!inLoadedRange(entry)) {
-		finish(false);
-		return;
-	}
-	if (result.value
-		&& result.value->flags == MessageTimelineFlag::Deleted
-		&& result.value->origin == entry.metadata.origin
-		&& !result.value->versions.empty()
-		&& !owner->_owner->message(entry.id)) {
-		MessageArchiveStorage::RestoreDeletedTextMessage(
-			history,
-			entry.id.msg,
-			result.value->versions.back(),
-			!previewRange);
-		if (owner->_owner->message(entry.id.peer, ArchivedMsgId(entry.id.msg))) {
-			--remaining;
-			crl::on_main(archive, [weak = archive] {
-				weak->_owner->sendHistoryChangeNotifications();
-			});
+	crl::on_main(archive, [weak = archive, callbacks = base::take(ready)] {
+		weak->_owner->sendHistoryChangeNotifications();
+		for (const auto &callback : callbacks) {
+			callback();
 		}
-	}
-	++index;
-	readNext();
+	});
 }
 
 void MessageArchive::LoadedHistoryState::finish(bool commit) {
+	notifyReady();
 	if (commit) {
 		cursor = page.nextCursor;
 		exhausted = page.exhausted;
@@ -1273,6 +1360,7 @@ rpl::producer<std::optional<bool>> MessageArchive::restorePreviewMessages(
 		archive->_previewHistories.push_back(state);
 		const auto cancel = [state] {
 			state->unloaded = true;
+			state->cancelled->store(true);
 			state->previewDone = nullptr;
 		};
 		lifetime.add(cancel);
@@ -1287,7 +1375,8 @@ void MessageArchive::restoreLoadedMessages(
 		not_null<History*> history,
 		MessagePositionDirection direction,
 		int limit,
-		bool rangeExpanded) {
+		bool rangeExpanded,
+		Fn<void()> ready) {
 	Expects(&history->owner() == _owner);
 	Expects(limit > 0);
 	Expects(direction == MessagePositionDirection::Older
@@ -1297,10 +1386,16 @@ void MessageArchive::restoreLoadedMessages(
 		|| history->peer->forum()
 		|| history->peer->isMonoforum()
 		|| (_state == State::Closed && !_account->messageArchiveExists())) {
+		if (ready) {
+			ready();
+		}
 		return;
 	}
 	const auto maxId = history->maxMsgId();
 	if (!maxId && !(history->loadedAtTop() && history->loadedAtBottom())) {
+		if (ready) {
+			ready();
+		}
 		return;
 	}
 	auto &state = _loadedHistories[{ history->peer->id, direction }];
@@ -1313,6 +1408,9 @@ void MessageArchive::restoreLoadedMessages(
 			? (history->loadedAtBottom() ? ServerMaxMsgId : maxId + 1)
 			: (history->loadedAtBottom() ? ServerMaxMsgId - 1 : maxId);
 	}
+	if (ready) {
+		state->ready.push_back(std::move(ready));
+	}
 	state->start(limit, rangeExpanded);
 }
 
@@ -1323,6 +1421,7 @@ void MessageArchive::interruptLoadedMessages(PeerId peer, bool resume) {
 			if (state && !state->unloaded && state->history->peer->id == peer) {
 				state->restartLimit = state->previewLimit;
 				state->interrupted = true;
+				state->cancelled->store(true);
 				const auto done = state->previewDone;
 				done(std::nullopt);
 				if (!state->loading) {
@@ -1346,6 +1445,7 @@ void MessageArchive::interruptLoadedMessages(PeerId peer, bool resume) {
 		}
 		if (!resume || state->loading) {
 			state->interrupted = true;
+			state->cancelled->store(true);
 		}
 	}
 }
@@ -1506,61 +1606,6 @@ void MessageArchive::readTimeline(
 		});
 }
 
-void MessageArchive::readTimelineMetadata(
-		FullMsgId id,
-		TimelineMetadataReadDone done) {
-	Expects(id.peer != 0);
-	Expects(IsServerMsgId(id.msg));
-	Expects(done != nullptr);
-
-	const auto weak = base::make_weak(this);
-	if (_state == State::Closed && !_account->messageArchiveExists()) {
-		crl::on_main(
-			weak,
-			[done = std::move(done)]() mutable {
-				done(TimelineMetadataReadResult{
-					.error = Storage::Cache::Error::NoError(),
-				});
-			});
-		return;
-	}
-	auto &database = databaseForOperation();
-	const auto attempt = _openAttempt;
-	_account->readMessageArchiveRecord(
-		database,
-		MessageArchiveStorage::MessageTimelineKey(id),
-		[weak, attempt, done = std::move(done)](
-				QByteArray &&value) mutable {
-			auto result = TimelineMetadataReadResult{
-				.error = attempt
-					? attempt->error
-					: Storage::Cache::Error::NoError(),
-				.exists = !value.isEmpty(),
-			};
-			if (result.error.type == Storage::Cache::Error::Type::None
-				&& result.exists) {
-				const auto parsed
-					= MessageArchiveStorage::ParseMessageTimelineMetadata(value);
-				if (parsed) {
-					result.value = parsed.value;
-				} else {
-					LOG(("Message Archive Error: Could not parse timeline metadata."));
-					result.error = Storage::Cache::Error{
-						.type = Storage::Cache::Error::Type::IO,
-					};
-				}
-			}
-			crl::on_main(
-				weak,
-				[
-					done = std::move(done),
-					result = std::move(result)
-				]() mutable {
-					done(std::move(result));
-				});
-		});
-}
-
 void MessageArchive::writeRecord(
 		Storage::Cache::Key key,
 		QByteArray value,
@@ -1646,6 +1691,17 @@ void MessageArchive::readTimelinePage(
 		int limit,
 		TimelinePageDone done,
 		MessageArchiveStorage::MessagePositionDirection direction) {
+	readPage(peer, cursor, limit, std::move(done), direction, nullptr);
+}
+
+void MessageArchive::readPage(
+		PeerId peer,
+		MsgId cursor,
+		int limit,
+		TimelinePageDone done,
+		MessageArchiveStorage::MessagePositionDirection direction,
+		const Data::MessagesRange *range,
+		std::shared_ptr<std::atomic<bool>> cancelled) {
 	Expects(peer != 0);
 	Expects(direction == MessagePositionDirection::Older
 		|| direction == MessagePositionDirection::Newer);
@@ -1656,16 +1712,26 @@ void MessageArchive::readTimelinePage(
 	Expects(done != nullptr);
 
 	const auto weak = base::make_weak(this);
+	if (_state == State::Closed && !_account->messageArchiveExists()) {
+		crl::on_main(weak, [done = std::move(done)]() mutable {
+			done(TimelinePage{ .exhausted = true });
+		});
+		return;
+	}
+	auto &database = databaseForOperation();
 	const auto state = std::make_shared<PageState>(
 		weak,
 		peer,
 		cursor,
 		limit,
 		std::move(done),
-		direction);
-	crl::on_main(weak, [state] {
-		state->start();
-	});
+		direction,
+		_account->messageArchiveRecordReader(database),
+		_openAttempt,
+		range,
+		_readCancelled,
+		std::move(cancelled));
+	state->start();
 }
 
 void MessageArchive::removeMessage(FullMsgId id, WriteDone done) {

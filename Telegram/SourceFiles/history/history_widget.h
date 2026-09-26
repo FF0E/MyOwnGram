@@ -848,6 +848,8 @@ private:
 	Window::SectionShow _showAtMsgParams;
 	bool _showAndMaybeSendStart = false;
 
+	uint64 _archiveLoadGeneration = 0;
+	int _archiveFirstLoadPending = 0;
 	int _firstLoadRequest = 0; // Not real mtpRequestId.
 	bool _firstLoadFromTheStart = false;
 	int _preloadRequest = 0; // Not real mtpRequestId.

@@ -3584,6 +3584,8 @@ void HistoryWidget::clearSupportPreloadRequest() {
 void HistoryWidget::clearAllLoadRequests() {
 	Expects(_history != nullptr);
 
+	++_archiveLoadGeneration;
+	_archiveFirstLoadPending = 0;
 	auto &histories = _history->owner().histories();
 	for (const auto history : { _history, _migrated }) {
 		if (history) {
@@ -3925,9 +3927,7 @@ void HistoryWidget::updateControlsVisibility() {
 		return;
 	}
 
-	if (_scroll->isHidden()) {
-		_scroll->show();
-	}
+	_scroll->setVisible(!_archiveFirstLoadPending);
 	_topBars->show();
 	if (_sponsoredMessageBar && checkSponsoredMessageBarVisibility()) {
 		_sponsoredMessageBar->toggle(true, anim::type::normal);
@@ -4620,9 +4620,31 @@ void HistoryWidget::historyLoaded() {
 		item->history()->attachArchivedMessage(item->id);
 	}
 	_historyInited = false;
-	doneShow();
-	restoreArchivedMessages(false);
-	restoreArchivedMessages(true);
+	const auto generation = ++_archiveLoadGeneration;
+	_archiveFirstLoadPending = _migrated ? 4 : 2;
+	const auto ready = crl::guard(this, [=, this] {
+		if (generation == _archiveLoadGeneration
+			&& !--_archiveFirstLoadPending) {
+			doneShow();
+		}
+	});
+	using Direction = MyOwnGram::MessageArchiveStorage::MessagePositionDirection;
+	for (const auto history : { _history, _migrated }) {
+		if (!history) {
+			continue;
+		}
+		for (const auto direction : { Direction::Older, Direction::Newer }) {
+			session().data().messageArchive().restoreLoadedMessages(
+				history,
+				direction,
+				kMessagesPerPage,
+				false,
+				ready);
+		}
+	}
+	if (_archiveFirstLoadPending) {
+		_scroll->hide();
+	}
 }
 
 void HistoryWidget::restoreArchivedMessages(
@@ -8196,6 +8218,7 @@ void HistoryWidget::updateHistoryGeometry(
 		_itemRevealPending.clear();
 	});
 	if (!_history
+		|| _archiveFirstLoadPending
 		|| (initial && _historyInited)
 		|| (!initial && !_historyInited && !_firstLoadRequest)) {
 		return;
@@ -8453,6 +8476,9 @@ void HistoryWidget::startMessageSendingAnimation(
 void HistoryWidget::updateListSize() {
 	Expects(_list != nullptr);
 
+	if (_archiveFirstLoadPending) {
+		return;
+	}
 	_list->recountHistoryGeometry(!_historyInited);
 	auto washidden = _scroll->isHidden();
 	if (washidden) {
