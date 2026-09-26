@@ -2405,6 +2405,7 @@ void MessageArchive::removeInlineMessage(FullMsgId id) {
 		if (const auto local = _owner->message(id.peer, ArchivedMsgId(id.msg))) {
 			_owner->notifyItemsAboutToBeDestroyed({ local });
 			local->destroy();
+			_owner->sendHistoryChangeNotifications();
 		}
 	});
 }

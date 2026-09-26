@@ -8645,7 +8645,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_message_history_capture_about" = "Experimental: save supported incoming message changes observed on this device. These controls apply to every account; saved history is encrypted and stored separately for each account. Turning capture off keeps existing saved history.\n\nInline restoration currently supports simple text messages in ordinary chats, not replies, forwards, media, channel posts, topics, or service messages. Expired media is not retained. View edit history shows saved text and captions only, without media or buttons. Media references use Telegram's normal cache and local files; enabling history does not download or copy files.";
 "lng_myowngram_message_history_local_deletion" = "When I delete messages";
 "lng_myowngram_remove_saved_history_on_delete" = "Remove saved history";
-"lng_myowngram_message_history_local_deletion_about" = "When enabled, deleting messages on this device also removes their saved history. When disabled, saved versions remain in the local archive but are not restored in the chat. The archive browser and clearing tools are not available yet, so those versions cannot currently be opened after local deletion.";
+"lng_myowngram_message_history_local_deletion_about" = "When enabled, deleting messages on this device also removes their saved history. When disabled, saved versions remain in the local archive but are not restored in the chat. Open Message History from the chat menu to inspect saved versions or remove individual saved records. Bulk clearing is not available yet.";
 "lng_myowngram_general" = "General";
 "lng_myowngram_web_content" = "Web content";
 "lng_myowngram_open_mini_apps" = "Open Mini Apps";
@@ -8738,5 +8738,20 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_message_history_appearance" = "Appearance";
 "lng_myowngram_translucent_deleted_messages" = "Translucent deleted messages";
 "lng_myowngram_message_history_appearance_about" = "Show retained deleted messages at reduced opacity in chats and chat previews. The deleted icon remains visible with this option off. Applies to all accounts without changing what is saved.";
+
+"lng_myowngram_message_history_saved" = "Saved Message";
+"lng_myowngram_message_history_browser_about" = "Saved text and captions on this device, in original message order. Open a dated entry to inspect its saved versions. Previews are read-only; media and message buttons are not shown. Refresh to see later changes.";
+"lng_myowngram_message_history_refresh" = "Refresh";
+"lng_myowngram_message_history_newer" = "Newer";
+"lng_myowngram_message_history_older" = "Older";
+"lng_myowngram_message_history_entry" = "{date} · {status}";
+"lng_myowngram_message_history_empty" = "No readable saved records on this page.";
+"lng_myowngram_message_history_unavailable" = "This saved record is no longer available or could not be read.";
+"lng_myowngram_message_history_only" = "Deleted · archive only";
+"lng_myowngram_message_history_media" = "Saved media or message buttons are not previewed.";
+"lng_myowngram_message_history_remove" = "Remove saved record";
+"lng_myowngram_message_history_remove_sure" = "Remove all saved versions of this message and its locally retained chat copy from this device? This does not delete or change any message on Telegram. Later observed changes may be saved again.";
+"lng_myowngram_message_history_removing" = "Removing saved record…";
+"lng_myowngram_message_history_remove_error" = "Removal could not be confirmed. The saved record may still exist. Try again.";
 
 // Keys finished

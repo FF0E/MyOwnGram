@@ -65,6 +65,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session_settings.h"
 #include "menu/menu_mute.h"
 #include "menu/menu_ttl_validator.h"
+#include "myowngram/message_history_box.h"
 #include "apiwrap.h"
 #include "mainwidget.h"
 #include "api/api_blocked_peers.h"
@@ -325,6 +326,7 @@ private:
 	void addDirectMessages();
 	void addToggleTopicClosed();
 	void addExportChat();
+	void addMessageHistory();
 	void addTranslate();
 	void addReport();
 	void addNewContact();
@@ -1025,6 +1027,20 @@ void Filler::addExportChat() {
 		tr::lng_profile_export_chat(tr::now),
 		[=] { PeerMenuExportChat(navigation, peer); },
 		&st::menuIconExport);
+}
+
+void Filler::addMessageHistory() {
+	if (!_peer || _topic || _sublist || _peer->isSelf()
+		|| _peer->isRepliesChat() || _peer->isVerifyCodes()) {
+		return;
+	}
+	const auto peer = _peer;
+	const auto weak = base::make_weak(_controller.get());
+	_addAction(tr::lng_myowngram_message_history(tr::now), [=] {
+		if (const auto controller = weak.get()) {
+			MyOwnGram::ShowMessageHistory(controller, peer);
+		}
+	}, &st::menuIconStats);
 }
 
 void Filler::addTranslate() {
@@ -1883,6 +1899,7 @@ void Filler::fillHistoryActions() {
 	addViewDiscussion();
 	addDirectMessages();
 	addExportChat();
+	addMessageHistory();
 	addTranslate();
 	addReport();
 	addClearHistory();

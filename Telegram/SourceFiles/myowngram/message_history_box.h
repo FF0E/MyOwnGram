@@ -9,6 +9,7 @@
 #include <QtCore/QPoint>
 
 class HistoryItem;
+class PeerData;
 
 namespace Ui {
 class PopupMenu;
@@ -19,6 +20,10 @@ class SessionController;
 } // namespace Window
 
 namespace MyOwnGram {
+
+void ShowMessageHistory(
+	not_null<Window::SessionController*> controller,
+	not_null<PeerData*> peer);
 
 void MaybeAddEditHistoryAction(
 	not_null<Ui::PopupMenu*> menu,
