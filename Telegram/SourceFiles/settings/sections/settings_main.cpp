@@ -368,6 +368,15 @@ void BuildSectionButtons(SectionBuilder &builder) {
 	const auto controller = builder.controller();
 	const auto showOther = builder.showOther();
 
+	builder.addSectionButton({
+		.title = tr::lng_myowngram_title(),
+		.targetSection = MyOwnGramId(),
+		.icon = { &st::menuIconCustomize },
+	});
+	builder.addSkip();
+	builder.addDivider();
+	builder.addSkip();
+
 	if (!session->supportMode()) {
 		builder.addButton({
 			.title = tr::lng_settings_my_account(),
@@ -440,12 +449,6 @@ void BuildSectionButtons(SectionBuilder &builder) {
 		.targetSection = AdvancedId(),
 		.icon = { &st::menuIconManage },
 		.keywords = { u"performance"_q, u"proxy"_q, u"experimental"_q },
-	});
-
-	builder.addSectionButton({
-		.title = tr::lng_myowngram_title(),
-		.targetSection = MyOwnGramId(),
-		.icon = { &st::menuIconCustomize },
 	});
 
 	builder.addSectionButton({
