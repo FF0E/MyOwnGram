@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include "core/ad_settings.h"
+
 namespace Main {
 class Session;
 } // namespace Main
@@ -45,6 +47,7 @@ public:
         Fn<void(PeerSearchResult)> callback,
         RequestType type = RequestType::CacheOrRemote);
     void clear();
+	[[nodiscard]] rpl::producer<PeerSearchResult> changes() const;
 
 private:
     struct CacheEntry {
@@ -52,10 +55,13 @@ private:
         bool requested = false;
         bool peersReady = false;
         bool sponsoredReady = false;
+		bool sponsoredRequested = false;
+		bool sponsoredSkipped = false;
     };
 
     void requestPeers();
     void requestSponsored();
+	void applyAdSettings(Core::AdSettings settings);
 
 	void finish(PeerSearchResult result);
 	void finishPeers(mtpRequestId requestId, PeerSearchResult result);
@@ -63,13 +69,17 @@ private:
 
     const not_null<Main::Session*> _session;
     const Type _type;
+    Core::AdSettings _adSettings;
 
     QString _query;
+	QString _lastResultQuery;
     Fn<void(PeerSearchResult)> _callback;
 
 	base::flat_map<QString, CacheEntry> _cache;
 	base::flat_map<mtpRequestId, QString> _peerRequests;
 	base::flat_map<mtpRequestId, QString> _sponsoredRequests;
+	rpl::event_stream<PeerSearchResult> _changes;
+	rpl::lifetime _lifetime;
 
 };
 

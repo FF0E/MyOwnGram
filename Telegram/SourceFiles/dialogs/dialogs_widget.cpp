@@ -448,6 +448,15 @@ Widget::Widget(
 			_childListPeerId.value(),
 			_childListShown.value(),
 			makeChildListShown)));
+	_peerSearch.changes() | rpl::on_next([=](Api::PeerSearchResult result) {
+		if (peerSearchRequired()) {
+			peerSearchReceived(std::move(result));
+			_peerSearch.request(_searchState.query, [=](
+					Api::PeerSearchResult result) {
+				peerSearchReceived(std::move(result));
+			});
+		}
+	}, lifetime());
 	controller->activeChatsFilter(
 	) | rpl::on_next([=](FilterId id) {
 		switchToChatsFilter(id);
@@ -983,7 +992,11 @@ void Widget::chosenRow(const ChosenRow &row) {
 
 	if (!row.sponsoredRandomId.isEmpty()) {
 		auto &messages = session().sponsoredMessages();
-		messages.clicked(row.sponsoredRandomId, false, false);
+		messages.clicked(
+			row.sponsoredRandomId,
+			Core::AdPlacement::Search,
+			false,
+			false);
 	} else if (!_searchState.query.isEmpty()) {
 		if (const auto history = row.key.history()) {
 			session().recentPeers().bump(history->peer);
@@ -3750,6 +3763,10 @@ void Widget::searchReceived(
 }
 
 void Widget::peerSearchReceived(Api::PeerSearchResult result) {
+	const auto query = Api::ConvertPeerSearchQuery(_searchState.query.trimmed());
+	if (result.query != query) {
+		result = {};
+	}
 	_inner->peerSearchReceived(std::move(result));
 	listScrollUpdated();
 	update();

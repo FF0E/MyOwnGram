@@ -1516,7 +1516,8 @@ void InnerWidget::paintEvent(QPaintEvent *e) {
 						&& r.y() <= (skip + from * st::dialogsRowHeight)
 						&& r.y() + r.height() >= (skip + (from + 1) * st::dialogsRowHeight)) {
 						session().sponsoredMessages().view(
-							result->sponsored->data.randomId);
+							result->sponsored->data.randomId,
+							Core::AdPlacement::Search);
 					}
 					const auto peer = result->peer;
 					const auto active = !activeEntry.fullId
@@ -3920,7 +3921,11 @@ void InnerWidget::chatPreviewShown(bool shown, RowDescriptor row) {
 		const auto chosen = computeChosenRow();
 		if (!chosen.sponsoredRandomId.isEmpty() && row.key == chosen.key) {
 			auto &messages = session().sponsoredMessages();
-			messages.clicked(chosen.sponsoredRandomId, false, false);
+			messages.clicked(
+				chosen.sponsoredRandomId,
+				Core::AdPlacement::Search,
+				false,
+				false);
 		}
 		_chatPreviewRow = row;
 		if (base::take(_chatPreviewTouchGlobal)) {

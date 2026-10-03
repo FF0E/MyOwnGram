@@ -26,6 +26,7 @@ namespace {
 constexpr auto kInitialVideoQuality = 480; // Start with SD.
 constexpr auto kMinIvZoom = 25;
 constexpr auto kMaxIvZoom = 400;
+constexpr auto kAdSettingsKey = std::string_view("myowngram-ad-controls");
 
 [[nodiscard]] int DefaultIvZoom() {
 	const auto exact = cScale() * 100 / cScreenScale();
@@ -1305,6 +1306,33 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 	_chatFiltersHorizontal = (chatFiltersHorizontal == 1);
 	_quickDialogAction = Dialogs::Ui::QuickDialogAction(quickDialogAction);
 	_notificationsVolume = notificationsVolume;
+	const auto ads = readPrefGeneric(kAdSettingsKey).value_or(QByteArray());
+	_adSettings = DeserializeAdPreferences({
+		ads.constData(),
+		size_t(ads.size()),
+	});
+}
+
+AdSettings Settings::adSettings(AdPlacement placement) const {
+	return _adSettings.current()[int(placement)];
+}
+
+rpl::producer<AdSettings> Settings::adSettingsValue(
+		AdPlacement placement) const {
+	return _adSettings.value() | rpl::map([=](const AdPreferences &values) {
+		return values[int(placement)];
+	}) | rpl::distinct_until_changed();
+}
+
+void Settings::setAdSettings(AdPlacement placement, AdSettings value) {
+	auto values = _adSettings.current();
+	if (values[int(placement)] == value) {
+		return;
+	}
+	values[int(placement)] = value;
+	const auto bytes = SerializeAdPreferences(values);
+	writePrefGeneric(kAdSettingsKey, QByteArray(bytes.data(), bytes.size()));
+	_adSettings = std::move(values);
 }
 
 void Settings::clearPref(std::string_view key) {
@@ -1750,7 +1778,11 @@ void Settings::resetOnLastLogout() {
 	_storiesClickTooltipHidden = false;
 	_ttlVoiceClickTooltipHidden = false;
 	const auto srDisabled = readPref<bool>(kScreenReaderModeDisabledKey);
+	const auto ads = readPref<QByteArray>(kAdSettingsKey);
 	_prefs.clear();
+	if (!ads.isEmpty()) {
+		writePref<QByteArray>(kAdSettingsKey, ads);
+	}
 	if (srDisabled) {
 		writePref<bool>(kScreenReaderModeDisabledKey, true);
 	}

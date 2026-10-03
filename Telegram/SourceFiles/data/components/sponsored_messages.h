@@ -18,6 +18,10 @@ namespace Api {
 struct SponsoredSearchResult;
 } // namespace Api
 
+namespace Core {
+enum class AdPlacement;
+} // namespace Core
+
 namespace Main {
 class Session;
 } // namespace Main
@@ -152,6 +156,7 @@ public:
 	void clicked(const FullMsgId &fullId, bool isMedia, bool isFullscreen);
 	void clicked(
 		const QByteArray &randomId,
+		Core::AdPlacement placement,
 		bool isMedia,
 		bool isFullscreen);
 	[[nodiscard]] FullMsgId fillTopBar(
@@ -172,7 +177,9 @@ public:
 		not_null<HistoryItem*> after);
 
 	void view(const FullMsgId &fullId);
-	void view(const QByteArray &randomId);
+	void view(const QByteArray &randomId, Core::AdPlacement placement);
+
+	[[nodiscard]] rpl::producer<Core::AdPlacement> changes() const;
 
 	[[nodiscard]] State state(not_null<History*> history) const;
 
@@ -235,6 +242,8 @@ private:
 	[[nodiscard]] SponsoredForVideo prepareForVideo(
 		not_null<PeerData*> peer);
 	void clearOldRequests();
+	void clearChatData();
+	void clearFor(Core::AdPlacement placement);
 
 	const Entry *find(const FullMsgId &fullId) const;
 
@@ -249,6 +258,7 @@ private:
 	base::flat_map<not_null<PeerData*>, RequestForVideo> _requestsForVideo;
 
 	rpl::event_stream<FullMsgId> _itemRemoved;
+	rpl::event_stream<Core::AdPlacement> _changes;
 
 	rpl::lifetime _lifetime;
 

@@ -80,6 +80,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_peer_menu.h"
 #include "base/call_delayed.h"
 #include "base/qt/qt_key_modifiers.h"
+#include "core/ad_settings.h"
 #include "core/application.h"
 #include "core/shortcuts.h"
 #include "core/click_handler_types.h"
@@ -620,6 +621,13 @@ ChatWidget::ChatWidget(
 	_scroll->setBottomContentRequest([=] {
 		return appendSponsoredMessages();
 	});
+	session().sponsoredMessages().changes(
+	) | rpl::filter([](Core::AdPlacement placement) {
+		return placement == Core::AdPlacement::Channel;
+	}) | rpl::on_next([=] {
+		_historySponsoredPreloading.destroy();
+		requestSponsoredMessages();
+	}, lifetime());
 	_scroll->scrolls(
 	) | rpl::on_next([=] {
 		onScroll();

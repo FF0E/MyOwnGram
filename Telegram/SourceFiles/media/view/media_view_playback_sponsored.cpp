@@ -8,6 +8,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "media/view/media_view_playback_sponsored.h"
 
 #include "boxes/premium_preview_box.h"
+#include "core/application.h"
+#include "core/core_settings.h"
 #include "data/components/sponsored_messages.h"
 #include "data/data_file_origin.h"
 #include "data/data_photo.h"
@@ -367,7 +369,9 @@ void PlaybackSponsored::Message::startFadeIn() {
 		return;
 	}
 	startFade([=] {
-		_session->sponsoredMessages().view(_data.randomId);
+		_session->sponsoredMessages().view(
+			_data.randomId,
+			Core::AdPlacement::Video);
 	});
 	show();
 }
@@ -477,7 +481,11 @@ void PlaybackSponsored::Message::mousePressEvent(QMouseEvent *e) {
 
 void PlaybackSponsored::Message::mouseReleaseEvent(QMouseEvent *e) {
 	if (base::take(_pressed) && _over) {
-		_session->sponsoredMessages().clicked(_data.randomId, false, false);
+		_session->sponsoredMessages().clicked(
+			_data.randomId,
+			Core::AdPlacement::Video,
+			false,
+			false);
 		UrlClickHandler::Open(_data.link);
 	}
 }
@@ -560,10 +568,42 @@ PlaybackSponsored::PlaybackSponsored(
 , _show(std::move(show))
 , _itemId(item->fullId())
 , _controlsGeometry(controls->geometryValue())
+, _adSettings(Core::App().settings().adSettings(Core::AdPlacement::Video))
 , _timer([=] { update(); }) {
+	Core::App().settings().adSettingsValue(
+		Core::AdPlacement::Video
+	) | rpl::skip(1) | rpl::on_next([=](Core::AdSettings settings) {
+		applyAdSettings(settings);
+	}, _lifetime);
+	request();
+}
+
+void PlaybackSponsored::applyAdSettings(Core::AdSettings settings) {
+	const auto previous = std::exchange(_adSettings, settings);
+	if (!settings.show) {
+		_data.reset();
+		_widget = nullptr;
+		_timer.cancel();
+		_allowCloseAt = 0;
+		setPausedInside(false);
+	}
+	if ((settings.show && !previous.show)
+		|| (settings.get && !previous.get)) {
+		request();
+	}
+}
+
+void PlaybackSponsored::request() {
+	const auto item = _session->data().message(_itemId);
+	if (!item || _requesting || _data) {
+		return;
+	}
+	_requesting = true;
 	_session->sponsoredMessages().requestForVideo(item, crl::guard(this, [=](
 			Data::SponsoredForVideo data) {
-		if (data.list.empty()) {
+		_requesting = false;
+		if (data.list.empty()
+			|| !Core::App().settings().adSettings(Core::AdPlacement::Video).show) {
 			return;
 		}
 		_data = std::move(data);

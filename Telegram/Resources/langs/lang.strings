@@ -8777,4 +8777,21 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_folder_archive_failed" = "Failed to create archive.";
 "lng_folder_archive_status" = "ZIP archive";
 
+// Keep MyOwnGram strings separate for upstream merges.
+"lng_myowngram_title" = "MyOwnGram";
+"lng_myowngram_about" = "Custom settings shared by all accounts in this installation. Your choices are saved locally and kept when you log out.";
+"lng_myowngram_ads_title" = "Ads";
+"lng_myowngram_ads_show" = "Show ads";
+"lng_myowngram_ads_show_about" = "Choose where sponsored content can appear. Turning a switch off also removes already-loaded ads. Ordinary messages and promotional posts are unaffected.";
+"lng_myowngram_ads_get" = "Get ads";
+"lng_myowngram_ads_get_about" = "Allow normal ad-data requests. If Show ads is off, responses are discarded before loading ad media. Turning off Get ads can leave already-loaded ads visible. Requests already sent cannot be recalled.";
+"lng_myowngram_ads_show_channel" = "Show channel ads";
+"lng_myowngram_ads_show_bot" = "Show bot banners";
+"lng_myowngram_ads_show_search" = "Show search ads";
+"lng_myowngram_ads_show_video" = "Show media-player ads";
+"lng_myowngram_ads_get_channel" = "Get channel ads";
+"lng_myowngram_ads_get_bot" = "Get bot banners";
+"lng_myowngram_ads_get_search" = "Get search ads";
+"lng_myowngram_ads_get_video" = "Get media-player ads";
+
 // Keys finished

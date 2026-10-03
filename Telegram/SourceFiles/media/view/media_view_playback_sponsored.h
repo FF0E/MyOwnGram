@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "base/timer.h"
 #include "base/weak_ptr.h"
+#include "core/ad_settings.h"
 #include "data/components/sponsored_messages.h"
 
 namespace ChatHelpers {
@@ -47,6 +48,8 @@ private:
 		Data::SponsoredForVideoState data;
 	};
 
+	void request();
+	void applyAdSettings(Core::AdSettings settings);
 	void update();
 	void finish();
 	void updatePaused();
@@ -72,6 +75,8 @@ private:
 	bool _paused = false;
 	bool _pausedInside = false;
 	bool _pausedOutside = false;
+	bool _requesting = false;
+	Core::AdSettings _adSettings;
 	base::Timer _timer;
 
 	std::optional<Data::SponsoredForVideo> _data;

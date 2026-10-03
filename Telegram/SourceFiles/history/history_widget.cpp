@@ -870,6 +870,26 @@ HistoryWidget::HistoryWidget(
 		}
 	}, lifetime());
 
+	session().sponsoredMessages().changes(
+	) | rpl::on_next([=](Core::AdPlacement placement) {
+		if (!_history || placement == Core::AdPlacement::Video) {
+			return;
+		}
+		const auto current = _history->peer->isUser()
+			? Core::AdPlacement::Bot
+			: Core::AdPlacement::Channel;
+		if (placement != current) {
+			return;
+		}
+		_historySponsoredPreloading.destroy();
+		if (_sponsoredMessageBar
+			&& session().sponsoredMessages().state(_history)
+				== Data::SponsoredMessages::State::None) {
+			_sponsoredMessageBar->finishAnimating();
+		}
+		requestSponsoredMessages();
+	}, lifetime());
+
 	using MessageUpdateFlag = Data::MessageUpdate::Flag;
 	session().changes().messageUpdates(
 		MessageUpdateFlag::Destroyed
@@ -3458,28 +3478,7 @@ void HistoryWidget::showHistory(
 		unreadCountUpdated(); // set _historyDown badge.
 		showAboutTopPromotion();
 
-		if (!session().sponsoredMessages().isTopBarFor(_history)) {
-			const auto checkState = [=] {
-				using State = Data::SponsoredMessages::State;
-				const auto state = session().sponsoredMessages().state(
-					_history);
-				_sponsoredMessagesStateKnown = (state != State::None);
-				if (state == State::InjectToMiddle) {
-					injectSponsoredMessages();
-				}
-			};
-			const auto history = _history;
-			session().sponsoredMessages().request(
-				_history,
-				crl::guard(this, [=, this] {
-					if (history == _history) {
-						checkState();
-					}
-				}));
-			checkState();
-		} else {
-			requestSponsoredMessageBar();
-		}
+		requestSponsoredMessages();
 	} else {
 		_chooseForReport = nullptr;
 		refreshTopBarActiveChat();
@@ -3586,6 +3585,32 @@ void HistoryWidget::setupPreview() {
 		}
 		updateField();
 	}, _preview->lifetime());
+}
+
+void HistoryWidget::requestSponsoredMessages() {
+	if (!_history) {
+		return;
+	} else if (session().sponsoredMessages().isTopBarFor(_history)) {
+		requestSponsoredMessageBar();
+		return;
+	}
+	const auto checkState = [=] {
+		using State = Data::SponsoredMessages::State;
+		const auto state = session().sponsoredMessages().state(_history);
+		_sponsoredMessagesStateKnown = (state != State::None);
+		if (state == State::InjectToMiddle) {
+			injectSponsoredMessages();
+		}
+	};
+	const auto history = _history;
+	session().sponsoredMessages().request(
+		_history,
+		crl::guard(this, [=] {
+			if (history == _history) {
+				checkState();
+			}
+		}));
+	checkState();
 }
 
 void HistoryWidget::injectSponsoredMessages() const {

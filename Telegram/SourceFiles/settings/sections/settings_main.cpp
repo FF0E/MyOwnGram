@@ -56,6 +56,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/sections/settings_credits.h"
 #include "settings/sections/settings_folders.h"
 #include "settings/sections/settings_information.h"
+#include "settings/sections/settings_myowngram.h"
 #include "settings/sections/settings_notifications.h"
 #include "settings/settings_power_saving.h"
 #include "settings/sections/settings_premium.h"
@@ -439,6 +440,12 @@ void BuildSectionButtons(SectionBuilder &builder) {
 		.targetSection = AdvancedId(),
 		.icon = { &st::menuIconManage },
 		.keywords = { u"performance"_q, u"proxy"_q, u"experimental"_q },
+	});
+
+	builder.addSectionButton({
+		.title = tr::lng_myowngram_title(),
+		.targetSection = MyOwnGramId(),
+		.icon = { &st::menuIconCustomize },
 	});
 
 	builder.addSectionButton({

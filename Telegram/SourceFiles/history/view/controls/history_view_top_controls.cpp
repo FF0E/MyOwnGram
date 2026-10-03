@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/call_delayed.h"
 #include "boxes/peers/edit_peer_requests_box.h"
 #include "calls/calls_instance.h"
+#include "core/ad_settings.h"
 #include "core/application.h"
 #include "data/components/sponsored_messages.h"
 #include "data/data_channel.h"
@@ -101,6 +102,18 @@ TopControls::TopControls(
 	setupTranslateBar();
 	rebuildModeSensitiveBars();
 	requestSponsoredMessageBar();
+	_history->session().sponsoredMessages().changes(
+	) | rpl::filter([](Core::AdPlacement placement) {
+		return placement == Core::AdPlacement::Bot;
+	}) | rpl::on_next([=] {
+		if (_sponsoredMessageBar
+			&& _history->session().sponsoredMessages().state(_history)
+				== Data::SponsoredMessages::State::None) {
+			_sponsoredMessageBar->finishAnimating();
+		}
+		requestSponsoredMessageBar();
+		checkSponsoredMessageBar();
+	}, _wrap->lifetime());
 	rpl::merge(
 		_list->heightValue() | rpl::to_empty,
 		_scroll->heightValue() | rpl::to_empty

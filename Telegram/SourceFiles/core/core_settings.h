@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include "core/ad_settings.h"
 #include "core/core_settings_proxy.h"
 #include "media/media_common.h"
 #include "dialogs/ui/dialogs_quick_action.h"
@@ -1058,6 +1059,11 @@ public:
 			std::forward<Other>(fallback));
 	}
 
+	[[nodiscard]] AdSettings adSettings(AdPlacement placement) const;
+	[[nodiscard]] rpl::producer<AdSettings> adSettingsValue(
+		AdPlacement placement) const;
+	void setAdSettings(AdPlacement placement, AdSettings value);
+
 	void resetOnLastLogout();
 
 private:
@@ -1207,6 +1213,7 @@ private:
 	rpl::variable<Ui::ChatsFiltersTabsMode> _chatFiltersTabsMode
 		= Ui::ChatsFiltersTabsMode::Default;
 	base::flat_map<QByteArray, QByteArray> _prefs;
+	rpl::variable<AdPreferences> _adSettings = AdPreferences();
 
 	bool _tabbedReplacedWithInfo = false; // per-window
 	rpl::event_stream<bool> _tabbedReplacedWithInfoValue; // per-window

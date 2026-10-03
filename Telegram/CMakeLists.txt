@@ -546,6 +546,7 @@ PRIVATE
     chat_helpers/tabbed_selector.h
     chat_helpers/ttl_media_layer_widget.cpp
     chat_helpers/ttl_media_layer_widget.h
+    core/ad_settings.h
     core/application.cpp
     core/application.h
     core/proxy_rotation_manager.cpp
@@ -1879,6 +1880,8 @@ PRIVATE
     settings/sections/settings_local_storage.h
     settings/sections/settings_main.cpp
     settings/sections/settings_main.h
+    settings/sections/settings_myowngram.cpp
+    settings/sections/settings_myowngram.h
     settings/settings_recent_searches.cpp
     settings/settings_recent_searches.h
     settings/settings_search.cpp

@@ -10,7 +10,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_text_entities.h"
 #include "api/api_peer_search.h" // SponsoredSearchResult
 #include "apiwrap.h"
+#include "core/application.h"
 #include "core/click_handler_types.h"
+#include "core/core_settings.h"
 #include "data/data_channel.h"
 #include "data/data_document.h"
 #include "data/data_file_origin.h"
@@ -33,6 +35,12 @@ constexpr auto kMs = crl::time(1000);
 constexpr auto kRequestTimeLimit = 5 * 60 * crl::time(1000);
 
 const auto kFlaggedPreload = ((MediaPreload*)quintptr(0x01));
+
+[[nodiscard]] Core::AdPlacement PlacementFor(not_null<History*> history) {
+	return history->peer->isUser()
+		? Core::AdPlacement::Bot
+		: Core::AdPlacement::Channel;
+}
 
 [[nodiscard]] bool TooEarlyForRequest(crl::time received) {
 	return (received > 0) && (received + kRequestTimeLimit > crl::now());
@@ -60,19 +68,44 @@ SponsoredMessages::SponsoredMessages(not_null<Main::Session*> session)
 		_session
 	) | rpl::on_next([=](bool premium) {
 		if (premium) {
-			clear();
+			clearChatData();
 		}
 	}, _lifetime);
+	for (const auto placement : {
+		Core::AdPlacement::Channel,
+		Core::AdPlacement::Bot,
+		Core::AdPlacement::Video,
+	}) {
+		Core::App().settings().adSettingsValue(
+			placement
+		) | rpl::skip(1) | rpl::on_next([=](Core::AdSettings settings) {
+			if (!settings.show) {
+				clearFor(placement);
+			}
+			_changes.fire_copy(placement);
+		}, _lifetime);
+	}
 }
 
 SponsoredMessages::~SponsoredMessages() {
 	Expects(_data.empty());
 	Expects(_requests.empty());
 	Expects(_viewRequests.empty());
+	Expects(_dataForVideo.empty());
+	Expects(_requestsForVideo.empty());
 }
 
 void SponsoredMessages::clear() {
 	_lifetime.destroy();
+	_clearTimer.cancel();
+	clearChatData();
+	for (const auto &request : base::take(_requestsForVideo)) {
+		_session->api().request(request.second.requestId).cancel();
+	}
+	base::take(_dataForVideo);
+}
+
+void SponsoredMessages::clearChatData() {
 	for (const auto &request : base::take(_requests)) {
 		_session->api().request(request.second.requestId).cancel();
 	}
@@ -80,6 +113,24 @@ void SponsoredMessages::clear() {
 		_session->api().request(request.second.requestId).cancel();
 	}
 	base::take(_data);
+}
+
+void SponsoredMessages::clearFor(Core::AdPlacement placement) {
+	if (placement == Core::AdPlacement::Video) {
+		base::take(_dataForVideo);
+		return;
+	}
+	// UI removal callbacks may reenter the ad lookup.
+	auto previous = base::take(_data);
+	for (auto &[history, list] : previous) {
+		if (PlacementFor(history) != placement) {
+			_data.emplace(history, std::move(list));
+		}
+	}
+}
+
+rpl::producer<Core::AdPlacement> SponsoredMessages::changes() const {
+	return _changes.events();
 }
 
 void SponsoredMessages::clearOldRequests() {
@@ -328,8 +379,9 @@ void SponsoredMessages::request(not_null<History*> history, Fn<void()> done) {
 	if (!canHaveFor(history)) {
 		return;
 	}
-	auto &request = _requests[history];
-	if (request.requestId || TooEarlyForRequest(request.lastReceived)) {
+	const auto i = _requests.find(history);
+	if (i != end(_requests)
+		&& (i->second.requestId || TooEarlyForRequest(i->second.lastReceived))) {
 		return;
 	}
 	{
@@ -345,7 +397,13 @@ void SponsoredMessages::request(not_null<History*> history, Fn<void()> done) {
 			}
 		}
 	}
-	request.requestId = _session->api().request(
+	if (!Core::App().settings().adSettings(PlacementFor(history)).get) {
+		if (done) {
+			done();
+		}
+		return;
+	}
+	_requests[history].requestId = _session->api().request(
 		MTPmessages_GetSponsoredMessages(
 			MTP_flags(0),
 			history->peer->input(),
@@ -384,27 +442,23 @@ void SponsoredMessages::requestForVideo(
 	if (request.requestId) {
 		return;
 	}
-	{
-		const auto it = _dataForVideo.find(peer);
-		if (it != end(_dataForVideo)) {
-			const auto &list = it->second;
-			// Don't rebuild currently displayed messages.
-			const auto proj = [](const Entry &e) {
-				return e.item != nullptr;
-			};
-			if (ranges::any_of(list.entries, proj)) {
-				return;
-			}
-		}
-	}
-	const auto finish = [=] {
+	const auto finish = [=](bool received) {
 		const auto i = _requestsForVideo.find(peer);
-		if (i != end(_requestsForVideo)) {
-			for (const auto &callback : base::take(i->second.callbacks)) {
-				callback(prepareForVideo(peer));
-			}
+		if (i == end(_requestsForVideo)) {
+			return;
+		}
+		const auto callbacks = base::take(i->second.callbacks);
+		if (!received) {
+			_requestsForVideo.erase(i);
+		}
+		for (const auto &callback : callbacks) {
+			callback(received ? prepareForVideo(peer) : SponsoredForVideo());
 		}
 	};
+	if (!Core::App().settings().adSettings(Core::AdPlacement::Video).get) {
+		finish(false);
+		return;
+	}
 	using Flag = MTPmessages_GetSponsoredMessages::Flag;
 	request.requestId = _session->api().request(
 		MTPmessages_GetSponsoredMessages(
@@ -413,10 +467,9 @@ void SponsoredMessages::requestForVideo(
 			MTP_int(item->id.bare))
 	).done([=](const MTPmessages_sponsoredMessages &result) {
 		parseForVideo(peer, result);
-		finish();
+		finish(true);
 	}).fail([=] {
-		_requestsForVideo.remove(peer);
-		finish();
+		finish(false);
 	}).send();
 }
 
@@ -442,6 +495,9 @@ void SponsoredMessages::parse(
 		_clearTimer.callOnce(kRequestTimeLimit * 2);
 	}
 
+	if (!Core::App().settings().adSettings(PlacementFor(history)).show) {
+		return;
+	}
 	list.match([&](const MTPDmessages_sponsoredMessages &data) {
 		_session->data().processUsers(data.vusers());
 		_session->data().processChats(data.vchats());
@@ -477,6 +533,9 @@ void SponsoredMessages::parseForVideo(
 		_clearTimer.callOnce(kRequestTimeLimit * 2);
 	}
 
+	if (!Core::App().settings().adSettings(Core::AdPlacement::Video).show) {
+		return;
+	}
 	list.match([&](const MTPDmessages_sponsoredMessages &data) {
 		_session->data().processUsers(data.vusers());
 		_session->data().processChats(data.vchats());
@@ -724,10 +783,17 @@ void SponsoredMessages::view(const FullMsgId &fullId) {
 	if (!entryPtr) {
 		return;
 	}
-	view(entryPtr->sponsored.randomId);
+	view(
+		entryPtr->sponsored.randomId,
+		PlacementFor(entryPtr->sponsored.history));
 }
 
-void SponsoredMessages::view(const QByteArray &randomId) {
+void SponsoredMessages::view(
+		const QByteArray &randomId,
+		Core::AdPlacement placement) {
+	if (!Core::App().settings().adSettings(placement).show) {
+		return;
+	}
 	auto &request = _viewRequests[randomId];
 	if (request.requestId || TooEarlyForRequest(request.lastReceived)) {
 		return;
@@ -784,13 +850,21 @@ void SponsoredMessages::clicked(
 	if (!entryPtr) {
 		return;
 	}
-	clicked(entryPtr->sponsored.randomId, isMedia, isFullscreen);
+	clicked(
+		entryPtr->sponsored.randomId,
+		PlacementFor(entryPtr->sponsored.history),
+		isMedia,
+		isFullscreen);
 }
 
 void SponsoredMessages::clicked(
 		const QByteArray &randomId,
+		Core::AdPlacement placement,
 		bool isMedia,
 		bool isFullscreen) {
+	if (!Core::App().settings().adSettings(placement).show) {
+		return;
+	}
 	using Flag = MTPmessages_ClickSponsoredMessage::Flag;
 	_session->api().request(MTPmessages_ClickSponsoredMessage(
 		MTP_flags(Flag(0)
