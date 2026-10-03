@@ -14,7 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/settings_builder.h"
 #include "settings/settings_common_session.h"
 #include "ui/widgets/buttons.h"
-#include "ui/vertical_list.h"
+#include "ui/wrap/vertical_layout.h"
 
 #include <tuple>
 
