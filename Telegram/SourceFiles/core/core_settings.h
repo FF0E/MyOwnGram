@@ -1222,7 +1222,7 @@ private:
 		= Ui::ChatsFiltersTabsMode::Default;
 	base::flat_map<QByteArray, QByteArray> _prefs;
 	rpl::variable<AdPreferences> _adSettings = AdPreferences();
-	rpl::variable<bool> _sendReadMetrics = false;
+	rpl::variable<bool> _sendReadMetrics = true;
 
 	bool _tabbedReplacedWithInfo = false; // per-window
 	rpl::event_stream<bool> _tabbedReplacedWithInfoValue; // per-window

@@ -1326,7 +1326,7 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 		ads.constData(),
 		size_t(ads.size()),
 	});
-	_sendReadMetrics = readPref<bool>(kSendReadMetricsKey);
+	_sendReadMetrics = readPref<bool>(kSendReadMetricsKey, true);
 }
 
 AdSettings Settings::adSettings(AdPlacement placement) const {
@@ -1791,9 +1791,7 @@ void Settings::resetOnLastLogout() {
 	const auto srDisabled = readPref<bool>(kScreenReaderModeDisabledKey);
 	const auto ads = readPref<QByteArray>(kAdSettingsKey);
 	_prefs.clear();
-	if (sendReadMetrics()) {
-		writePref<bool>(kSendReadMetricsKey, true);
-	}
+	writePref<bool>(kSendReadMetricsKey, sendReadMetrics());
 	if (!ads.isEmpty()) {
 		writePref<QByteArray>(kAdSettingsKey, ads);
 	}
