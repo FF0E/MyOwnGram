@@ -8,6 +8,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_read_metrics.h"
 
 #include "apiwrap.h"
+#include "core/application.h"
+#include "core/core_settings.h"
 #include "data/data_peer.h"
 
 namespace Api {
@@ -20,14 +22,31 @@ constexpr auto kSendTimeout = crl::time(5000);
 ReadMetrics::ReadMetrics(not_null<ApiWrap*> api)
 : _api(&api->instance())
 , _timer([=] { send(); }) {
+	Core::App().settings().sendReadMetricsValue(
+	) | rpl::on_next([=](bool enabled) {
+		if (!enabled) {
+			clear();
+		}
+	}, _lifetime);
 }
 
 void ReadMetrics::add(
 		not_null<PeerData*> peer,
 		FinalizedReadMetric metric) {
+	if (!Core::App().settings().sendReadMetrics()) {
+		return;
+	}
 	_pending[peer].push_back(metric);
 	if (!_timer.isActive()) {
 		_timer.callOnce(kSendTimeout);
+	}
+}
+
+void ReadMetrics::clear() {
+	_timer.cancel();
+	_pending.clear();
+	for (const auto &[peer, requestId] : base::take(_requests)) {
+		_api.request(requestId).cancel();
 	}
 }
 

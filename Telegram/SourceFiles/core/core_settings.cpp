@@ -27,6 +27,8 @@ constexpr auto kInitialVideoQuality = 480; // Start with SD.
 constexpr auto kMinIvZoom = 25;
 constexpr auto kMaxIvZoom = 400;
 constexpr auto kAdSettingsKey = std::string_view("myowngram-ad-controls");
+constexpr auto kSendReadMetricsKey
+	= std::string_view("myowngram-send-read-metrics");
 
 [[nodiscard]] int DefaultIvZoom() {
 	const auto exact = cScale() * 100 / cScreenScale();
@@ -530,6 +532,19 @@ QByteArray Settings::serialize() const {
 
 	Ensures(result.size() == size);
 	return result;
+}
+
+template <>
+std::optional<bool> Settings::readPrefImpl<bool>(std::string_view key) {
+	if (const auto data = readPrefGeneric(key)) {
+		return !data->isEmpty();
+	}
+	return {};
+}
+
+template <>
+void Settings::writePrefImpl<bool>(std::string_view key, bool value) {
+	writePrefGeneric(key, value ? "\x1"_q : QByteArray());
 }
 
 void Settings::addFromSerialized(const QByteArray &serialized) {
@@ -1311,6 +1326,7 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 		ads.constData(),
 		size_t(ads.size()),
 	});
+	_sendReadMetrics = readPref<bool>(kSendReadMetricsKey);
 }
 
 AdSettings Settings::adSettings(AdPlacement placement) const {
@@ -1333,6 +1349,14 @@ void Settings::setAdSettings(AdPlacement placement, AdSettings value) {
 	const auto bytes = SerializeAdPreferences(values);
 	writePrefGeneric(kAdSettingsKey, QByteArray(bytes.data(), bytes.size()));
 	_adSettings = std::move(values);
+}
+
+void Settings::setSendReadMetrics(bool enabled) {
+	if (_sendReadMetrics.current() == enabled) {
+		return;
+	}
+	writePref<bool>(kSendReadMetricsKey, enabled);
+	_sendReadMetrics = enabled;
 }
 
 void Settings::clearPref(std::string_view key) {
@@ -1362,19 +1386,6 @@ void Settings::writePrefGeneric(
 std::optional<QByteArray> Settings::readPrefGeneric(std::string_view key) {
 	const auto i = _prefs.find(QByteArray(key.data(), key.size()));
 	return (i != end(_prefs)) ? i->second : std::optional<QByteArray>();
-}
-
-template <>
-std::optional<bool> Settings::readPrefImpl<bool>(std::string_view key) {
-	if (const auto data = readPrefGeneric(key)) {
-		return !data->isEmpty();
-	}
-	return {};
-}
-
-template <>
-void Settings::writePrefImpl<bool>(std::string_view key, bool value) {
-	writePrefGeneric(key, value ? "\x1"_q : QByteArray());
 }
 
 template <>
@@ -1780,6 +1791,9 @@ void Settings::resetOnLastLogout() {
 	const auto srDisabled = readPref<bool>(kScreenReaderModeDisabledKey);
 	const auto ads = readPref<QByteArray>(kAdSettingsKey);
 	_prefs.clear();
+	if (sendReadMetrics()) {
+		writePref<bool>(kSendReadMetricsKey, true);
+	}
 	if (!ads.isEmpty()) {
 		writePref<QByteArray>(kAdSettingsKey, ads);
 	}

@@ -44,6 +44,7 @@ private:
 		crl::time exitGraceStart = 0;
 	};
 
+	void setEnabled(bool enabled);
 	void onTimeout();
 	void sync(crl::time now);
 	void processTransitions(crl::time now, crl::time activeUntil);
@@ -69,6 +70,7 @@ private:
 	int _batchVisibleBottom = 0;
 	base::flat_set<MsgId> _batchVisible;
 	crl::time _lastActivity = 0;
+	bool _enabled = false;
 	bool _appActive = true;
 	bool _screenActive = true;
 	bool _paused = false;

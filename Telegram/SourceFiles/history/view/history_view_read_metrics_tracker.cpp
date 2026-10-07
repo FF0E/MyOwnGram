@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "apiwrap.h"
 #include "base/random.h"
 #include "core/application.h"
+#include "core/core_settings.h"
 #include "data/data_peer.h"
 #include "history/history_item.h"
 #include "main/main_session.h"
@@ -28,6 +29,10 @@ constexpr auto kMinReportThreshold = crl::time(300);
 ReadMetricsTracker::ReadMetricsTracker(not_null<PeerData*> peer)
 : _peer(peer)
 , _timer([=] { onTimeout(); }) {
+	Core::App().settings().sendReadMetricsValue(
+	) | rpl::on_next([=](bool enabled) {
+		setEnabled(enabled);
+	}, _lifetime);
 	Core::App().appDeactivatedValue(
 	) | rpl::on_next([=](bool deactivated) {
 		const auto appActive = !deactivated;
@@ -44,6 +49,9 @@ ReadMetricsTracker::~ReadMetricsTracker() {
 }
 
 void ReadMetricsTracker::startBatch(int visibleTop, int visibleBottom) {
+	if (!_enabled) {
+		return;
+	}
 	_batchNow = crl::now();
 	sync(_batchNow);
 	_batchViewportHeight = visibleBottom - visibleTop;
@@ -56,7 +64,7 @@ void ReadMetricsTracker::push(
 		not_null<HistoryItem*> item,
 		int itemTop,
 		int itemHeight) {
-	if (!ShouldTrack(item)) {
+	if (!_enabled || !ShouldTrack(item)) {
 		return;
 	}
 	const auto msgId = item->id;
@@ -102,6 +110,9 @@ void ReadMetricsTracker::push(
 }
 
 void ReadMetricsTracker::endBatch() {
+	if (!_enabled) {
+		return;
+	}
 	for (auto it = _tracked.begin(); it != _tracked.end();) {
 		if (_batchVisible.contains(it->first)) {
 			++it;
@@ -124,7 +135,7 @@ void ReadMetricsTracker::endBatch() {
 }
 
 void ReadMetricsTracker::registerActivity() {
-	if (!_appActive || !_screenActive) {
+	if (!_enabled || !_appActive || !_screenActive) {
 		return;
 	}
 	const auto now = crl::now();
@@ -150,6 +161,17 @@ void ReadMetricsTracker::pauseTracking() {
 
 void ReadMetricsTracker::resumeTracking() {
 	setScreenActive(true);
+}
+
+void ReadMetricsTracker::setEnabled(bool enabled) {
+	_enabled = enabled;
+	if (!enabled) {
+		_timer.cancel();
+		_tracked.clear();
+		_currentlyVisible.clear();
+		_batchVisible.clear();
+		_lastActivity = 0;
+	}
 }
 
 void ReadMetricsTracker::onTimeout() {

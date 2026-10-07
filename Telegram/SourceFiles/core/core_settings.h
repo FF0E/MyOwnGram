@@ -1064,6 +1064,14 @@ public:
 		AdPlacement placement) const;
 	void setAdSettings(AdPlacement placement, AdSettings value);
 
+	[[nodiscard]] bool sendReadMetrics() const {
+		return _sendReadMetrics.current();
+	}
+	[[nodiscard]] rpl::producer<bool> sendReadMetricsValue() const {
+		return _sendReadMetrics.value();
+	}
+	void setSendReadMetrics(bool enabled);
+
 	void resetOnLastLogout();
 
 private:
@@ -1214,6 +1222,7 @@ private:
 		= Ui::ChatsFiltersTabsMode::Default;
 	base::flat_map<QByteArray, QByteArray> _prefs;
 	rpl::variable<AdPreferences> _adSettings = AdPreferences();
+	rpl::variable<bool> _sendReadMetrics = false;
 
 	bool _tabbedReplacedWithInfo = false; // per-window
 	rpl::event_stream<bool> _tabbedReplacedWithInfoValue; // per-window

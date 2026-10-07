@@ -585,6 +585,10 @@ ListWidget::ListWidget(
 		});
 	}
 	if (_readMetricsTracker) {
+		Core::App().settings().sendReadMetricsValue(
+		) | rpl::on_next([=](bool) {
+			markReadMetricsStale();
+		}, lifetime());
 		Core::App().inAppKeyPressed(
 		) | rpl::on_next([=] {
 			registerReadMetricsActivity();

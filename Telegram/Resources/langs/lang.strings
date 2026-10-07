@@ -8794,4 +8794,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_ads_get_search" = "Get search ads";
 "lng_myowngram_ads_get_video" = "Get media-player ads";
 
+"lng_myowngram_privacy_title" = "Privacy";
+"lng_myowngram_reading_analytics" = "Send reading analytics";
+"lng_myowngram_reading_analytics_about" = "Send Telegram viewing-time and visibility statistics for messages with view counters. Read receipts and post view counts are unaffected.";
+
 // Keys finished

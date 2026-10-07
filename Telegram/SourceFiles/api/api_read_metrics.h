@@ -31,6 +31,7 @@ public:
 	void add(not_null<PeerData*> peer, FinalizedReadMetric metric);
 
 private:
+	void clear();
 	void send();
 
 	MTP::Sender _api;
@@ -39,6 +40,7 @@ private:
 		std::vector<FinalizedReadMetric>> _pending;
 	base::flat_map<not_null<PeerData*>, mtpRequestId> _requests;
 	base::Timer _timer;
+	rpl::lifetime _lifetime;
 
 };
 

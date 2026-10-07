@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/application.h"
 #include "core/file_utilities.h"
 #include "core/click_handler_types.h"
+#include "core/core_settings.h"
 #include "core/phone_click_handler.h"
 #include "data/data_chat_participant_status.h"
 #include "history/history_item_helpers.h"
@@ -420,6 +421,10 @@ HistoryInner::HistoryInner(
 
 	setMouseTracking(true);
 	setAccessibleName(tr::lng_sr_message_list(tr::now));
+	Core::App().settings().sendReadMetricsValue(
+	) | rpl::on_next([=](bool) {
+		markReadMetricsStale();
+	}, lifetime());
 	Core::App().inAppKeyPressed(
 	) | rpl::on_next([=] {
 		registerReadMetricsActivity();

@@ -42,6 +42,14 @@ public:
 
 };
 
+class Privacy final : public Section<Privacy> {
+public:
+	Privacy(QWidget *parent, not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+};
+
 void AddAdToggles(
 		SectionBuilder &builder,
 		bool Core::AdSettings::*flag) {
@@ -104,6 +112,12 @@ const auto kMain = BuildHelper({
 		.icon = { &st::menuIconBlock },
 		.keywords = { u"ads"_q, u"sponsored"_q, u"advertising"_q },
 	});
+	builder.addSectionButton({
+		.title = tr::lng_myowngram_privacy_title(),
+		.targetSection = Privacy::Id(),
+		.icon = { &st::menuIconLock },
+		.keywords = { u"analytics"_q, u"tracking"_q, u"telemetry"_q },
+	});
 	builder.addSkip();
 	builder.addDividerText(tr::lng_myowngram_about());
 });
@@ -124,6 +138,30 @@ const auto kAds = BuildHelper({
 	AddAdToggles(builder, &Core::AdSettings::get);
 	builder.addSkip();
 	builder.addDividerText(tr::lng_myowngram_ads_get_about());
+});
+
+const auto kPrivacy = BuildHelper({
+	.id = Privacy::Id(),
+	.parentId = MyOwnGram::Id(),
+	.title = &tr::lng_myowngram_privacy_title,
+	.icon = &st::menuIconLock,
+}, [](SectionBuilder &builder) {
+	const auto settings = &Core::App().settings();
+	builder.addSkip();
+	const auto button = builder.addButton({
+		.id = u"myowngram/privacy/reading-analytics"_q,
+		.title = tr::lng_myowngram_reading_analytics(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->sendReadMetricsValue(),
+		.keywords = { u"tracking"_q, u"telemetry"_q, u"read metrics"_q },
+	});
+	if (button) {
+		button->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setSendReadMetrics(enabled);
+		}, button->lifetime());
+	}
+	builder.addSkip();
+	builder.addDividerText(tr::lng_myowngram_reading_analytics_about());
 });
 
 MyOwnGram::MyOwnGram(
@@ -150,6 +188,19 @@ Ads::Ads(
 
 rpl::producer<QString> Ads::title() {
 	return tr::lng_myowngram_ads_title();
+}
+
+Privacy::Privacy(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	build(content, kPrivacy.build);
+	Ui::ResizeFitChild(this, content);
+}
+
+rpl::producer<QString> Privacy::title() {
+	return tr::lng_myowngram_privacy_title();
 }
 
 } // namespace
