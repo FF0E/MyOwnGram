@@ -1072,6 +1072,14 @@ public:
 	}
 	void setSendReadMetrics(bool enabled);
 
+	[[nodiscard]] bool sendPremiumPromoAnalytics() const {
+		return _sendPremiumPromoAnalytics.current();
+	}
+	[[nodiscard]] rpl::producer<bool> sendPremiumPromoAnalyticsValue() const {
+		return _sendPremiumPromoAnalytics.value();
+	}
+	void setSendPremiumPromoAnalytics(bool enabled);
+
 	void resetOnLastLogout();
 
 private:
@@ -1223,6 +1231,7 @@ private:
 	base::flat_map<QByteArray, QByteArray> _prefs;
 	rpl::variable<AdPreferences> _adSettings = AdPreferences();
 	rpl::variable<bool> _sendReadMetrics = true;
+	rpl::variable<bool> _sendPremiumPromoAnalytics = true;
 
 	bool _tabbedReplacedWithInfo = false; // per-window
 	rpl::event_stream<bool> _tabbedReplacedWithInfoValue; // per-window

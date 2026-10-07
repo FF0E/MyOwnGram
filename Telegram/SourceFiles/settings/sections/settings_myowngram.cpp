@@ -162,6 +162,21 @@ const auto kPrivacy = BuildHelper({
 	}
 	builder.addSkip();
 	builder.addDividerText(tr::lng_myowngram_reading_analytics_about());
+	builder.addSkip();
+	const auto premium = builder.addButton({
+		.id = u"myowngram/privacy/premium-promo-analytics"_q,
+		.title = tr::lng_myowngram_premium_promo_analytics(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->sendPremiumPromoAnalyticsValue(),
+		.keywords = { u"tracking"_q, u"telemetry"_q, u"subscription"_q },
+	});
+	if (premium) {
+		premium->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setSendPremiumPromoAnalytics(enabled);
+		}, premium->lifetime());
+	}
+	builder.addSkip();
+	builder.addDividerText(tr::lng_myowngram_premium_promo_analytics_about());
 });
 
 MyOwnGram::MyOwnGram(

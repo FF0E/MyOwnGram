@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "chat_helpers/stickers_lottie.h" // LottiePlayerFromDocument.
 #include "core/application.h"
 #include "core/click_handler_types.h"
+#include "core/core_settings.h"
 #include "core/local_url_handlers.h" // Core::TryConvertUrlToLocal.
 #include "core/ui_integration.h" // TextContext.
 #include "data/data_document.h"
@@ -499,6 +500,9 @@ void SendAppLog(
 		not_null<::Main::Session*> session,
 		const QString &type,
 		const MTPJSONValue &data) {
+	if (!Core::App().settings().sendPremiumPromoAnalytics()) {
+		return;
+	}
 	const auto now = double(base::unixtime::now())
 		+ (QTime::currentTime().msec() / 1000.);
 	session->api().request(MTPhelp_SaveAppLog(
@@ -519,6 +523,9 @@ void SendScreenShow(
 		not_null<Window::SessionController*> controller,
 		const std::vector<QString> &order,
 		const QString &ref) {
+	if (!Core::App().settings().sendPremiumPromoAnalytics()) {
+		return;
+	}
 	auto list = QVector<MTPJSONValue>();
 	list.reserve(order.size());
 	for (const auto &element : order) {

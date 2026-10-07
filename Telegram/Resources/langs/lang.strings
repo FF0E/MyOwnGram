@@ -8798,4 +8798,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_reading_analytics" = "Send reading analytics";
 "lng_myowngram_reading_analytics_about" = "Send Telegram viewing-time and visibility statistics for messages with view counters. Read receipts and post view counts are unaffected.";
 
+"lng_myowngram_premium_promo_analytics" = "Send Premium promotion analytics";
+"lng_myowngram_premium_promo_analytics_about" = "Send Telegram reports about opening the Premium promotion page and certain subscription-button clicks. Offers and purchases are unaffected. Requests already started may still be sent.";
+
 // Keys finished

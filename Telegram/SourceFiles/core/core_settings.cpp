@@ -29,6 +29,8 @@ constexpr auto kMaxIvZoom = 400;
 constexpr auto kAdSettingsKey = std::string_view("myowngram-ad-controls");
 constexpr auto kSendReadMetricsKey
 	= std::string_view("myowngram-send-read-metrics");
+constexpr auto kSendPremiumPromoAnalyticsKey
+	= std::string_view("myowngram-send-premium-promo-analytics");
 
 [[nodiscard]] int DefaultIvZoom() {
 	const auto exact = cScale() * 100 / cScreenScale();
@@ -1327,6 +1329,9 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 		size_t(ads.size()),
 	});
 	_sendReadMetrics = readPref<bool>(kSendReadMetricsKey, true);
+	_sendPremiumPromoAnalytics = readPref<bool>(
+		kSendPremiumPromoAnalyticsKey,
+		true);
 }
 
 AdSettings Settings::adSettings(AdPlacement placement) const {
@@ -1357,6 +1362,14 @@ void Settings::setSendReadMetrics(bool enabled) {
 	}
 	writePref<bool>(kSendReadMetricsKey, enabled);
 	_sendReadMetrics = enabled;
+}
+
+void Settings::setSendPremiumPromoAnalytics(bool enabled) {
+	if (_sendPremiumPromoAnalytics.current() == enabled) {
+		return;
+	}
+	writePref<bool>(kSendPremiumPromoAnalyticsKey, enabled);
+	_sendPremiumPromoAnalytics = enabled;
 }
 
 void Settings::clearPref(std::string_view key) {
@@ -1792,6 +1805,7 @@ void Settings::resetOnLastLogout() {
 	const auto ads = readPref<QByteArray>(kAdSettingsKey);
 	_prefs.clear();
 	writePref<bool>(kSendReadMetricsKey, sendReadMetrics());
+	writePref<bool>(kSendPremiumPromoAnalyticsKey, sendPremiumPromoAnalytics());
 	if (!ads.isEmpty()) {
 		writePref<QByteArray>(kAdSettingsKey, ads);
 	}
