@@ -99,6 +99,91 @@ void AddAdToggles(
 	}
 }
 
+void AddActivityToggles(SectionBuilder &builder) {
+	struct Row {
+		bool Core::ActivitySettings::*flag = nullptr;
+		const tr::phrase<> *title = nullptr;
+		QString id;
+		const tr::phrase<> *about = nullptr;
+	};
+	const auto rows = std::array{
+		Row{
+			&Core::ActivitySettings::online,
+			&tr::lng_myowngram_send_online_status,
+			u"online"_q,
+			&tr::lng_myowngram_online_status_about,
+		},
+		Row{
+			&Core::ActivitySettings::typing,
+			&tr::lng_myowngram_send_typing_status,
+			u"typing"_q,
+		},
+		Row{
+			&Core::ActivitySettings::recording,
+			&tr::lng_myowngram_send_recording_status,
+			u"recording"_q,
+		},
+		Row{
+			&Core::ActivitySettings::uploading,
+			&tr::lng_myowngram_send_upload_status,
+			u"uploading"_q,
+		},
+		Row{
+			&Core::ActivitySettings::stickerSelection,
+			&tr::lng_myowngram_send_sticker_selection_status,
+			u"stickers"_q,
+		},
+		Row{
+			&Core::ActivitySettings::game,
+			&tr::lng_myowngram_send_game_activity_status,
+			u"games"_q,
+		},
+		Row{
+			&Core::ActivitySettings::speaking,
+			&tr::lng_myowngram_send_group_call_speaking_status,
+			u"speaking"_q,
+			&tr::lng_myowngram_activity_status_about,
+		},
+		Row{
+			&Core::ActivitySettings::emojiEffects,
+			&tr::lng_myowngram_share_emoji_effects,
+			u"emoji-effects"_q,
+		},
+		Row{
+			&Core::ActivitySettings::emojiWatching,
+			&tr::lng_myowngram_send_emoji_watching_status,
+			u"emoji-watching"_q,
+			&tr::lng_myowngram_emoji_activity_about,
+		},
+	};
+	const auto settings = &Core::App().settings();
+	for (const auto &row : rows) {
+		const auto flag = row.flag;
+		const auto button = builder.addButton({
+			.id = u"myowngram/privacy/activity/"_q + row.id,
+			.title = (*row.title)(),
+			.st = &st::settingsButtonNoIcon,
+			.toggled = settings->activitySettingsValue()
+				| rpl::map([=](const Core::ActivitySettings &value) {
+					return value.*flag;
+				}) | rpl::distinct_until_changed(),
+			.keywords = { u"activity"_q, u"status"_q },
+		});
+		if (button) {
+			button->toggledValue() | rpl::on_next([=](bool enabled) {
+				auto value = settings->activitySettings();
+				value.*flag = enabled;
+				settings->setActivitySettings(value);
+			}, button->lifetime());
+		}
+		if (row.about) {
+			builder.addSkip();
+			builder.addDividerText((*row.about)());
+			builder.addSkip();
+		}
+	}
+}
+
 const auto kMain = BuildHelper({
 	.id = MyOwnGram::Id(),
 	.parentId = MainId(),
@@ -177,6 +262,9 @@ const auto kPrivacy = BuildHelper({
 	}
 	builder.addSkip();
 	builder.addDividerText(tr::lng_myowngram_premium_promo_analytics_about());
+	builder.addSkip();
+	builder.addSubsectionTitle(tr::lng_myowngram_activity_title());
+	AddActivityToggles(builder);
 });
 
 MyOwnGram::MyOwnGram(

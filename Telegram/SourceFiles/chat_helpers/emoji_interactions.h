@@ -86,6 +86,7 @@ private:
 		crl::time scheduledAt = 0;
 		crl::time startedAt = 0;
 		bool incoming = false;
+		bool share = true;
 		int index = 0;
 	};
 	struct PlaySent {
@@ -98,6 +99,7 @@ private:
 	};
 	[[nodiscard]] static CheckResult Combine(CheckResult a, CheckResult b);
 
+	void applyActivitySettings();
 	void check(crl::time now = 0);
 	[[nodiscard]] CheckResult checkAnimations(crl::time now);
 	[[nodiscard]] CheckResult checkAnimations(

@@ -7,12 +7,14 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "api/api_send_progress.h"
 
-#include "main/main_session.h"
-#include "history/history.h"
-#include "data/data_peer.h"
-#include "data/data_user.h"
 #include "base/unixtime.h"
+#include "core/application.h"
+#include "core/core_settings.h"
+#include "data/data_peer.h"
 #include "data/data_peer_values.h"
+#include "data/data_user.h"
+#include "history/history.h"
+#include "main/main_session.h"
 #include "apiwrap.h"
 
 namespace Api {
@@ -23,11 +25,68 @@ constexpr auto kSendMySpeakingInterval = 3 * crl::time(1000);
 constexpr auto kSendMyTypingInterval = 5 * crl::time(1000);
 constexpr auto kSendTypingsToOfflineFor = TimeId(30);
 
+[[nodiscard]] bool CanSendProgress(
+		SendProgressType type,
+		const Core::ActivitySettings &settings) {
+	using Type = SendProgressType;
+	switch (type) {
+	case Type::Typing:
+		return settings.typing;
+	case Type::RecordVideo:
+	case Type::RecordVoice:
+	case Type::RecordRound:
+		return settings.recording;
+	case Type::UploadVideo:
+	case Type::UploadVoice:
+	case Type::UploadRound:
+	case Type::UploadPhoto:
+	case Type::UploadFile:
+		return settings.uploading;
+	case Type::ChooseSticker:
+		return settings.stickerSelection;
+	case Type::PlayGame:
+		return settings.game;
+	case Type::Speaking:
+		return settings.speaking;
+	case Type::ChooseLocation:
+	case Type::ChooseContact:
+		return true;
+	}
+	Unexpected("Type in CanSendProgress.");
+}
+
 } // namespace
 
 SendProgressManager::SendProgressManager(not_null<Main::Session*> session)
 : _session(session)
 , _stopTypingTimer([=] { cancelTyping(base::take(_stopTypingHistory)); }) {
+	Core::App().settings().activitySettingsValue(
+	) | rpl::on_next([=] {
+		applyActivitySettings();
+	}, _lifetime);
+}
+
+void SendProgressManager::applyActivitySettings() {
+	const auto settings = Core::App().settings().activitySettings();
+	for (auto i = _requests.begin(); i != _requests.end();) {
+		if (!CanSendProgress(i->first.type, settings)) {
+			_session->api().request(i->second).cancel();
+			i = _requests.erase(i);
+		} else {
+			++i;
+		}
+	}
+	for (auto i = _updated.begin(); i != _updated.end();) {
+		if (!CanSendProgress(i->first.type, settings)) {
+			i = _updated.erase(i);
+		} else {
+			++i;
+		}
+	}
+	if (!settings.typing) {
+		_stopTypingTimer.cancel();
+		_stopTypingHistory = nullptr;
+	}
 }
 
 void SendProgressManager::cancel(
@@ -73,6 +132,11 @@ void SendProgressManager::update(
 	}
 
 	const auto doing = (progress >= 0);
+	if (doing && !CanSendProgress(
+			type,
+			Core::App().settings().activitySettings())) {
+		return;
+	}
 	const auto key = Key{ history, topMsgId, type };
 	if (updated(key, doing)) {
 		cancel(history, topMsgId, type);

@@ -60,6 +60,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_streamed_drafts.h"
 #include "history/history_unread_things.h"
 #include "core/application.h"
+#include "core/core_settings.h"
 #include "storage/storage_account.h"
 #include "storage/storage_facade.h"
 #include "storage/storage_user_photos.h"
@@ -238,6 +239,18 @@ Updates::Updates(not_null<Main::Session*> session)
 , _failDifferenceTimer([=] { getDifferenceAfterFail(); })
 , _idleFinishTimer([=] { checkIdleFinish(); }) {
 	_ptsWaiter.setRequesting(true);
+
+	Core::App().settings().activitySettingsValue(
+	) | rpl::map([](const Core::ActivitySettings &value) {
+		return value.online;
+	}) | rpl::distinct_until_changed(
+	) | rpl::skip(1) | rpl::on_next([=](bool enabled) {
+		if (enabled) {
+			updateOnline(0, true);
+		} else if (_lastWasOnline) {
+			api().request(base::take(_onlineRequest)).cancel();
+		}
+	}, _lifetime);
 
 	session->account().mtpUpdates(
 	) | rpl::on_next([=](const MTPUpdates &updates) {
@@ -1021,18 +1034,20 @@ void Updates::updateOnline(crl::time lastNonIdleTime, bool gotOtherOffline) {
 
 		_lastWasOnline = isOnline;
 		_lastSetOnline = ms;
-		if (!Core::Quitting()) {
-			_onlineRequest = api().request(MTPaccount_UpdateStatus(
-				MTP_bool(!isOnline)
-			)).send();
-		} else {
-			_onlineRequest = api().request(MTPaccount_UpdateStatus(
-				MTP_bool(!isOnline)
-			)).done([=] {
-				Core::App().quitPreventFinished();
-			}).fail([=] {
-				Core::App().quitPreventFinished();
-			}).send();
+		if (!isOnline || Core::App().settings().activitySettings().online) {
+			if (!Core::Quitting()) {
+				_onlineRequest = api().request(MTPaccount_UpdateStatus(
+					MTP_bool(!isOnline)
+				)).send();
+			} else {
+				_onlineRequest = api().request(MTPaccount_UpdateStatus(
+					MTP_bool(!isOnline)
+				)).done([=] {
+					Core::App().quitPreventFinished();
+				}).fail([=] {
+					Core::App().quitPreventFinished();
+				}).send();
+			}
 		}
 
 		const auto self = session().user();

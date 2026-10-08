@@ -8801,4 +8801,18 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_premium_promo_analytics" = "Send Premium promotion analytics";
 "lng_myowngram_premium_promo_analytics_about" = "Send Telegram reports about opening the Premium promotion page and certain subscription-button clicks. Offers and purchases are unaffected. Requests already started may still be sent.";
 
+"lng_myowngram_activity_title" = "Activity";
+"lng_myowngram_send_online_status" = "Send online status";
+"lng_myowngram_online_status_about" = "Turning this off stops this client from reporting that you are online. Normal offline reports continue. Other actions and devices may still show you as online; this does not force you offline.";
+"lng_myowngram_send_typing_status" = "Send typing status";
+"lng_myowngram_send_recording_status" = "Send recording status";
+"lng_myowngram_send_upload_status" = "Send upload status";
+"lng_myowngram_send_sticker_selection_status" = "Send sticker selection status";
+"lng_myowngram_send_game_activity_status" = "Send game activity status";
+"lng_myowngram_send_group_call_speaking_status" = "Send group-call speaking status";
+"lng_myowngram_activity_status_about" = "These switches stop activity notices, not writing, recording, uploading, stickers, games, or calls. The speaking switch does not mute you or hide all speaker indicators. Read confirmations stay unchanged. Notices already received may remain briefly.";
+"lng_myowngram_share_emoji_effects" = "Share emoji effects";
+"lng_myowngram_send_emoji_watching_status" = "Send watching animations status";
+"lng_myowngram_emoji_activity_about" = "Sharing lets your taps on animated emoji start effects on the other person's screen. The watching status tells them when an incoming effect starts playing. Turning these off keeps local effects, emoji messages, reactions, and read confirmations working.";
+
 // Keys finished

@@ -10,6 +10,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_common.h"
 #include "base/timer.h"
 
+#include <rpl/lifetime.h>
+
 class History;
 
 namespace Main {
@@ -87,6 +89,7 @@ private:
 		}
 	};
 
+	void applyActivitySettings();
 	bool updated(const Key &key, bool doing);
 
 	void send(const Key &key, int progress);
@@ -99,6 +102,8 @@ private:
 	base::flat_map<Key, crl::time> _updated;
 	base::Timer _stopTypingTimer;
 	History *_stopTypingHistory = nullptr;
+
+	rpl::lifetime _lifetime;
 
 };
 

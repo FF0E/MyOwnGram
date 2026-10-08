@@ -41,6 +41,22 @@ namespace Core {
 inline constexpr auto kScreenReaderModeDisabledKey
 	= "screen-reader-mode-disabled"_cs;
 
+struct ActivitySettings {
+	bool online = true;
+	bool typing = true;
+	bool recording = true;
+	bool uploading = true;
+	bool stickerSelection = true;
+	bool game = true;
+	bool speaking = true;
+	bool emojiEffects = true;
+	bool emojiWatching = true;
+
+	friend constexpr bool operator==(
+		ActivitySettings,
+		ActivitySettings) = default;
+};
+
 struct WindowPosition {
 	int32 moncrc = 0;
 	int maximized = 0;
@@ -1080,6 +1096,14 @@ public:
 	}
 	void setSendPremiumPromoAnalytics(bool enabled);
 
+	[[nodiscard]] ActivitySettings activitySettings() const {
+		return _activitySettings.current();
+	}
+	[[nodiscard]] rpl::producer<ActivitySettings> activitySettingsValue() const {
+		return _activitySettings.value();
+	}
+	void setActivitySettings(ActivitySettings value);
+
 	void resetOnLastLogout();
 
 private:
@@ -1232,6 +1256,7 @@ private:
 	rpl::variable<AdPreferences> _adSettings = AdPreferences();
 	rpl::variable<bool> _sendReadMetrics = true;
 	rpl::variable<bool> _sendPremiumPromoAnalytics = true;
+	rpl::variable<ActivitySettings> _activitySettings;
 
 	bool _tabbedReplacedWithInfo = false; // per-window
 	rpl::event_stream<bool> _tabbedReplacedWithInfoValue; // per-window

@@ -20,6 +20,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "webrtc/webrtc_device_common.h"
 #include "window/section_widget.h"
 
+#include <array>
+#include <utility>
+
 namespace Core {
 namespace {
 
@@ -31,6 +34,45 @@ constexpr auto kSendReadMetricsKey
 	= std::string_view("myowngram-send-read-metrics");
 constexpr auto kSendPremiumPromoAnalyticsKey
 	= std::string_view("myowngram-send-premium-promo-analytics");
+
+constexpr auto kActivityPreferences = std::array{
+	std::pair{
+		&ActivitySettings::online,
+		std::string_view("myowngram-send-online-status"),
+	},
+	std::pair{
+		&ActivitySettings::typing,
+		std::string_view("myowngram-send-typing-status"),
+	},
+	std::pair{
+		&ActivitySettings::recording,
+		std::string_view("myowngram-send-recording-status"),
+	},
+	std::pair{
+		&ActivitySettings::uploading,
+		std::string_view("myowngram-send-upload-status"),
+	},
+	std::pair{
+		&ActivitySettings::stickerSelection,
+		std::string_view("myowngram-send-sticker-selection-status"),
+	},
+	std::pair{
+		&ActivitySettings::game,
+		std::string_view("myowngram-send-game-status"),
+	},
+	std::pair{
+		&ActivitySettings::speaking,
+		std::string_view("myowngram-send-group-call-speaking-status"),
+	},
+	std::pair{
+		&ActivitySettings::emojiEffects,
+		std::string_view("myowngram-share-emoji-effects"),
+	},
+	std::pair{
+		&ActivitySettings::emojiWatching,
+		std::string_view("myowngram-send-emoji-watching-status"),
+	},
+};
 
 [[nodiscard]] int DefaultIvZoom() {
 	const auto exact = cScale() * 100 / cScreenScale();
@@ -1332,6 +1374,11 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 	_sendPremiumPromoAnalytics = readPref<bool>(
 		kSendPremiumPromoAnalyticsKey,
 		true);
+	auto activity = ActivitySettings();
+	for (const auto &[flag, key] : kActivityPreferences) {
+		activity.*flag = readPref<bool>(key, true);
+	}
+	_activitySettings = activity;
 }
 
 AdSettings Settings::adSettings(AdPlacement placement) const {
@@ -1370,6 +1417,19 @@ void Settings::setSendPremiumPromoAnalytics(bool enabled) {
 	}
 	writePref<bool>(kSendPremiumPromoAnalyticsKey, enabled);
 	_sendPremiumPromoAnalytics = enabled;
+}
+
+void Settings::setActivitySettings(ActivitySettings value) {
+	const auto current = _activitySettings.current();
+	if (current == value) {
+		return;
+	}
+	for (const auto &[flag, key] : kActivityPreferences) {
+		if (current.*flag != value.*flag) {
+			writePref<bool>(key, value.*flag);
+		}
+	}
+	_activitySettings = value;
 }
 
 void Settings::clearPref(std::string_view key) {
@@ -1806,6 +1866,9 @@ void Settings::resetOnLastLogout() {
 	_prefs.clear();
 	writePref<bool>(kSendReadMetricsKey, sendReadMetrics());
 	writePref<bool>(kSendPremiumPromoAnalyticsKey, sendPremiumPromoAnalytics());
+	for (const auto &[flag, key] : kActivityPreferences) {
+		writePref<bool>(key, activitySettings().*flag);
+	}
 	if (!ads.isEmpty()) {
 		writePref<QByteArray>(kAdSettingsKey, ads);
 	}

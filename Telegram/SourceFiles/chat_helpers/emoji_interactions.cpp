@@ -7,19 +7,21 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "chat_helpers/emoji_interactions.h"
 
+#include "base/random.h"
 #include "chat_helpers/stickers_emoji_pack.h"
-#include "history/history_item.h"
-#include "history/history.h"
-#include "history/view/history_view_element.h"
-#include "history/view/media/history_view_sticker.h"
-#include "main/main_session.h"
-#include "data/data_session.h"
+#include "core/application.h"
+#include "core/core_settings.h"
 #include "data/data_changes.h"
-#include "data/data_peer.h"
 #include "data/data_document.h"
 #include "data/data_document_media.h"
+#include "data/data_peer.h"
+#include "data/data_session.h"
+#include "history/view/media/history_view_sticker.h"
+#include "history/view/history_view_element.h"
+#include "history/history.h"
+#include "history/history_item.h"
+#include "main/main_session.h"
 #include "ui/emoji_config.h"
-#include "base/random.h"
 #include "apiwrap.h"
 
 #include <QtCore/QJsonDocument>
@@ -50,6 +52,11 @@ auto EmojiInteractions::Combine(CheckResult a, CheckResult b) -> CheckResult {
 EmojiInteractions::EmojiInteractions(not_null<Main::Session*> session)
 : _session(session)
 , _checkTimer([=] { check(); }) {
+	Core::App().settings().activitySettingsValue(
+	) | rpl::on_next([=] {
+		applyActivitySettings();
+	}, _lifetime);
+
 	_session->changes().messageUpdates(
 		Data::MessageUpdate::Flag::Destroyed
 		| Data::MessageUpdate::Flag::Edited
@@ -67,6 +74,20 @@ EmojiInteractions::EmojiInteractions(not_null<Main::Session*> session)
 }
 
 EmojiInteractions::~EmojiInteractions() = default;
+
+void EmojiInteractions::applyActivitySettings() {
+	const auto settings = Core::App().settings().activitySettings();
+	if (!settings.emojiEffects) {
+		for (auto &[item, animations] : _outgoing) {
+			for (auto &animation : animations) {
+				animation.share = false;
+			}
+		}
+	}
+	if (!settings.emojiWatching) {
+		_playStarted.clear();
+	}
+}
 
 void EmojiInteractions::checkEdition(
 		not_null<HistoryItem*> item,
@@ -119,6 +140,7 @@ void EmojiInteractions::startOutgoing(
 		.document = document,
 		.media = media,
 		.scheduledAt = now,
+		.share = Core::App().settings().activitySettings().emojiEffects,
 		.index = index,
 	});
 	check(now);
@@ -307,15 +329,27 @@ void EmojiInteractions::sendAccumulatedOutgoing(
 	const auto till = ranges::find_if(animations, [&](const auto &animation) {
 		return !animation.startedAt || (animation.startedAt >= intervalEnd);
 	});
+	if (!Core::App().settings().activitySettings().emojiEffects) {
+		animations.erase(from, till);
+		return;
+	}
 	auto bunch = EmojiInteractionsBunch();
 	bunch.interactions.reserve(till - from);
+	auto firstSharedAt = crl::time();
 	for (const auto &animation : ranges::make_subrange(from, till)) {
+		if (!animation.share) {
+			continue;
+		}
+		if (bunch.interactions.empty()) {
+			firstSharedAt = animation.startedAt;
+		}
 		bunch.interactions.push_back({
 			.index = animation.index + 1,
-			.time = (animation.startedAt - firstStartedAt) / 1000.,
+			.time = (animation.startedAt - firstSharedAt) / 1000.,
 		});
 	}
 	if (bunch.interactions.empty()) {
+		animations.erase(from, till);
 		return;
 	}
 	const auto peer = item->history()->peer;
@@ -471,6 +505,9 @@ void EmojiInteractions::setWaitingForDownload(bool waiting) {
 }
 
 void EmojiInteractions::playStarted(not_null<PeerData*> peer, QString emoji) {
+	if (!Core::App().settings().activitySettings().emojiWatching) {
+		return;
+	}
 	auto &map = _playStarted[peer];
 	const auto i = map.find(emoji);
 	const auto now = crl::now();
