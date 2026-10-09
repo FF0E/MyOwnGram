@@ -4491,9 +4491,10 @@ void ArticleSession::saveRichDraftNow() {
 	if (!cloudDraft) {
 		return;
 	}
-	_richDraftAutosaveRetryPending = (_session->api().saveDraftToCloud(
-		not_null{ thread },
-		*cloudDraft) == 0);
+	_richDraftAutosaveRetryPending = Core::App().settings().sendDrafts()
+		&& (_session->api().saveDraftToCloud(
+			not_null{ thread },
+			*cloudDraft) == 0);
 }
 
 void ArticleSession::startCloseWithDraftSave() {
@@ -4549,6 +4550,10 @@ void ArticleSession::saveRichDraftForClose(uint64 generation) {
 	}
 	_closeDraftSaveWaiting = false;
 	_richDraftAutosaveRetryPending = false;
+	if (!Core::App().settings().sendDrafts()) {
+		closeWithDraftSaveDone(generation);
+		return;
+	}
 	_closeDraftSaveRequestId = _session->api().saveDraftToCloud(
 		not_null{ thread },
 		*cloudDraft,

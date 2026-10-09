@@ -10,6 +10,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_text_entities.h"
 #include "ui/widgets/fields/input_field.h"
 #include "chat_helpers/message_field.h"
+#include "core/application.h"
+#include "core/core_settings.h"
 #include "history/history.h"
 #include "history/history_widget.h"
 #include "history/history_item_components.h"
@@ -104,6 +106,9 @@ void ApplyPeerCloudDraft(
 		MsgId topicRootId,
 		PeerId monoforumPeerId,
 		const MTPDdraftMessage &draft) {
+	if (!Core::App().settings().receiveDrafts()) {
+		return;
+	}
 	const auto history = session->data().history(peerId);
 	const auto date = draft.vdate().v;
 	if (history->skipCloudDraftUpdate(topicRootId, monoforumPeerId, date)) {
@@ -176,6 +181,9 @@ void ClearPeerCloudDraft(
 		MsgId topicRootId,
 		PeerId monoforumPeerId,
 		TimeId date) {
+	if (!Core::App().settings().receiveDrafts()) {
+		return;
+	}
 	const auto history = session->data().history(peerId);
 	if (history->skipCloudDraftUpdate(topicRootId, monoforumPeerId, date)) {
 		return;

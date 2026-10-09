@@ -68,8 +68,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_chat_filters.h"
 #include "data/data_histories.h"
 #include "data/data_history_messages.h"
-#include "core/core_cloud_password.h"
 #include "core/application.h"
+#include "core/core_cloud_password.h"
+#include "core/core_settings.h"
 #include "base/unixtime.h"
 #include "base/random.h"
 #include "base/call_delayed.h"
@@ -130,6 +131,9 @@ using UpdatedFileReferences = Data::UpdatedFileReferences;
 [[nodiscard]] bool ShouldSkipPlainDraftCloudSave(
 		not_null<Main::Session*> session,
 		not_null<Data::Thread*> thread) {
+	if (!Core::App().settings().sendDrafts()) {
+		return true;
+	}
 	const auto history = thread->owningHistory();
 	const auto topicRootId = thread->topicRootId();
 	const auto monoforumPeerId = thread->monoforumPeerId();
@@ -2370,6 +2374,9 @@ mtpRequestId ApiWrap::savePreparedDraftToCloud(
 		bool clearOnFail,
 		Fn<void()> done,
 		Fn<void(const MTP::Error &)> fail) {
+	if (!Core::App().settings().sendDrafts()) {
+		return 0;
+	}
 	const auto weak = base::make_weak(thread);
 	const auto history = thread->owningHistory();
 	const auto topicRootId = thread->topicRootId();

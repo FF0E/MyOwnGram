@@ -263,6 +263,37 @@ const auto kPrivacy = BuildHelper({
 	builder.addSkip();
 	builder.addDividerText(tr::lng_myowngram_premium_promo_analytics_about());
 	builder.addSkip();
+	builder.addSubsectionTitle(tr::lng_myowngram_drafts_title());
+	const auto sendDrafts = builder.addButton({
+		.id = u"myowngram/privacy/send-drafts"_q,
+		.title = tr::lng_myowngram_send_drafts(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->sendDraftsValue(),
+		.keywords = { u"drafts"_q, u"sync"_q, u"cloud"_q },
+	});
+	if (sendDrafts) {
+		sendDrafts->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setSendDrafts(enabled);
+		}, sendDrafts->lifetime());
+	}
+	builder.addSkip();
+	builder.addDividerText(tr::lng_myowngram_send_drafts_about());
+	builder.addSkip();
+	const auto receiveDrafts = builder.addButton({
+		.id = u"myowngram/privacy/receive-drafts"_q,
+		.title = tr::lng_myowngram_receive_drafts(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->receiveDraftsValue(),
+		.keywords = { u"drafts"_q, u"sync"_q, u"cloud"_q },
+	});
+	if (receiveDrafts) {
+		receiveDrafts->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setReceiveDrafts(enabled);
+		}, receiveDrafts->lifetime());
+	}
+	builder.addSkip();
+	builder.addDividerText(tr::lng_myowngram_receive_drafts_about());
+	builder.addSkip();
 	builder.addSubsectionTitle(tr::lng_myowngram_activity_title());
 	AddActivityToggles(builder);
 });

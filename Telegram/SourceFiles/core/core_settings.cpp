@@ -34,6 +34,8 @@ constexpr auto kSendReadMetricsKey
 	= std::string_view("myowngram-send-read-metrics");
 constexpr auto kSendPremiumPromoAnalyticsKey
 	= std::string_view("myowngram-send-premium-promo-analytics");
+constexpr auto kSendDraftsKey = std::string_view("myowngram-send-drafts");
+constexpr auto kReceiveDraftsKey = std::string_view("myowngram-receive-drafts");
 
 constexpr auto kActivityPreferences = std::array{
 	std::pair{
@@ -1374,6 +1376,8 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 	_sendPremiumPromoAnalytics = readPref<bool>(
 		kSendPremiumPromoAnalyticsKey,
 		true);
+	_sendDrafts = readPref<bool>(kSendDraftsKey, true);
+	_receiveDrafts = readPref<bool>(kReceiveDraftsKey, true);
 	auto activity = ActivitySettings();
 	for (const auto &[flag, key] : kActivityPreferences) {
 		activity.*flag = readPref<bool>(key, true);
@@ -1417,6 +1421,22 @@ void Settings::setSendPremiumPromoAnalytics(bool enabled) {
 	}
 	writePref<bool>(kSendPremiumPromoAnalyticsKey, enabled);
 	_sendPremiumPromoAnalytics = enabled;
+}
+
+void Settings::setSendDrafts(bool enabled) {
+	if (_sendDrafts.current() == enabled) {
+		return;
+	}
+	writePref<bool>(kSendDraftsKey, enabled);
+	_sendDrafts = enabled;
+}
+
+void Settings::setReceiveDrafts(bool enabled) {
+	if (_receiveDrafts.current() == enabled) {
+		return;
+	}
+	writePref<bool>(kReceiveDraftsKey, enabled);
+	_receiveDrafts = enabled;
 }
 
 void Settings::setActivitySettings(ActivitySettings value) {
@@ -1866,6 +1886,8 @@ void Settings::resetOnLastLogout() {
 	_prefs.clear();
 	writePref<bool>(kSendReadMetricsKey, sendReadMetrics());
 	writePref<bool>(kSendPremiumPromoAnalyticsKey, sendPremiumPromoAnalytics());
+	writePref<bool>(kSendDraftsKey, sendDrafts());
+	writePref<bool>(kReceiveDraftsKey, receiveDrafts());
 	for (const auto &[flag, key] : kActivityPreferences) {
 		writePref<bool>(key, activitySettings().*flag);
 	}

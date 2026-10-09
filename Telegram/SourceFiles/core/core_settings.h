@@ -1096,6 +1096,22 @@ public:
 	}
 	void setSendPremiumPromoAnalytics(bool enabled);
 
+	[[nodiscard]] bool sendDrafts() const {
+		return _sendDrafts.current();
+	}
+	[[nodiscard]] rpl::producer<bool> sendDraftsValue() const {
+		return _sendDrafts.value();
+	}
+	void setSendDrafts(bool enabled);
+
+	[[nodiscard]] bool receiveDrafts() const {
+		return _receiveDrafts.current();
+	}
+	[[nodiscard]] rpl::producer<bool> receiveDraftsValue() const {
+		return _receiveDrafts.value();
+	}
+	void setReceiveDrafts(bool enabled);
+
 	[[nodiscard]] ActivitySettings activitySettings() const {
 		return _activitySettings.current();
 	}
@@ -1256,6 +1272,8 @@ private:
 	rpl::variable<AdPreferences> _adSettings = AdPreferences();
 	rpl::variable<bool> _sendReadMetrics = true;
 	rpl::variable<bool> _sendPremiumPromoAnalytics = true;
+	rpl::variable<bool> _sendDrafts = true;
+	rpl::variable<bool> _receiveDrafts = true;
 	rpl::variable<ActivitySettings> _activitySettings;
 
 	bool _tabbedReplacedWithInfo = false; // per-window

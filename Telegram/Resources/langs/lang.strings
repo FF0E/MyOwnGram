@@ -8801,6 +8801,12 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_premium_promo_analytics" = "Send Premium promotion analytics";
 "lng_myowngram_premium_promo_analytics_about" = "Send Telegram reports about opening the Premium promotion page and certain subscription-button clicks. Offers and purchases are unaffected. Requests already started may still be sent.";
 
+"lng_myowngram_drafts_title" = "Drafts";
+"lng_myowngram_send_drafts" = "Send drafts to Telegram";
+"lng_myowngram_send_drafts_about" = "Turning this off stops syncing draft changes to Telegram, not local saving. Full rich drafts stay in memory but are not saved locally for restart. Attachments may still upload, and requests already started may finish.";
+"lng_myowngram_receive_drafts" = "Receive drafts from Telegram";
+"lng_myowngram_receive_drafts_about" = "Apply draft changes from Telegram, including cleared drafts. Turning this off prevents those updates from replacing local drafts; draft data can still arrive inside normal chat updates.";
+
 "lng_myowngram_activity_title" = "Activity";
 "lng_myowngram_send_online_status" = "Send online status";
 "lng_myowngram_online_status_about" = "Turning this off stops this client from reporting that you are online. Normal offline reports continue. Other actions and devices may still show you as online; this does not force you offline.";
