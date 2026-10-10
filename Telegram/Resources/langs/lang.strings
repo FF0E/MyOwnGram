@@ -8874,7 +8874,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_details_reactions" = "Reactions";
 "lng_myowngram_details_tags" = "Tags";
 "lng_myowngram_details_attachment" = "Attachment";
-"lng_myowngram_details_attachment_number" = "Attachment {count}";
+"lng_myowngram_details_attachment_number" = "Attachment {index}";
 "lng_myowngram_details_link_preview" = "Link preview";
 "lng_myowngram_details_filename" = "Filename";
 "lng_myowngram_details_mime" = "MIME type";

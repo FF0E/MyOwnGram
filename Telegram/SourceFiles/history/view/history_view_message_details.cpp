@@ -495,7 +495,7 @@ Details MediaDetails(
 			result,
 			tr::lng_myowngram_details_attachment_number(
 				tr::now,
-				lt_count,
+				lt_index,
 				QString::number(result.size() + 1)),
 			std::move(fields));
 	}
