@@ -14,6 +14,13 @@ using "ui/menu_icons.style";
 using "ui/effects/premium_limits.style";
 using "ui/effects/premium.style";
 
+messageDetailsPopup: PopupMenu(defaultPopupMenu) {
+	menu: Menu(defaultMenu) {
+		widthMin: 360px;
+		widthMax: 480px;
+	}
+}
+
 GroupCallUserpics {
 	size: pixels;
 	shift: pixels;

@@ -699,6 +699,46 @@ rpl::producer<Ui::WhoReadContent> WhoReacted(
 
 } // namespace
 
+CachedMessageInteractions LookupCachedMessageInteractions(
+		not_null<HistoryItem*> item) {
+	auto read = base::flat_map<PeerId, TimeId>();
+	auto reacted = base::flat_map<std::pair<PeerId, ReactionId>, TimeId>();
+	for (const auto &[widget, context] : Contexts()) {
+		const auto i = context->cachedRead.find(item);
+		if (i != end(context->cachedRead)) {
+			for (const auto &entry : i->second.data.current().list) {
+				auto &date = read[entry.peer];
+				date = std::max(date, entry.date);
+			}
+		}
+		const auto j = context->cachedReacted.find(item);
+		if (j != end(context->cachedReacted)) {
+			for (const auto &[filter, cache] : j->second) {
+				for (const auto &entry : cache.data.current().list) {
+					auto &date = reacted[{
+						entry.peerWithDate.peer,
+						entry.reaction,
+					}];
+					date = std::max(date, entry.peerWithDate.date);
+				}
+			}
+		}
+	}
+	auto result = CachedMessageInteractions();
+	result.read.type = DetectSeenType(item);
+	for (const auto &[peer, date] : read) {
+		result.read.list.push_back({ .peer = peer, .date = date });
+	}
+	for (const auto &[key, date] : reacted) {
+		result.reactions.push_back({
+			.peer = key.first,
+			.reaction = key.second,
+			.date = date,
+		});
+	}
+	return result;
+}
+
 QString FormatReadDate(TimeId date, const QDateTime &now) {
 	if (!date) {
 		return {};

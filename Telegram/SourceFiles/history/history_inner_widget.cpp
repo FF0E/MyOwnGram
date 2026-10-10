@@ -28,6 +28,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_about_view.h"
 #include "history/view/history_view_drag.h"
 #include "history/view/history_view_message.h"
+#include "history/view/history_view_message_details.h"
 #include "history/view/history_view_service_message.h"
 #include "history/view/history_view_cursor_state.h"
 #include "history/view/history_view_reply_button.h"
@@ -3836,6 +3837,13 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 			_menu,
 			textItem ? textItem : _dragStateItem,
 			!added);
+	}
+	if (_dragStateItem && !hasSelected) {
+		HistoryView::AddMessageDetailsAction(
+			_menu,
+			_dragStateItem,
+			lnkPhoto,
+			lnkDocument);
 	}
 	if (hasWhoReactedItem) {
 		HistoryView::AddWhoReactedAction(

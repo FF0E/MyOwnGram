@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include "data/data_message_reaction_id.h"
+
 class HistoryItem;
 
 namespace style {
@@ -17,10 +19,6 @@ namespace Ui {
 struct WhoReadContent;
 enum class WhoReadType;
 } // namespace Ui
-
-namespace Data {
-struct ReactionId;
-} // namespace Data
 
 namespace Api {
 
@@ -49,6 +47,20 @@ struct WhoReadList {
 	std::vector<WhoReadPeer> list;
 	Ui::WhoReadType type = {};
 };
+
+struct CachedMessageReaction {
+	PeerId peer = 0;
+	Data::ReactionId reaction;
+	TimeId date = 0;
+};
+
+struct CachedMessageInteractions {
+	WhoReadList read;
+	std::vector<CachedMessageReaction> reactions;
+};
+
+[[nodiscard]] CachedMessageInteractions LookupCachedMessageInteractions(
+	not_null<HistoryItem*> item);
 
 // The context must be destroyed before the session holding this item.
 [[nodiscard]] rpl::producer<Ui::WhoReadContent> WhoReacted(

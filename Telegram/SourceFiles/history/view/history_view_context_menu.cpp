@@ -23,6 +23,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_list_widget.h"
 #include "history/view/controls/history_view_suggest_options.h"
 #include "history/view/history_view_cursor_state.h"
+#include "history/view/history_view_message_details.h"
 #include "history/view/history_view_reaction_preview.h"
 #include "history/history.h"
 #include "history/history_item.h"
@@ -1950,6 +1951,9 @@ void FillContextMenuItems(
 	if (item) {
 		const auto added = (result->actions().size() > wasAmount);
 		AddSelectRestrictionAction(result, item, !added);
+	}
+	if (item && !hasSelection) {
+		AddMessageDetailsAction(result, item, lnkPhoto, lnkDocument);
 	}
 	if (!skipWhoReacted) {
 		if (hasWhoReactedItem) {
