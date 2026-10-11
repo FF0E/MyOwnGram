@@ -742,16 +742,22 @@ void AppendCopyLines(
 void FillMenu(
 		not_null<Ui::PopupMenu*> menu,
 		const Details &details,
-		const QString &prefix = {}) {
+		const QString &prefix,
+		QString &section) {
 	for (const auto &detail : details) {
 		if (!detail.children.empty()) {
 			const auto label = prefix.isEmpty()
 				? detail.label
 				: prefix + u" / "_q + detail.label;
-			menu->addSeparator();
-			menu->addAction(label, [] {})->setEnabled(false);
-			FillMenu(menu, detail.children, label);
+			FillMenu(menu, detail.children, label, section);
 		} else {
+			if (section != prefix) {
+				menu->addSeparator();
+				if (!prefix.isEmpty()) {
+					menu->addAction(prefix, [] {})->setEnabled(false);
+				}
+				section = prefix;
+			}
 			const auto &st = menu->st().menu;
 			const auto font = st.itemStyle.font;
 			const auto available = st.widthMax - st.itemPadding.left()
@@ -780,6 +786,13 @@ void FillMenu(
 }
 
 } // namespace
+
+void FillMessageDetailsMenu(
+		not_null<Ui::PopupMenu*> menu,
+		const std::vector<MessageDetail> &details) {
+	auto section = QString();
+	FillMenu(menu, details, QString(), section);
+}
 
 void AddMessageDetailsAction(
 		not_null<Ui::PopupMenu*> menu,
@@ -828,7 +841,7 @@ void AddMessageDetailsAction(
 			});
 		AddRemoteMessageDetailsAction(submenu, item, menu->parentWidget());
 		submenu->addSeparator();
-		FillMenu(submenu, details);
+		FillMessageDetailsMenu(submenu, details);
 	}), widget->lifetime());
 	menu->addAction(std::move(widget));
 }

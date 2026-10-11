@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include <vector>
+
 class DocumentData;
 class HistoryItem;
 class PhotoData;
@@ -16,6 +18,12 @@ class PopupMenu;
 } // namespace Ui
 
 namespace HistoryView {
+
+struct MessageDetail;
+
+void FillMessageDetailsMenu(
+	not_null<Ui::PopupMenu*> menu,
+	const std::vector<MessageDetail> &details);
 
 void AddMessageDetailsAction(
 	not_null<Ui::PopupMenu*> menu,

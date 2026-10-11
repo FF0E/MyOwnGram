@@ -14,6 +14,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_session.h"
 #include "history/history.h"
 #include "history/history_item.h"
+#include "history/view/history_view_message_details.h"
+#include "history/view/history_view_message_metadata.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
 #include "mtproto/details/mtproto_dump_to_text.h"
@@ -67,6 +69,78 @@ std::optional<RemoteRequest> RequestFor(not_null<HistoryItem*> item) {
 		MTP_inputMessageID(MTP_int(item->id))));
 }
 
+std::vector<MessageDetail> RemoteDetails(const QString &text) {
+	struct Frame {
+		std::vector<MessageDetail> *fields = nullptr;
+		QString vectorName;
+		int index = -1;
+	};
+	auto result = std::vector<MessageDetail>();
+	auto stack = std::vector<Frame>{ { .fields = &result } };
+	// Full-value dumps escape string newlines, preserving structural lines.
+	for (auto line : text.split('\n', Qt::SkipEmptyParts)) {
+		line = line.trimmed();
+		if (line.endsWith(',')) {
+			line.chop(1);
+		}
+		if (line == u"}"_q || line == u"]"_q) {
+			stack.pop_back();
+			continue;
+		}
+		auto &parent = stack.back();
+		auto name = QString();
+		if (parent.index >= 0) {
+			name = parent.vectorName + u"["_q
+				+ QString::number(parent.index++) + u"]"_q;
+		} else if (!line.startsWith(u"{ "_q)) {
+			const auto colon = line.indexOf(u": "_q);
+			if (colon >= 0) {
+				name = line.left(colon);
+				line.remove(0, colon + 2);
+			}
+		}
+		if (line.startsWith(u"[ vector<"_q)) {
+			if (line.endsWith(']')) {
+				parent.fields->push_back({
+					.label = std::move(name),
+					.value = u"[]"_q,
+				});
+			} else {
+				stack.push_back({
+					.fields = parent.fields,
+					.vectorName = std::move(name),
+					.index = 0,
+				});
+			}
+		} else if (line.startsWith(u"{ "_q)) {
+			line.remove(0, 2);
+			if (line.endsWith('}')) {
+				line.chop(1);
+				parent.fields->push_back({
+					.label = name.isEmpty()
+						? u"constructor"_q
+						: std::move(name),
+					.value = line.trimmed(),
+				});
+			} else {
+				auto fields = parent.fields;
+				if (!name.isEmpty()) {
+					fields->push_back({ .label = std::move(name) });
+					fields = &fields->back().children;
+				}
+				fields->push_back({ .label = u"constructor"_q, .value = line });
+				stack.push_back({ .fields = fields });
+			}
+		} else {
+			parent.fields->push_back({
+				.label = std::move(name),
+				.value = std::move(line),
+			});
+		}
+	}
+	return result;
+}
+
 void FillRemoteMenu(not_null<Ui::PopupMenu*> menu, const QString &text) {
 	menu->clearActions();
 	menu->addAction(
@@ -76,16 +150,7 @@ void FillRemoteMenu(not_null<Ui::PopupMenu*> menu, const QString &text) {
 		tr::lng_myowngram_details_copy_remote(tr::now),
 		[text] { QGuiApplication::clipboard()->setText(text); });
 	menu->addSeparator();
-	const auto &st = menu->st().menu;
-	const auto width = st.widthMax - st.itemPadding.left()
-		- st.itemPadding.right() - st.itemRightSkip;
-	for (const auto &line : text.split('\n', Qt::SkipEmptyParts)) {
-		const auto label = st.itemStyle.font->elided(line, width)
-			.replace('&', u"&&"_q);
-		menu->addAction(label, [line] {
-			QGuiApplication::clipboard()->setText(line);
-		});
-	}
+	FillMessageDetailsMenu(menu, RemoteDetails(text));
 }
 
 void ShowRemoteDetails(
