@@ -119,8 +119,8 @@ void ShowRemoteDetails(
 			menu->update();
 		}
 	});
-	const auto id = v::match(request, [&](const auto &method) {
-		return session->api().request(method).done(done).fail(fail)
+	const auto id = v::match(request, [&](auto method) {
+		return session->api().request(std::move(method)).done(done).fail(fail)
 			.handleFloodErrors().send();
 	});
 	menu->lifetime().add(crl::guard(session, [=] {

@@ -42,7 +42,7 @@ void Field(Fields &fields, QString name, QString value) {
 	}
 }
 
-void Group(Fields &fields, QString name, Fields values) {
+void AddGroup(Fields &fields, QString name, Fields values) {
 	if (!values.empty()) {
 		fields.push_back({
 			.label = std::move(name),
@@ -109,10 +109,10 @@ void Text(Fields &fields, QString name, const TextWithEntities &text) {
 		Number(part, u"offset"_q, entity.offset());
 		Number(part, u"length"_q, entity.length());
 		Field(part, u"data"_q, entity.data());
-		Group(values, u"entities["_q + QString::number(index++) + u"]"_q,
+		AddGroup(values, u"entities["_q + QString::number(index++) + u"]"_q,
 			std::move(part));
 	}
-	Group(fields, std::move(name), std::move(values));
+	AddGroup(fields, std::move(name), std::move(values));
 }
 
 void Size(Fields &fields, QString name, QSize size) {
@@ -162,7 +162,7 @@ Fields PhotoFields(not_null<PhotoData*> photo) {
 		Size(part, u"dimensions"_q,
 			QSize(location.width(), location.height()));
 		Number(part, u"bytes"_q, photo->imageByteSize(size));
-		Group(result, u"sizes["_q + QString::number(Data::PhotoSizeIndex(size))
+		AddGroup(result, u"sizes["_q + QString::number(Data::PhotoSizeIndex(size))
 			+ u"]"_q, std::move(part));
 	}
 	if (photo->hasVideo()) {
@@ -240,7 +240,7 @@ Fields DocumentFields(not_null<DocumentData*> document) {
 			Number(part, u"id"_q, quality->id);
 			Number(part, u"bytes"_q, quality->size);
 			Size(part, u"dimensions"_q, quality->dimensions);
-			Group(result, u"qualities["_q + QString::number(index++) + u"]"_q,
+			AddGroup(result, u"qualities["_q + QString::number(index++) + u"]"_q,
 				std::move(part));
 		}
 	}
@@ -347,13 +347,13 @@ Fields WebPageFields(not_null<WebPageData*> page) {
 		Number(result, u"story.id"_q, page->storyId.story);
 	}
 	if (page->photo) {
-		Group(result, u"photo"_q, PhotoFields(page->photo));
+		AddGroup(result, u"photo"_q, PhotoFields(page->photo));
 	}
 	if (page->document) {
-		Group(result, u"document"_q, DocumentFields(page->document));
+		AddGroup(result, u"document"_q, DocumentFields(page->document));
 	}
 	if (page->uniqueGift) {
-		Group(result, u"uniqueGift"_q, UniqueGiftFields(*page->uniqueGift));
+		AddGroup(result, u"uniqueGift"_q, UniqueGiftFields(*page->uniqueGift));
 	}
 	if (page->composeToneEmojiId) {
 		Number(result, u"composeToneEmojiId"_q, page->composeToneEmojiId);
@@ -369,7 +369,7 @@ Fields WebPageFields(not_null<WebPageData*> page) {
 	}
 	auto index = 0;
 	for (const auto &item : page->collage.items) {
-		Group(result, u"collage["_q + QString::number(index++) + u"]"_q,
+		AddGroup(result, u"collage["_q + QString::number(index++) + u"]"_q,
 			v::match(item, [](PhotoData *photo) {
 				return PhotoFields(photo);
 			}, [](DocumentData *document) {
@@ -383,16 +383,16 @@ Fields PollMediaFields(const PollMedia &media) {
 	auto result = Fields();
 	Field(result, u"url"_q, media.url);
 	if (media.photo) {
-		Group(result, u"photo"_q, PhotoFields(media.photo));
+		AddGroup(result, u"photo"_q, PhotoFields(media.photo));
 	}
 	if (media.document) {
-		Group(result, u"document"_q, DocumentFields(media.document));
+		AddGroup(result, u"document"_q, DocumentFields(media.document));
 	}
 	if (media.geo) {
 		Field(result, u"geo"_q, MTP::details::DumpObject(media.geo->toMTP()));
 	}
 	if (media.webpage) {
-		Group(result, u"webpage"_q, WebPageFields(media.webpage));
+		AddGroup(result, u"webpage"_q, WebPageFields(media.webpage));
 	}
 	return result;
 }
@@ -401,7 +401,7 @@ Fields PollAnswerFields(const PollAnswer &answer) {
 	auto result = Fields();
 	Text(result, u"text"_q, answer.text);
 	Bytes(result, u"option"_q, answer.option);
-	Group(result, u"media"_q, PollMediaFields(answer.media));
+	AddGroup(result, u"media"_q, PollMediaFields(answer.media));
 	Peer(result, u"addedBy"_q, answer.addedBy);
 	Date(result, u"addedDate"_q, answer.addedDate);
 	Number(result, u"votes"_q, answer.votes);
@@ -419,8 +419,8 @@ Fields PollFields(not_null<PollData*> poll) {
 	Number(result, u"id"_q, poll->id);
 	Text(result, u"question"_q, poll->question);
 	Text(result, u"solution"_q, poll->solution);
-	Group(result, u"attachedMedia"_q, PollMediaFields(poll->attachedMedia));
-	Group(result, u"solutionMedia"_q, PollMediaFields(poll->solutionMedia));
+	AddGroup(result, u"attachedMedia"_q, PollMediaFields(poll->attachedMedia));
+	AddGroup(result, u"solutionMedia"_q, PollMediaFields(poll->solutionMedia));
 	Number(result, u"totalVoters"_q, poll->totalVoters);
 	Number(result, u"hash"_q, poll->hash);
 	Number(result, u"closePeriodSeconds"_q, poll->closePeriod);
@@ -439,7 +439,7 @@ Fields PollFields(not_null<PollData*> poll) {
 	Number(result, u"voteRestriction"_q, poll->voteRestriction());
 	auto index = 0;
 	for (const auto &answer : poll->answers) {
-		Group(result, u"answers["_q + QString::number(index++) + u"]"_q,
+		AddGroup(result, u"answers["_q + QString::number(index++) + u"]"_q,
 			PollAnswerFields(answer));
 	}
 	index = 0;
@@ -466,7 +466,7 @@ Fields TodoFields(const std::vector<TodoListItem> &items) {
 		Text(part, u"text"_q, item.text);
 		Peer(part, u"completedBy"_q, item.completedBy);
 		Date(part, u"completionDate"_q, item.completionDate);
-		Group(result, QString::number(item.id), std::move(part));
+		AddGroup(result, QString::number(item.id), std::move(part));
 	}
 	return result;
 }
@@ -511,10 +511,10 @@ Fields GiftFields(const Data::GiftCode &gift) {
 	Boolean(result, u"saved"_q, gift.saved);
 	Boolean(result, u"craft"_q, gift.craft);
 	if (gift.document) {
-		Group(result, u"document"_q, DocumentFields(gift.document));
+		AddGroup(result, u"document"_q, DocumentFields(gift.document));
 	}
 	if (gift.unique) {
-		Group(result, u"unique"_q, UniqueGiftFields(*gift.unique));
+		AddGroup(result, u"unique"_q, UniqueGiftFields(*gift.unique));
 	}
 	return result;
 }
@@ -530,23 +530,23 @@ Fields MediaFields(not_null<const Data::Media*> media) {
 	}
 	Text(result, u"consumedMessageText"_q, media->consumedMessageText());
 	if (const auto page = media->webpage()) {
-		Group(result, u"webpage"_q, WebPageFields(page));
+		AddGroup(result, u"webpage"_q, WebPageFields(page));
 	} else {
 		if (const auto photo = media->photo()) {
-			Group(result, u"photo"_q, PhotoFields(photo));
+			AddGroup(result, u"photo"_q, PhotoFields(photo));
 		}
 		if (const auto document = media->document()) {
-			Group(result, u"document"_q, DocumentFields(document));
+			AddGroup(result, u"document"_q, DocumentFields(document));
 		}
 	}
 	if (const auto cover = media->videoCover()) {
-		Group(result, u"videoCover"_q, PhotoFields(cover));
+		AddGroup(result, u"videoCover"_q, PhotoFields(cover));
 	}
 	if (const auto timestamp = media->videoTimestamp()) {
 		Number(result, u"videoTimestampSeconds"_q, timestamp);
 	}
 	if (const auto poll = media->poll()) {
-		Group(result, u"poll"_q, PollFields(poll));
+		AddGroup(result, u"poll"_q, PollFields(poll));
 	}
 	if (const auto list = media->todolist()) {
 		auto part = Fields();
@@ -555,8 +555,8 @@ Fields MediaFields(not_null<const Data::Media*> media) {
 		Text(part, u"title"_q, list->title);
 		Boolean(part, u"othersCanAppend"_q, list->othersCanAppend());
 		Boolean(part, u"othersCanComplete"_q, list->othersCanComplete());
-		Group(part, u"items"_q, TodoFields(list->items));
-		Group(result, u"todolist"_q, std::move(part));
+		AddGroup(part, u"items"_q, TodoFields(list->items));
+		AddGroup(result, u"todolist"_q, std::move(part));
 	}
 	if (const auto contact = media->sharedContact()) {
 		auto part = Fields();
@@ -567,7 +567,7 @@ Fields MediaFields(not_null<const Data::Media*> media) {
 		for (const auto &[type, value] : contact->vcardItems) {
 			Field(part, u"vcard["_q + QString::number(int(type)) + u"]"_q, value);
 		}
-		Group(result, u"contact"_q, std::move(part));
+		AddGroup(result, u"contact"_q, std::move(part));
 	}
 	if (const auto location = dynamic_cast<const Data::MediaLocation*>(media.get())) {
 		auto part = Fields();
@@ -575,7 +575,7 @@ Fields MediaFields(not_null<const Data::Media*> media) {
 		Number(part, u"livePeriodSeconds"_q, location->livePeriod());
 		Field(part, u"title"_q, location->title());
 		Field(part, u"description"_q, location->description());
-		Group(result, u"location"_q, std::move(part));
+		AddGroup(result, u"location"_q, std::move(part));
 	}
 	if (const auto call = media->call()) {
 		auto part = Fields();
@@ -587,22 +587,22 @@ Fields MediaFields(not_null<const Data::Media*> media) {
 		for (const auto peer : call->otherParticipants) {
 			Peer(part, u"participants["_q + QString::number(index++) + u"]"_q, peer);
 		}
-		Group(result, u"call"_q, std::move(part));
+		AddGroup(result, u"call"_q, std::move(part));
 	}
 	if (const auto game = media->game()) {
 		auto part = Fields();
 		if (game->photo) {
-			Group(part, u"photo"_q, PhotoFields(game->photo));
+			AddGroup(part, u"photo"_q, PhotoFields(game->photo));
 		}
 		if (game->document) {
-			Group(part, u"document"_q, DocumentFields(game->document));
+			AddGroup(part, u"document"_q, DocumentFields(game->document));
 		}
 		Number(part, u"id"_q, game->id);
 		Number(part, u"accessHash"_q, game->accessHash);
 		Field(part, u"shortName"_q, game->shortName);
 		Field(part, u"title"_q, game->title);
 		Field(part, u"description"_q, game->description);
-		Group(result, u"game"_q, std::move(part));
+		AddGroup(result, u"game"_q, std::move(part));
 	}
 	if (const auto invoice = media->invoice()) {
 		auto part = Fields();
@@ -614,20 +614,20 @@ Fields MediaFields(not_null<const Data::Media*> media) {
 		Boolean(part, u"isPaidMedia"_q, invoice->isPaidMedia);
 		Boolean(part, u"isTest"_q, invoice->isTest);
 		if (invoice->photo) {
-			Group(part, u"photo"_q, PhotoFields(invoice->photo));
+			AddGroup(part, u"photo"_q, PhotoFields(invoice->photo));
 		}
 		auto index = 0;
 		for (const auto &entry : invoice->extendedMedia) {
-			Group(part, u"extendedMedia["_q + QString::number(index++) + u"]"_q,
+			AddGroup(part, u"extendedMedia["_q + QString::number(index++) + u"]"_q,
 				MediaFields(entry.get()));
 		}
-		Group(result, u"invoice"_q, std::move(part));
+		AddGroup(result, u"invoice"_q, std::move(part));
 	}
 	if (const auto gift = media->gift()) {
 		auto part = GiftFields(*gift);
 		Peer(part, u"from"_q,
 			static_cast<const Data::MediaGiftBox*>(media.get())->from());
-		Group(result, u"gift"_q, std::move(part));
+		AddGroup(result, u"gift"_q, std::move(part));
 	}
 	if (const auto giveaway = media->giveawayStart()) {
 		auto part = Fields();
@@ -646,7 +646,7 @@ Fields MediaFields(not_null<const Data::Media*> media) {
 		for (const auto peer : giveaway->channels) {
 			Peer(part, u"channels["_q + QString::number(index++) + u"]"_q, peer);
 		}
-		Group(result, u"giveaway"_q, std::move(part));
+		AddGroup(result, u"giveaway"_q, std::move(part));
 	}
 	if (const auto giveaway = media->giveawayResults()) {
 		auto part = Fields();
@@ -665,7 +665,7 @@ Fields MediaFields(not_null<const Data::Media*> media) {
 		for (const auto peer : giveaway->winners) {
 			Peer(part, u"winners["_q + QString::number(index++) + u"]"_q, peer);
 		}
-		Group(result, u"giveawayResults"_q, std::move(part));
+		AddGroup(result, u"giveawayResults"_q, std::move(part));
 	}
 	if (const auto dice = dynamic_cast<const Data::MediaDice*>(media.get())) {
 		auto part = Fields();
@@ -676,7 +676,7 @@ Fields MediaFields(not_null<const Data::Media*> media) {
 			Number(part, u"stakeNanoTon"_q, outcome.stakeNanoTon);
 			Bytes(part, u"seed"_q, outcome.seed);
 		}
-		Group(result, u"dice"_q, std::move(part));
+		AddGroup(result, u"dice"_q, std::move(part));
 	}
 	if (const auto paper = media->paper()) {
 		auto part = Fields();
@@ -686,7 +686,7 @@ Fields MediaFields(not_null<const Data::Media*> media) {
 		Boolean(part, u"forBoth"_q, media->paperForBoth());
 		Boolean(part, u"local"_q, paper->isLocal());
 		Peer(part, u"ownerId"_q, peerFromUser(paper->ownerId()));
-		Group(result, u"wallpaper"_q, std::move(part));
+		AddGroup(result, u"wallpaper"_q, std::move(part));
 	}
 	if (const auto story = media->storyId()) {
 		Peer(result, u"story.peer"_q, story.peer);
@@ -720,7 +720,7 @@ Fields ReplyFieldsFor(not_null<HistoryItem*> item) {
 		Boolean(result, u"topicPost"_q, fields.topicPost);
 		Boolean(result, u"unavailable"_q, reply->unavailable());
 		if (fields.externalMedia) {
-			Group(result, u"externalMedia"_q, MediaFields(fields.externalMedia.get()));
+			AddGroup(result, u"externalMedia"_q, MediaFields(fields.externalMedia.get()));
 		}
 	}
 	if (const auto views = item->Get<HistoryMessageViews>()) {
@@ -769,7 +769,7 @@ Fields MarkupFields(not_null<HistoryItem*> item) {
 		for (const auto &buttons : markup->data.rows) {
 			auto column = 0;
 			for (const auto &button : buttons) {
-				Group(result, u"rows["_q + QString::number(row) + u"]["_q
+				AddGroup(result, u"rows["_q + QString::number(row) + u"]["_q
 					+ QString::number(column++) + u"]"_q, ButtonFields(button));
 			}
 			++row;
@@ -797,7 +797,7 @@ Fields ReactionFields(not_null<HistoryItem*> item) {
 		Number(part, u"count"_q, entry.count);
 		Boolean(part, u"top"_q, entry.top);
 		Boolean(part, u"my"_q, entry.my);
-		Group(result, u"topPaid["_q + QString::number(index++) + u"]"_q,
+		AddGroup(result, u"topPaid["_q + QString::number(index++) + u"]"_q,
 			std::move(part));
 	}
 	index = 0;
@@ -809,7 +809,7 @@ Fields ReactionFields(not_null<HistoryItem*> item) {
 			Boolean(part, u"unread"_q, entry.unread);
 			Boolean(part, u"big"_q, entry.big);
 			Boolean(part, u"my"_q, entry.my);
-			Group(result, u"recent["_q + QString::number(index++) + u"]"_q,
+			AddGroup(result, u"recent["_q + QString::number(index++) + u"]"_q,
 				std::move(part));
 		}
 	}
@@ -838,10 +838,10 @@ void Price(Fields &fields, CreditsAmount price) {
 Fields ServiceFields(not_null<HistoryItem*> item) {
 	auto result = Fields();
 	if (const auto data = item->Get<HistoryServicePinned>()) {
-		Group(result, u"pinned"_q, DependencyFields(*data));
+		AddGroup(result, u"pinned"_q, DependencyFields(*data));
 	}
 	if (const auto data = item->Get<HistoryServiceClearHistory>()) {
-		Group(result, u"clearHistory"_q, DependencyFields(*data));
+		AddGroup(result, u"clearHistory"_q, DependencyFields(*data));
 	}
 	if (const auto data = item->Get<HistoryServiceTopicInfo>()) {
 		auto part = DependencyFields(*data);
@@ -853,7 +853,7 @@ Fields ServiceFields(not_null<HistoryItem*> item) {
 		Boolean(part, u"renamed"_q, data->renamed);
 		Boolean(part, u"hidden"_q, data->hidden);
 		Boolean(part, u"unhidden"_q, data->unhidden);
-		Group(result, u"topic"_q, std::move(part));
+		AddGroup(result, u"topic"_q, std::move(part));
 	}
 	if (const auto data = item->Get<HistoryServiceTodoCompletions>()) {
 		auto part = DependencyFields(*data);
@@ -863,22 +863,22 @@ Fields ServiceFields(not_null<HistoryItem*> item) {
 		for (const auto id : data->incompleted) {
 			Number(part, u"incompleted"_q, id);
 		}
-		Group(result, u"todoCompletions"_q, std::move(part));
+		AddGroup(result, u"todoCompletions"_q, std::move(part));
 	}
 	if (const auto data = item->Get<HistoryServiceTodoAppendTasks>()) {
 		auto part = DependencyFields(*data);
-		Group(part, u"tasks"_q, TodoFields(data->list));
-		Group(result, u"todoAppendTasks"_q, std::move(part));
+		AddGroup(part, u"tasks"_q, TodoFields(data->list));
+		AddGroup(result, u"todoAppendTasks"_q, std::move(part));
 	}
 	if (const auto data = item->Get<HistoryServicePollAppendAnswer>()) {
 		auto part = DependencyFields(*data);
-		Group(part, u"answer"_q, PollAnswerFields(data->answer));
-		Group(result, u"pollAppendAnswer"_q, std::move(part));
+		AddGroup(part, u"answer"_q, PollAnswerFields(data->answer));
+		AddGroup(result, u"pollAppendAnswer"_q, std::move(part));
 	}
 	if (const auto data = item->Get<HistoryServicePollDeleteAnswer>()) {
 		auto part = DependencyFields(*data);
-		Group(part, u"answer"_q, PollAnswerFields(data->answer));
-		Group(result, u"pollDeleteAnswer"_q, std::move(part));
+		AddGroup(part, u"answer"_q, PollAnswerFields(data->answer));
+		AddGroup(result, u"pollDeleteAnswer"_q, std::move(part));
 	}
 	if (const auto data = item->Get<HistoryServiceSuggestDecision>()) {
 		auto part = DependencyFields(*data);
@@ -887,18 +887,18 @@ Fields ServiceFields(not_null<HistoryItem*> item) {
 		Field(part, u"rejectComment"_q, data->rejectComment);
 		Boolean(part, u"rejected"_q, data->rejected);
 		Boolean(part, u"balanceTooLow"_q, data->balanceTooLow);
-		Group(result, u"suggestDecision"_q, std::move(part));
+		AddGroup(result, u"suggestDecision"_q, std::move(part));
 	}
 	if (const auto data = item->Get<HistoryServiceSuggestFinish>()) {
 		auto part = DependencyFields(*data);
 		Price(part, data->price);
 		Number(part, u"refundType"_q, data->refundType);
-		Group(result, u"suggestFinish"_q, std::move(part));
+		AddGroup(result, u"suggestFinish"_q, std::move(part));
 	}
 	if (const auto data = item->Get<HistoryServiceGameScore>()) {
 		auto part = DependencyFields(*data);
 		Number(part, u"score"_q, data->score);
-		Group(result, u"gameScore"_q, std::move(part));
+		AddGroup(result, u"gameScore"_q, std::move(part));
 	}
 	if (const auto data = item->Get<HistoryServicePayment>()) {
 		auto part = DependencyFields(*data);
@@ -907,7 +907,7 @@ Fields ServiceFields(not_null<HistoryItem*> item) {
 		Boolean(part, u"recurringInit"_q, data->recurringInit);
 		Boolean(part, u"recurringUsed"_q, data->recurringUsed);
 		Boolean(part, u"isCreditsCurrency"_q, data->isCreditsCurrency);
-		Group(result, u"payment"_q, std::move(part));
+		AddGroup(result, u"payment"_q, std::move(part));
 	}
 	if (const auto data = item->Get<HistoryServicePaymentRefund>()) {
 		auto part = Fields();
@@ -915,20 +915,20 @@ Fields ServiceFields(not_null<HistoryItem*> item) {
 		Field(part, u"transactionId"_q, data->transactionId);
 		Field(part, u"currency"_q, data->currency);
 		Number(part, u"amount"_q, data->amount);
-		Group(result, u"paymentRefund"_q, std::move(part));
+		AddGroup(result, u"paymentRefund"_q, std::move(part));
 	}
 	if (const auto data = item->Get<HistoryServiceSameBackground>()) {
-		Group(result, u"sameBackground"_q, DependencyFields(*data));
+		AddGroup(result, u"sameBackground"_q, DependencyFields(*data));
 	}
 	if (const auto data = item->Get<HistoryServiceGiveawayResults>()) {
-		Group(result, u"giveawayResults"_q, DependencyFields(*data));
+		AddGroup(result, u"giveawayResults"_q, DependencyFields(*data));
 	}
 	if (const auto data = item->Get<HistoryServiceNoForwardsRequest>()) {
 		auto part = Fields();
 		Date(part, u"expiresAt"_q, data->expiresAt);
 		Boolean(part, u"expired"_q, data->expired);
 		Boolean(part, u"actionTaken"_q, data->actionTaken);
-		Group(result, u"noForwardsRequest"_q, std::move(part));
+		AddGroup(result, u"noForwardsRequest"_q, std::move(part));
 	}
 	if (const auto data = item->Get<HistoryServiceCommunityAdded>()) {
 		Peer(result, u"communityAdded"_q, peerFromChannel(data->communityId));
@@ -952,7 +952,7 @@ Fields ServiceFields(not_null<HistoryItem*> item) {
 		}, [&](TimeToLiveSingleView) {
 			Boolean(part, u"viewed"_q, true);
 		});
-		Group(result, u"selfDestruct"_q, std::move(part));
+		AddGroup(result, u"selfDestruct"_q, std::move(part));
 	}
 	return result;
 }
@@ -1006,9 +1006,9 @@ Fields StateFields(not_null<HistoryItem*> item) {
 		Boolean(part, u"accepted"_q, data->accepted);
 		Boolean(part, u"rejected"_q, data->rejected);
 		if (data->gift) {
-			Group(part, u"gift"_q, UniqueGiftFields(*data->gift));
+			AddGroup(part, u"gift"_q, UniqueGiftFields(*data->gift));
 		}
-		Group(result, u"suggestion"_q, std::move(part));
+		AddGroup(result, u"suggestion"_q, std::move(part));
 	}
 	if (const auto signedData = item->Get<HistoryMessageSigned>()) {
 		Boolean(result, u"isAnonymousRank"_q, signedData->isAnonymousRank);
@@ -1019,7 +1019,7 @@ Fields StateFields(not_null<HistoryItem*> item) {
 			auto part = Fields();
 			Field(part, u"reason"_q, reason.reason);
 			Field(part, u"text"_q, reason.text);
-			Group(result, u"restrictions["_q + QString::number(index++) + u"]"_q,
+			AddGroup(result, u"restrictions["_q + QString::number(index++) + u"]"_q,
 				std::move(part));
 		}
 	}
@@ -1038,7 +1038,7 @@ std::vector<MessageDetail> CollectMessageMetadata(
 	if (const auto translation = item->translation()) {
 		Text(content, u"translation"_q, translation->text);
 		if (translation->richPage) {
-			Group(content, u"richTranslation"_q,
+			AddGroup(content, u"richTranslation"_q,
 				RichPageFields(*translation->richPage));
 		}
 	}
@@ -1046,7 +1046,7 @@ std::vector<MessageDetail> CollectMessageMetadata(
 		? item->fullRichPage()
 		: item->richPage();
 	if (rich) {
-		Group(content, u"richPage"_q, RichPageFields(*rich));
+		AddGroup(content, u"richPage"_q, RichPageFields(*rich));
 	}
 	if (const auto factcheck = item->Get<HistoryMessageFactcheck>()) {
 		Text(content, u"factcheck"_q, factcheck->data.text);
@@ -1054,8 +1054,8 @@ std::vector<MessageDetail> CollectMessageMetadata(
 		Number(content, u"factcheck.hash"_q, factcheck->data.hash);
 		Boolean(content, u"factcheck.needCheck"_q, factcheck->data.needCheck);
 	}
-	Group(result, tr::lng_myowngram_details_content(tr::now), std::move(content));
-	Group(result, tr::lng_myowngram_details_reply_metadata(tr::now), ReplyFieldsFor(item));
+	AddGroup(result, tr::lng_myowngram_details_content(tr::now), std::move(content));
+	AddGroup(result, tr::lng_myowngram_details_reply_metadata(tr::now), ReplyFieldsFor(item));
 	if (item->history()->isForum()) {
 		if (const auto topic = item->topic()) {
 			auto values = Fields();
@@ -1068,23 +1068,23 @@ std::vector<MessageDetail> CollectMessageMetadata(
 			Boolean(values, u"pinned"_q, topic->isPinnedDialog(0));
 			Peer(values, u"creatorId"_q, topic->creatorId());
 			Date(values, u"creationDate"_q, topic->creationDate());
-			Group(result, tr::lng_myowngram_details_topic(tr::now), std::move(values));
+			AddGroup(result, tr::lng_myowngram_details_topic(tr::now), std::move(values));
 		}
 	}
-	Group(result, tr::lng_myowngram_details_buttons(tr::now), MarkupFields(item));
-	Group(result, tr::lng_myowngram_details_reaction_metadata(tr::now), ReactionFields(item));
+	AddGroup(result, tr::lng_myowngram_details_buttons(tr::now), MarkupFields(item));
+	AddGroup(result, tr::lng_myowngram_details_reaction_metadata(tr::now), ReactionFields(item));
 	if (const auto media = item->media()) {
-		Group(result, tr::lng_myowngram_details_media_metadata(tr::now), MediaFields(media));
+		AddGroup(result, tr::lng_myowngram_details_media_metadata(tr::now), MediaFields(media));
 	}
 	const auto media = item->media();
 	if (selectedPhoto && (!media || selectedPhoto != media->photo())) {
-		Group(
+		AddGroup(
 			result,
 			tr::lng_myowngram_details_selected_photo(tr::now),
 			PhotoFields(selectedPhoto));
 	}
 	if (selectedDocument && (!media || selectedDocument != media->document())) {
-		Group(
+		AddGroup(
 			result,
 			tr::lng_myowngram_details_selected_document(tr::now),
 			DocumentFields(selectedDocument));
@@ -1097,11 +1097,11 @@ std::vector<MessageDetail> CollectMessageMetadata(
 			Text(values, u"captions["_q + QString::number(index++) + u"]"_q,
 				caption);
 		}
-		Group(result, tr::lng_myowngram_details_rich_media(tr::now),
+		AddGroup(result, tr::lng_myowngram_details_rich_media(tr::now),
 			std::move(values));
 		index = 0;
 		for (const auto &entry : instant->items) {
-			Group(result, tr::lng_myowngram_details_attachment_number(
+			AddGroup(result, tr::lng_myowngram_details_attachment_number(
 				tr::now, lt_index, QString::number(++index)),
 				v::match(entry, [](PhotoData *photo) {
 					return PhotoFields(photo);
@@ -1110,8 +1110,8 @@ std::vector<MessageDetail> CollectMessageMetadata(
 				}));
 		}
 	}
-	Group(result, tr::lng_myowngram_details_service(tr::now), ServiceFields(item));
-	Group(result, tr::lng_myowngram_details_state(tr::now), StateFields(item));
+	AddGroup(result, tr::lng_myowngram_details_service(tr::now), ServiceFields(item));
+	AddGroup(result, tr::lng_myowngram_details_state(tr::now), StateFields(item));
 	return result;
 }
 
