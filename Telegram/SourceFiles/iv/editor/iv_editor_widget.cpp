@@ -5743,7 +5743,7 @@ void Widget::mouseMoveEvent(QMouseEvent *e) {
 				const auto inlineButton
 					= inlineButtonEditRequestFromArticleHit(hit);
 				tooltip = inlineButton
-					? Markdown::RichButtonTooltip(
+					? HistoryMessageMarkupButton::Tooltip(
 						inlineButton->data.type,
 						inlineButton->data.payload,
 						QString())

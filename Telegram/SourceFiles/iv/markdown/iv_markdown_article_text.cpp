@@ -2342,7 +2342,10 @@ bool TextHasInlineButton(const TextWithEntities &text) {
 QString InlineButtonTooltip(QStringView data) {
 	const auto button = ActionableInlineButtonDataFor(data);
 	return button
-		? RichButtonTooltip(button->type, button->data, QString())
+		? HistoryMessageMarkupButton::Tooltip(
+			button->type,
+			button->data,
+			QString())
 		: QString();
 }
 

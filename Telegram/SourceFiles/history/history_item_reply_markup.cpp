@@ -11,6 +11,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_item.h"
 #include "history/history_item_components.h"
 #include "inline_bots/bot_attach_web_view.h"
+#include "lang/lang_keys.h"
+#include "ui/style/style_core_direction.h"
 
 #include <QtCore/QDataStream>
 
@@ -354,6 +356,44 @@ HistoryMessageMarkupButton::TypeIcon HistoryMessageMarkupButton::IconOfType(
 	Expects(int(type) < int(Type::kCount));
 
 	return kButtonTypeIcons[int(type)].icon;
+}
+
+QString HistoryMessageMarkupButton::Tooltip(
+		Type type,
+		const QByteArray &data,
+		const QString &elidedLabel) {
+	auto action = QString();
+	switch (type) {
+	case Type::Url:
+	case Type::Auth:
+	case Type::WebView:
+	case Type::SimpleWebView:
+		action = QString::fromUtf8(data);
+		break;
+	case Type::Callback:
+	case Type::CallbackWithPassword:
+		action = QString::fromUtf8(data);
+		if (action.toUtf8() != data || ranges::any_of(action, [](QChar ch) {
+			return ch.category() == QChar::Other_Control;
+		})) {
+			action = u"0x"_q + QString::fromLatin1(data.toHex());
+		}
+		break;
+	case Type::CopyText:
+		action = tr::lng_bot_copy_text_tooltip(
+			tr::now,
+			lt_text,
+			st::wrap_rtl(QString::fromUtf8(data)));
+		break;
+	default:
+		break;
+	}
+	if (action.isEmpty()) {
+		return elidedLabel;
+	} else if (elidedLabel.isEmpty()) {
+		return action;
+	}
+	return elidedLabel + u"\n\n"_q + action;
 }
 
 QByteArray HistoryMessageMarkupButton::RichPageButtonKey(

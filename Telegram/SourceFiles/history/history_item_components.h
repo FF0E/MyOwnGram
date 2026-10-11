@@ -505,9 +505,6 @@ private:
 	int _column = 0;
 	bool _fullDisplayed = true;
 
-	// Returns the full text of the corresponding button.
-	QString buttonText() const;
-
 };
 
 class ReplyKeyboard {

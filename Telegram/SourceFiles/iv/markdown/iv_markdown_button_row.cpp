@@ -99,7 +99,7 @@ void RichPageButtonClickHandler::onClick(ClickContext context) const {
 QString RichPageButtonClickHandler::tooltip() const {
 	const auto button = lookup();
 	return button
-		? RichButtonTooltip(
+		? HistoryMessageMarkupButton::Tooltip(
 			button->type,
 			button->data,
 			LookupRuntimeElidedLabel(_runtime, _index))
@@ -511,27 +511,6 @@ const style::icon *RichButtonIcon(ButtonType type) {
 	case TypeIcon::None: return nullptr;
 	}
 	Unexpected("TypeIcon in Iv::Markdown::RichButtonIcon.");
-}
-
-QString RichButtonTooltip(
-		ButtonType type,
-		const QByteArray &data,
-		const QString &elidedLabel) {
-	if (type == ButtonType::CopyText) {
-		return tr::lng_bot_copy_text_tooltip(
-			tr::now,
-			lt_text,
-			st::wrap_rtl(QString::fromUtf8(data)));
-	}
-	const auto url = (type == ButtonType::Url || type == ButtonType::Auth)
-		? QString::fromUtf8(data)
-		: QString();
-	if (url.isEmpty()) {
-		return elidedLabel;
-	} else if (elidedLabel.isEmpty()) {
-		return url;
-	}
-	return elidedLabel + u"\n\n"_q + url;
 }
 
 int ButtonRowMinWidth(int count, const style::MarkdownButtonRow &st) {

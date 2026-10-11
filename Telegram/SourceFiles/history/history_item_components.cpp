@@ -780,33 +780,14 @@ void ReplyMarkupClickHandler::onClick(ClickContext context) const {
 	Api::ActivateBotCommand(my, _row, _column);
 }
 
-// Returns the full text of the corresponding button.
-QString ReplyMarkupClickHandler::buttonText() const {
-	if (const auto button = getButton()) {
-		return button->text;
-	}
-	return QString();
-}
-
 QString ReplyMarkupClickHandler::tooltip() const {
-	if (const auto button = getButton()) {
-		if (button->type == HistoryMessageMarkupButton::Type::CopyText) {
-			return tr::lng_bot_copy_text_tooltip(
-				tr::now,
-				lt_text,
-				st::wrap_rtl(QString::fromUtf8(button->data)));
-		}
-	}
-	const auto button = getUrlButton();
-	const auto url = button ? QString::fromUtf8(button->data) : QString();
-	const auto text = _fullDisplayed ? QString() : buttonText();
-	if (!url.isEmpty() && !text.isEmpty()) {
-		return QString("%1\n\n%2").arg(text, url);
-	} else if (url.isEmpty() != text.isEmpty()) {
-		return text + url;
-	} else {
-		return QString();
-	}
+	const auto button = getButton();
+	return button
+		? HistoryMessageMarkupButton::Tooltip(
+			button->type,
+			button->data,
+			_fullDisplayed ? QString() : button->text)
+		: QString();
 }
 
 ReplyKeyboard::Button::Button() = default;

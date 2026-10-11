@@ -146,6 +146,10 @@ struct HistoryMessageMarkupButton {
 		int column);
 	[[nodiscard]] static bool LoadsOnActivate(Type type);
 	[[nodiscard]] static TypeIcon IconOfType(Type type);
+	[[nodiscard]] static QString Tooltip(
+		Type type,
+		const QByteArray &data,
+		const QString &elidedLabel);
 	[[nodiscard]] static QByteArray RichPageButtonKey(
 		const HistoryMessageMarkupButton &button);
 	[[nodiscard]] static QByteArray RegisterRichPageButton(
