@@ -646,7 +646,6 @@ Details MessageDetails(
 			ReadLabel(cached.read.type),
 			cached.read.list.front().date);
 	}
-	result.push_back({});
 	AddGroup(
 		result,
 		tr::lng_myowngram_details_chat_sender(tr::now),
@@ -720,9 +719,6 @@ void AppendCopyLines(
 		const Details &details,
 		const QString &prefix = {}) {
 	for (const auto &detail : details) {
-		if (detail.label.isEmpty()) {
-			continue;
-		}
 		const auto label = prefix.isEmpty()
 			? detail.label
 			: prefix + u" / "_q + detail.label;
@@ -735,18 +731,11 @@ void AppendCopyLines(
 }
 
 void FillMenu(not_null<Ui::PopupMenu*> menu, const Details &details) {
-	const auto addAction = Ui::Menu::CreateAddActionCallback(menu);
 	for (const auto &detail : details) {
-		if (detail.label.isEmpty()) {
+		if (!detail.children.empty()) {
 			menu->addSeparator();
-		} else if (!detail.children.empty()) {
-			addAction({
-				.text = detail.label,
-				.fillSubmenu = [&](not_null<Ui::PopupMenu*> submenu) {
-					FillMenu(submenu, detail.children);
-				},
-				.submenuSt = &st::messageDetailsPopup,
-			});
+			menu->addAction(detail.label, [] {})->setEnabled(false);
+			FillMenu(menu, detail.children);
 		} else {
 			const auto &st = menu->st().menu;
 			const auto font = st.itemStyle.font;
