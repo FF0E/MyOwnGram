@@ -278,9 +278,6 @@ public:
 		const QByteArray &fileReference);
 	void setContentUrl(const QString &url);
 	void setWebLocation(const WebFileLocation &location);
-	[[nodiscard]] int dcId() const {
-		return _dc;
-	}
 	[[nodiscard]] bool hasRemoteLocation() const;
 	[[nodiscard]] bool hasWebLocation() const;
 	[[nodiscard]] bool isNull() const;

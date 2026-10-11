@@ -489,19 +489,6 @@ public:
 		const QString &title,
 		const QString &description);
 
-	[[nodiscard]] const LocationPoint &point() const {
-		return _point;
-	}
-	[[nodiscard]] TimeId livePeriod() const {
-		return _livePeriod;
-	}
-	[[nodiscard]] QString title() const {
-		return _title;
-	}
-	[[nodiscard]] QString description() const {
-		return _description;
-	}
-
 private:
 
 	[[nodiscard]] QString typeString() const;

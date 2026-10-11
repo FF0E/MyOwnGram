@@ -7,11 +7,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
-#include <vector>
+#include <memory>
 
-class DocumentData;
 class HistoryItem;
-class PhotoData;
+
+namespace Main {
+class SessionShow;
+} // namespace Main
 
 namespace Ui {
 class PopupMenu;
@@ -19,16 +21,9 @@ class PopupMenu;
 
 namespace HistoryView {
 
-struct MessageDetail;
-
-void FillMessageDetailsMenu(
-	not_null<Ui::PopupMenu*> menu,
-	const std::vector<MessageDetail> &details);
-
 void AddMessageDetailsAction(
 	not_null<Ui::PopupMenu*> menu,
 	not_null<HistoryItem*> item,
-	PhotoData *selectedPhoto = nullptr,
-	DocumentData *selectedDocument = nullptr);
+	std::shared_ptr<Main::SessionShow> show);
 
 } // namespace HistoryView

@@ -3842,8 +3842,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 		HistoryView::AddMessageDetailsAction(
 			_menu,
 			_dragStateItem,
-			lnkPhoto,
-			lnkDocument);
+			_controller->uiShow());
 	}
 	if (hasWhoReactedItem) {
 		HistoryView::AddWhoReactedAction(

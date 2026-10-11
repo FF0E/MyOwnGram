@@ -1953,7 +1953,7 @@ void FillContextMenuItems(
 		AddSelectRestrictionAction(result, item, !added);
 	}
 	if (item && !hasSelection) {
-		AddMessageDetailsAction(result, item, lnkPhoto, lnkDocument);
+		AddMessageDetailsAction(result, item, list->controller()->uiShow());
 	}
 	if (!skipWhoReacted) {
 		if (hasWhoReactedItem) {
