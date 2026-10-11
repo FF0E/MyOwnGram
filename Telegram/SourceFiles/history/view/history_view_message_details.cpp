@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "api/api_who_reacted.h"
 #include "base/unixtime.h"
+#include "data/business/data_shortcut_messages.h"
 #include "data/components/scheduled_messages.h"
 #include "data/stickers/data_stickers.h"
 #include "data/stickers/data_stickers_set.h"
@@ -17,6 +18,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_photo.h"
 #include "data/data_session.h"
 #include "data/data_user.h"
+#include "history/view/history_view_message_details_remote.h"
+#include "history/view/history_view_message_metadata.h"
 #include "history/history.h"
 #include "history/history_item.h"
 #include "history/history_item_components.h"
@@ -26,12 +29,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/controls/who_reacted_context_action.h"
 #include "ui/text/format_values.h"
 #include "ui/widgets/menu/menu_action.h"
-#include "ui/widgets/menu/menu_add_action_callback.h"
-#include "ui/widgets/menu/menu_add_action_callback_factory.h"
 #include "ui/widgets/popup_menu.h"
 
 #include <QtGui/QClipboard>
 #include <QtGui/QGuiApplication>
+#include <QtWidgets/QMenu>
 
 #include "styles/style_chat_helpers.h"
 #include "styles/style_menu_icons.h"
@@ -39,13 +41,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 namespace HistoryView {
 namespace {
 
-struct Detail {
-	QString label;
-	QString value;
-	QString copy;
-	std::vector<Detail> children;
-};
-
+using Detail = MessageDetail;
 using Details = std::vector<Detail>;
 
 void Add(
@@ -600,14 +596,21 @@ Details MessageDetails(
 	const auto remoteScheduled = scheduled
 		&& !item->isSending()
 		&& !item->hasFailed();
+	const auto remoteShortcut = item->isBusinessShortcut()
+		&& !item->isSending()
+		&& !item->hasFailed();
 	const auto messageId = remoteScheduled
 		? item->history()->session().scheduledMessages().lookupId(item)
+		: remoteShortcut
+		? item->history()->owner().shortcutMessages().lookupId(item)
 		: item->id;
 	const auto localId = !IsServerMsgId(item->id);
 	Add(
 		result,
 		remoteScheduled
 		? tr::lng_myowngram_details_scheduled_id(tr::now)
+		: remoteShortcut
+		? tr::lng_myowngram_details_shortcut_message_id(tr::now)
 		: localId
 		? tr::lng_myowngram_details_local_id(tr::now)
 		: tr::lng_myowngram_details_message_id(tr::now),
@@ -703,6 +706,12 @@ Details MessageDetails(
 			? tr::lng_box_yes(tr::now)
 			: tr::lng_box_no(tr::now));
 	}
+	for (auto &detail : CollectMessageMetadata(
+			item,
+			selectedPhoto,
+			selectedDocument)) {
+		result.push_back(std::move(detail));
+	}
 	AddGroup(
 		result,
 		tr::lng_myowngram_details_more(tr::now),
@@ -730,12 +739,18 @@ void AppendCopyLines(
 	}
 }
 
-void FillMenu(not_null<Ui::PopupMenu*> menu, const Details &details) {
+void FillMenu(
+		not_null<Ui::PopupMenu*> menu,
+		const Details &details,
+		const QString &prefix = {}) {
 	for (const auto &detail : details) {
 		if (!detail.children.empty()) {
+			const auto label = prefix.isEmpty()
+				? detail.label
+				: prefix + u" / "_q + detail.label;
 			menu->addSeparator();
-			menu->addAction(detail.label, [] {})->setEnabled(false);
-			FillMenu(menu, detail.children);
+			menu->addAction(label, [] {})->setEnabled(false);
+			FillMenu(menu, detail.children, label);
 		} else {
 			const auto &st = menu->st().menu;
 			const auto font = st.itemStyle.font;
@@ -771,28 +786,51 @@ void AddMessageDetailsAction(
 		not_null<HistoryItem*> item,
 		PhotoData *selectedPhoto,
 		DocumentData *selectedDocument) {
-	if ((!item->isHistoryEntry() && !item->isScheduled())
+	if ((!item->isHistoryEntry()
+		&& !item->isScheduled()
+		&& !item->isBusinessShortcut())
 		|| item->isSponsored()
 		|| item->isFakeAboutView()) {
 		return;
 	}
-	const auto details = MessageDetails(item, selectedPhoto, selectedDocument);
-	Ui::Menu::CreateAddActionCallback(menu)({
-		.text = tr::lng_myowngram_details_title_menu(tr::now),
-		.icon = &st::menuIconInfo,
-		.fillSubmenu = [&](not_null<Ui::PopupMenu*> submenu) {
-			FillMenu(submenu, details);
-			auto lines = QStringList();
-			AppendCopyLines(lines, details);
-			submenu->addSeparator();
-			submenu->addAction(
-				tr::lng_myowngram_details_copy_all(tr::now),
-				[text = lines.join('\n')] {
-					QGuiApplication::clipboard()->setText(text);
-				});
-		},
-		.submenuSt = &st::messageDetailsPopup,
-	});
+	const auto owner = &item->history()->owner();
+	const auto id = item->fullId();
+	const auto action = Ui::Menu::CreateAction(
+		menu->menu(),
+		tr::lng_myowngram_details_title_menu(tr::now),
+		[] {});
+	action->setMenu(new QMenu(menu));
+	auto widget = base::make_unique_q<Ui::Menu::Action>(
+		menu->menu(),
+		menu->st().menu,
+		action,
+		&st::menuIconInfo,
+		&st::menuIconInfo);
+	// Fill before the menu's selection handler measures the submenu.
+	rpl::merge(
+		widget->selects() | rpl::filter([](const Ui::Menu::CallbackData &data) {
+			return data.selected;
+		}),
+		widget->clicks()
+	) | rpl::take(1) | rpl::on_next(crl::guard(&owner->session(), [=] {
+		const auto item = owner->message(id);
+		if (!item) {
+			return;
+		}
+		const auto submenu = menu->ensureSubmenu(action, st::messageDetailsPopup);
+		const auto details = MessageDetails(item, selectedPhoto, selectedDocument);
+		auto lines = QStringList();
+		AppendCopyLines(lines, details);
+		submenu->addAction(
+			tr::lng_myowngram_details_copy_all(tr::now),
+			[text = lines.join('\n')] {
+				QGuiApplication::clipboard()->setText(text);
+			});
+		AddRemoteMessageDetailsAction(submenu, item, menu->parentWidget());
+		submenu->addSeparator();
+		FillMenu(submenu, details);
+	}), widget->lifetime());
+	menu->addAction(std::move(widget));
 }
 
 } // namespace HistoryView

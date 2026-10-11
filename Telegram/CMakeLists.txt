@@ -1101,6 +1101,10 @@ PRIVATE
     history/view/history_view_message.h
     history/view/history_view_message_details.cpp
     history/view/history_view_message_details.h
+    history/view/history_view_message_details_remote.cpp
+    history/view/history_view_message_details_remote.h
+    history/view/history_view_message_metadata.cpp
+    history/view/history_view_message_metadata.h
     history/view/history_view_object.h
     history/view/history_view_paid_reaction_toast.cpp
     history/view/history_view_paid_reaction_toast.h

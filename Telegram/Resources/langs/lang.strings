@@ -8907,4 +8907,21 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_details_spoiler" = "Media spoiler";
 "lng_myowngram_details_more" = "More";
 
+"lng_myowngram_details_content" = "Text and formatting";
+"lng_myowngram_details_reply_metadata" = "Reply and forwarding fields";
+"lng_myowngram_details_topic" = "Topic";
+"lng_myowngram_details_buttons" = "Bot buttons";
+"lng_myowngram_details_reaction_metadata" = "Reaction fields";
+"lng_myowngram_details_media_metadata" = "Media fields";
+"lng_myowngram_details_selected_photo" = "Selected photo fields";
+"lng_myowngram_details_selected_document" = "Selected file fields";
+"lng_myowngram_details_state" = "Message state";
+"lng_myowngram_details_service" = "Service message fields";
+"lng_myowngram_details_rich_media" = "Rich message media";
+"lng_myowngram_details_shortcut_message_id" = "Quick reply message ID";
+"lng_myowngram_details_fetch_remote" = "Fetch data from Telegram";
+"lng_myowngram_details_remote_title" = "From Telegram (MTProto)";
+"lng_myowngram_details_copy_remote" = "Copy full response";
+"lng_myowngram_details_remote_error" = "Could not fetch message data";
+
 // Keys finished

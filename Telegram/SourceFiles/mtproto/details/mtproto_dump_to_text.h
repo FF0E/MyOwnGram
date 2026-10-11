@@ -14,13 +14,22 @@ namespace MTP::details {
 
 // Human-readable text serialization
 QString DumpToText(const mtpPrime *&from, const mtpPrime *end);
+[[nodiscard]] QString DumpToTextObject(const mtpBuffer &data);
+
+template <typename Object>
+[[nodiscard]] QString DumpObject(const Object &object) {
+	auto data = mtpBuffer();
+	object.write(data);
+	return DumpToTextObject(data);
+}
 
 struct DumpToTextBuffer {
 	static constexpr auto kBufferSize = 1024 * 1024; // 1 mb start size
 
-	DumpToTextBuffer()
+	explicit DumpToTextBuffer(bool fullValues = false)
 		: p(new char[kBufferSize])
-		, alloced(kBufferSize) {
+		, alloced(kBufferSize)
+		, fullValues(fullValues) {
 	}
 	~DumpToTextBuffer() {
 		delete[] p;
@@ -74,6 +83,7 @@ struct DumpToTextBuffer {
 	char *p = nullptr;
 	int size = 0;
 	int alloced = 0;
+	bool fullValues = false;
 
 };
 

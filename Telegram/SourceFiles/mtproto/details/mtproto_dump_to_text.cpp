@@ -10,6 +10,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "scheme-dump_to_text.h"
 #include "scheme.h"
 
+#include <QtCore/QJsonArray>
+#include <QtCore/QJsonDocument>
+#include <limits>
 #include <zlib.h>
 
 namespace MTP::details {
@@ -51,7 +54,11 @@ bool DumpToTextCore(DumpToTextBuffer &to, const mtpPrime *&from, const mtpPrime 
 	case mtpc_double: {
 		MTPdouble value;
 		if (value.read(from, end, cons)) {
-			to.add(QString::number(value.v)).add(" [DOUBLE]");
+			to.add(QString::number(
+				value.v,
+				'g',
+				to.fullValues ? std::numeric_limits<double>::max_digits10 : 6)
+			).add(" [DOUBLE]");
 			return true;
 		}
 	} break;
@@ -62,8 +69,14 @@ bool DumpToTextCore(DumpToTextBuffer &to, const mtpPrime *&from, const mtpPrime 
 			auto strUtf8 = value.v;
 			auto str = QString::fromUtf8(strUtf8);
 			if (str.toUtf8() == strUtf8) {
-				to.add("\"").add(str.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n")).add("\" [STRING]");
-			} else if (strUtf8.size() < 64) {
+				if (to.fullValues) {
+					const auto json = QJsonDocument(QJsonArray{ str }).toJson(
+						QJsonDocument::Compact);
+					to.add(json.constData() + 1, json.size() - 2).add(" [STRING]");
+				} else {
+					to.add("\"").add(str.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n")).add("\" [STRING]");
+				}
+			} else if (to.fullValues || strUtf8.size() < 64) {
 				to.add(Logs::mb(strUtf8.constData(), strUtf8.size()).str()).add(" [").add(QString::number(strUtf8.size())).add(" BYTES]");
 			} else {
 				to.add(Logs::mb(strUtf8.constData(), 16).str()).add("... [").add(QString::number(strUtf8.size())).add(" BYTES]");
@@ -163,6 +176,15 @@ bool DumpToTextCore(DumpToTextBuffer &to, const mtpPrime *&from, const mtpPrime 
 QString DumpToText(const mtpPrime *&from, const mtpPrime *end) {
 	DumpToTextBuffer to;
 	[[maybe_unused]] bool result = DumpToTextType(to, from, end, mtpc_core_message);
+	return QString::fromUtf8(to.p, to.size);
+}
+
+QString DumpToTextObject(const mtpBuffer &data) {
+	auto from = data.constData();
+	auto to = DumpToTextBuffer(true);
+	if (!DumpToTextType(to, from, from + data.size(), 0, 0)) {
+		to.error();
+	}
 	return QString::fromUtf8(to.p, to.size);
 }
 
