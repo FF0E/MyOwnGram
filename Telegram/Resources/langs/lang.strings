@@ -8829,6 +8829,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_peer_ids_telegram" = "Telegram API";
 "lng_myowngram_peer_ids_bot" = "Bot API";
 "lng_myowngram_copy_id" = "Copy ID";
+"lng_myowngram_id" = "ID";
 "lng_myowngram_dc_miami" = "Miami FL, USA";
 "lng_myowngram_dc_amsterdam" = "Amsterdam, NL";
 "lng_myowngram_dc_singapore" = "Singapore, SG";

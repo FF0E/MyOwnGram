@@ -3290,6 +3290,8 @@ int PeerDcId(not_null<PeerData*> peer) {
 rpl::producer<QString> DcTextValue(int dc) {
 	auto location = rpl::producer<QString>();
 	switch (dc) {
+	case 0:
+		return tr::lng_myowngram_id();
 	case 1:
 	case 3:
 		location = tr::lng_myowngram_dc_miami();
@@ -3302,7 +3304,7 @@ rpl::producer<QString> DcTextValue(int dc) {
 		location = tr::lng_myowngram_dc_singapore();
 		break;
 	default:
-		return rpl::single(dc ? u"DC%1"_q.arg(dc) : QString());
+		return rpl::single(u"DC%1"_q.arg(dc));
 	}
 	return std::move(location) | rpl::map([=](const QString &name) {
 		return u"DC%1, %2"_q.arg(dc).arg(name);
@@ -3326,17 +3328,14 @@ object_ptr<Ui::SlideWrap<Ui::VerticalLayout>> CreatePeerIdRow(
 		st::infoProfileLabeledPadding);
 	result->setDuration(st::infoSlideDuration);
 	const auto layout = result->entity();
-	const auto label = layout->add(
-		object_ptr<Ui::FlatLabel>(
-			layout,
-			settings->peerIdDisplayValue() | rpl::map([=](
-					Core::PeerIdDisplay mode) {
-				return Ui::Text::Wrapped(
-					tr::marked(PeerIdText(peer, topicRootId, mode)),
-					EntityType::Code);
-			}),
-			st::infoLabeledOneLine),
-		style::al_justify);
+	const auto label = layout->add(object_ptr<Ui::FlatLabel>(
+		layout,
+		settings->peerIdDisplayValue() | rpl::map([=](Core::PeerIdDisplay mode) {
+			return Ui::Text::Wrapped(
+				tr::marked(PeerIdText(peer, topicRootId, mode)),
+				EntityType::Code);
+		}),
+		st::infoLabeledOneLine));
 	label->setSelectable(true);
 	label->setDoubleClickSelectsParagraph(true);
 	label->setContextCopyText(tr::lng_myowngram_copy_id(tr::now));
@@ -3352,19 +3351,16 @@ object_ptr<Ui::SlideWrap<Ui::VerticalLayout>> CreatePeerIdRow(
 			Data::PeerUpdate::Flag::Photo | Data::PeerUpdate::Flag::FullInfo
 		) | rpl::map([=] {
 			return PeerDcId(peer);
-		}) | rpl::distinct_until_changed()
-			| rpl::start_spawning(layout->lifetime());
-		const auto caption = layout->add(
-			object_ptr<Ui::SlideWrap<Ui::FlatLabel>>(
+		}) | rpl::distinct_until_changed();
+		layout->add(object_ptr<Ui::PaddingWrap<Ui::FlatLabel>>(
+			layout,
+			object_ptr<Ui::FlatLabel>(
 				layout,
-				object_ptr<Ui::FlatLabel>(
-					layout,
-					rpl::duplicate(dc)
-						| rpl::map(DcTextValue)
-						| rpl::flatten_latest(),
-					st::infoLabel),
-				QMargins(0, st::infoLabelSkip, 0, 0)));
-		caption->toggleOn(std::move(dc) | rpl::map(rpl::mappers::_1 != 0));
+				std::move(dc)
+					| rpl::map(DcTextValue)
+					| rpl::flatten_latest(),
+				st::infoLabel),
+			QMargins(0, st::infoLabelSkip, 0, 0)));
 	}
 	result->toggleOn(settings->peerIdDisplayValue() | rpl::map(
 		rpl::mappers::_1 != Core::PeerIdDisplay::Hidden));
