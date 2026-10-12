@@ -1426,17 +1426,6 @@ Section DetailsFiller::makeInfo() {
 	const auto raw = wrap.data();
 	const auto result = raw->entity();
 	auto tracker = Ui::MultiSlideTracker();
-	tracker.track(result->add(CreatePeerIdRow(
-		result,
-		_peer,
-		_controller->uiShow())));
-	if (_topic) {
-		tracker.track(result->add(CreatePeerIdRow(
-			result,
-			_peer,
-			_controller->uiShow(),
-			_topic->rootId())));
-	}
 
 	// Fill context for a mention / hashtag / bot command link.
 	const auto infoClickFilter = [=,
@@ -1781,6 +1770,11 @@ Section DetailsFiller::makeInfo() {
 			return false;
 		});
 
+		tracker.track(result->add(CreatePeerIdRow(
+			result,
+			_peer,
+			_controller->uiShow())));
+
 		if (!user->isBot()) {
 			tracker.track(result->add(
 				CreateBirthday(result, controller, user),
@@ -1874,6 +1868,18 @@ Section DetailsFiller::makeInfo() {
 				Ui::DefaultShowFillPeerQrBoxCallback(show, peer);
 				return false;
 			});
+		}
+
+		tracker.track(result->add(CreatePeerIdRow(
+			result,
+			_peer,
+			_controller->uiShow())));
+		if (_topic) {
+			tracker.track(result->add(CreatePeerIdRow(
+				result,
+				_peer,
+				_controller->uiShow(),
+				topicRootId)));
 		}
 
 		if (const auto channel = _topic ? nullptr : _peer->asChannel()) {
@@ -3320,14 +3326,17 @@ object_ptr<Ui::SlideWrap<Ui::VerticalLayout>> CreatePeerIdRow(
 		st::infoProfileLabeledPadding);
 	result->setDuration(st::infoSlideDuration);
 	const auto layout = result->entity();
-	const auto label = layout->add(object_ptr<Ui::FlatLabel>(
-		layout,
-		settings->peerIdDisplayValue() | rpl::map([=](Core::PeerIdDisplay mode) {
-			return Ui::Text::Wrapped(
-				tr::marked(PeerIdText(peer, topicRootId, mode)),
-				EntityType::Code);
-		}),
-		st::infoLabeledOneLine));
+	const auto label = layout->add(
+		object_ptr<Ui::FlatLabel>(
+			layout,
+			settings->peerIdDisplayValue() | rpl::map([=](
+					Core::PeerIdDisplay mode) {
+				return Ui::Text::Wrapped(
+					tr::marked(PeerIdText(peer, topicRootId, mode)),
+					EntityType::Code);
+			}),
+			st::infoLabeledOneLine),
+		style::al_justify);
 	label->setSelectable(true);
 	label->setDoubleClickSelectsParagraph(true);
 	label->setContextCopyText(tr::lng_myowngram_copy_id(tr::now));
