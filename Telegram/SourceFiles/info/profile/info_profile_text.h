@@ -12,12 +12,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <rpl/producer.h>
 
-class PeerData;
-
-namespace Main {
-class SessionShow;
-} // namespace Main
-
 namespace style {
 struct FlatLabel;
 } // namespace style
@@ -36,12 +30,6 @@ struct TextWithLabel {
 	not_null<Ui::FlatLabel*> text;
 	not_null<Ui::FlatLabel*> subtext;
 };
-
-object_ptr<Ui::SlideWrap<Ui::VerticalLayout>> CreatePeerIdRow(
-	QWidget *parent,
-	not_null<PeerData*> peer,
-	std::shared_ptr<Main::SessionShow> show,
-	MsgId topicRootId = 0);
 
 TextWithLabel CreateTextWithLabel(
 	QWidget *parent,

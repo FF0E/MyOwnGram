@@ -12,7 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_channel.h"
 #include "data/data_community.h"
 #include "dialogs/ui/dialogs_top_bar_suggestion_content.h"
-#include "info/profile/info_profile_text.h"
+#include "info/profile/info_profile_actions.h"
 #include "info/profile/info_profile_top_bar.h"
 #include "info/profile/info_profile_values.h"
 #include "info/info_controller.h"

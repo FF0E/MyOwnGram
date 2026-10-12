@@ -8,11 +8,20 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #pragma once
 
 #include "base/object_ptr.h"
+#include "data/data_msg_id.h"
 #include "info/profile/info_profile_section_stack.h"
+
+class PeerData;
+
+namespace Main {
+class SessionShow;
+} // namespace Main
 
 namespace Ui {
 class RpWidget;
 class VerticalLayout;
+template <typename Widget>
+class SlideWrap;
 } // namespace Ui
 
 namespace Data {
@@ -30,6 +39,12 @@ extern const char kOptionShowPeerIdBelowAbout[];
 extern const char kOptionShowChannelJoinedBelowAbout[];
 
 struct Origin;
+
+object_ptr<Ui::SlideWrap<Ui::VerticalLayout>> CreatePeerIdRow(
+	QWidget *parent,
+	not_null<PeerData*> peer,
+	std::shared_ptr<Main::SessionShow> show,
+	MsgId topicRootId = 0);
 
 object_ptr<Ui::RpWidget> SetupActions(
 	not_null<Controller*> controller,
