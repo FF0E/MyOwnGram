@@ -41,6 +41,12 @@ namespace Core {
 inline constexpr auto kScreenReaderModeDisabledKey
 	= "screen-reader-mode-disabled"_cs;
 
+enum class PeerIdDisplay {
+	Hidden,
+	TelegramApi,
+	BotApi,
+};
+
 struct ActivitySettings {
 	bool online = true;
 	bool typing = true;
@@ -1120,6 +1126,14 @@ public:
 	}
 	void setActivitySettings(ActivitySettings value);
 
+	[[nodiscard]] PeerIdDisplay peerIdDisplay() const {
+		return _peerIdDisplay.current();
+	}
+	[[nodiscard]] rpl::producer<PeerIdDisplay> peerIdDisplayValue() const {
+		return _peerIdDisplay.value();
+	}
+	void setPeerIdDisplay(PeerIdDisplay value);
+
 	void resetOnLastLogout();
 
 private:
@@ -1271,6 +1285,7 @@ private:
 	base::flat_map<QByteArray, QByteArray> _prefs;
 	rpl::variable<AdPreferences> _adSettings = AdPreferences();
 	rpl::variable<bool> _sendReadMetrics = true;
+	rpl::variable<PeerIdDisplay> _peerIdDisplay = PeerIdDisplay::Hidden;
 	rpl::variable<bool> _sendPremiumPromoAnalytics = true;
 	rpl::variable<bool> _sendDrafts = true;
 	rpl::variable<bool> _receiveDrafts = true;

@@ -32,6 +32,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/translate_box.h"
 #include "core/application.h"
 #include "core/click_handler_types.h"
+#include "core/core_settings.h"
 #include "core/ui_integration.h"
 #include "data/business/data_business_common.h"
 #include "data/business/data_business_info.h"
@@ -231,10 +232,13 @@ base::options::toggle ShowChannelJoinedBelowAbout({
 [[nodiscard]] rpl::producer<TextWithEntities> AboutWithAdvancedValue(
 		not_null<PeerData*> peer) {
 
-	return AboutValue(
-		peer
-	) | rpl::map([=](TextWithEntities &&value) {
-		if (ShowPeerIdBelowAbout.value()) {
+	return rpl::combine(
+		AboutValue(peer),
+		Core::App().settings().peerIdDisplayValue()
+	) | rpl::map([=](TextWithEntities value, Core::PeerIdDisplay mode) {
+		const auto showId = ShowPeerIdBelowAbout.value()
+			&& (mode == Core::PeerIdDisplay::Hidden);
+		if (showId) {
 			using namespace Ui::Text;
 			if (!value.empty()) {
 				value.append("\n\n");
@@ -249,7 +253,7 @@ base::options::toggle ShowChannelJoinedBelowAbout({
 			if (const auto channel = peer->asChannel()) {
 				if (!channel->amCreator() && channel->inviteDate) {
 					if (!value.empty()) {
-						if (ShowPeerIdBelowAbout.value()) {
+						if (showId) {
 							value.append("\n");
 						} else {
 							value.append("\n\n");
@@ -280,9 +284,13 @@ void SetupAboutPeerIdDrag(
 		return;
 	}
 	const auto id = QString::number(peer->id.value & PeerId::kChatTypeMask);
-	AboutValue(
+	AboutWithAdvancedValue(
 		peer
 	) | rpl::on_next([=] {
+		const auto mode = Core::App().settings().peerIdDisplay();
+		if (mode != Core::PeerIdDisplay::Hidden) {
+			return;
+		}
 		label->setLink(
 			kPeerIdLinkIndex,
 			std::make_shared<DraggableUrlClickHandler>(
@@ -1416,6 +1424,17 @@ Section DetailsFiller::makeInfo() {
 	const auto raw = wrap.data();
 	const auto result = raw->entity();
 	auto tracker = Ui::MultiSlideTracker();
+	tracker.track(result->add(CreatePeerIdRow(
+		result,
+		_peer,
+		_controller->uiShow())));
+	if (_topic) {
+		tracker.track(result->add(CreatePeerIdRow(
+			result,
+			_peer,
+			_controller->uiShow(),
+			_topic->rootId())));
+	}
 
 	// Fill context for a mention / hashtag / bot command link.
 	const auto infoClickFilter = [=,

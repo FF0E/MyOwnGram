@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_channel.h"
 #include "data/data_community.h"
 #include "dialogs/ui/dialogs_top_bar_suggestion_content.h"
+#include "info/profile/info_profile_text.h"
 #include "info/profile/info_profile_top_bar.h"
 #include "info/profile/info_profile_values.h"
 #include "info/info_controller.h"
@@ -20,6 +21,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/text/text_utilities.h"
 #include "ui/vertical_list.h"
 #include "ui/widgets/buttons.h"
+#include "ui/wrap/slide_wrap.h"
 #include "ui/wrap/vertical_layout.h"
 #include "ui/rp_widget.h"
 #include "ui/ui_utility.h"
@@ -67,6 +69,7 @@ InnerWidget::InnerWidget(
 , _controller(controller)
 , _peer(peer) {
 	if (const auto community = peer->asChannel()) {
+		add(Profile::CreatePeerIdRow(this, peer, controller->uiShow()));
 		SetupCommunityContent(
 			this,
 			controller->parentController(),

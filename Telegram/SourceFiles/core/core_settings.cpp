@@ -36,6 +36,7 @@ constexpr auto kSendPremiumPromoAnalyticsKey
 	= std::string_view("myowngram-send-premium-promo-analytics");
 constexpr auto kSendDraftsKey = std::string_view("myowngram-send-drafts");
 constexpr auto kReceiveDraftsKey = std::string_view("myowngram-receive-drafts");
+constexpr auto kPeerIdDisplayKey = std::string_view("myowngram-peer-id-display");
 
 constexpr auto kActivityPreferences = std::array{
 	std::pair{
@@ -1383,6 +1384,17 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 		activity.*flag = readPref<bool>(key, true);
 	}
 	_activitySettings = activity;
+	const auto peerIds = readPrefGeneric(kPeerIdDisplayKey)
+		.value_or(QByteArray()).toInt();
+	switch (PeerIdDisplay(peerIds)) {
+	case PeerIdDisplay::TelegramApi:
+	case PeerIdDisplay::BotApi:
+		_peerIdDisplay = PeerIdDisplay(peerIds);
+		break;
+	default:
+		_peerIdDisplay = PeerIdDisplay::Hidden;
+		break;
+	}
 }
 
 AdSettings Settings::adSettings(AdPlacement placement) const {
@@ -1405,6 +1417,14 @@ void Settings::setAdSettings(AdPlacement placement, AdSettings value) {
 	const auto bytes = SerializeAdPreferences(values);
 	writePrefGeneric(kAdSettingsKey, QByteArray(bytes.data(), bytes.size()));
 	_adSettings = std::move(values);
+}
+
+void Settings::setPeerIdDisplay(PeerIdDisplay value) {
+	if (_peerIdDisplay.current() == value) {
+		return;
+	}
+	writePrefGeneric(kPeerIdDisplayKey, QByteArray::number(int(value)));
+	_peerIdDisplay = value;
 }
 
 void Settings::setSendReadMetrics(bool enabled) {
@@ -1884,6 +1904,7 @@ void Settings::resetOnLastLogout() {
 	const auto srDisabled = readPref<bool>(kScreenReaderModeDisabledKey);
 	const auto ads = readPref<QByteArray>(kAdSettingsKey);
 	_prefs.clear();
+	writePrefGeneric(kPeerIdDisplayKey, QByteArray::number(int(peerIdDisplay())));
 	writePref<bool>(kSendReadMetricsKey, sendReadMetrics());
 	writePref<bool>(kSendPremiumPromoAnalyticsKey, sendPremiumPromoAnalytics());
 	writePref<bool>(kSendDraftsKey, sendDrafts());

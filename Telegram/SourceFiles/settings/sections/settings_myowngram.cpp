@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/settings_builder.h"
 #include "settings/settings_common_session.h"
 #include "ui/widgets/buttons.h"
+#include "ui/widgets/checkbox.h"
 #include "ui/wrap/vertical_layout.h"
 
 #include <tuple>
@@ -184,6 +185,40 @@ void AddActivityToggles(SectionBuilder &builder) {
 	}
 }
 
+void AddPeerIdSelector(SectionBuilder &builder) {
+	builder.addSubsectionTitle({
+		.id = u"myowngram/peer-ids"_q,
+		.title = tr::lng_myowngram_peer_ids(),
+		.keywords = { u"uid"_q, u"dc"_q, u"profile"_q, u"datacenter"_q },
+	});
+	builder.add([](const WidgetContext &ctx) {
+		using Mode = Core::PeerIdDisplay;
+		const auto settings = &Core::App().settings();
+		auto wrap = object_ptr<Ui::VerticalLayout>(ctx.container);
+		const auto inner = wrap.data();
+		const auto group = std::make_shared<Ui::RadioenumGroup<Mode>>(
+			settings->peerIdDisplay());
+		const auto add = [&](Mode value, const QString &title) {
+			inner->add(object_ptr<Ui::Radioenum<Mode>>(
+				inner,
+				group,
+				value,
+				title,
+				st::settingsSendType), st::settingsSendTypePadding);
+		};
+		add(Mode::Hidden, tr::lng_myowngram_peer_ids_hidden(tr::now));
+		add(Mode::TelegramApi, tr::lng_myowngram_peer_ids_telegram(tr::now));
+		add(Mode::BotApi, tr::lng_myowngram_peer_ids_bot(tr::now));
+		group->setChangedCallback([=](Mode value) {
+			settings->setPeerIdDisplay(value);
+		});
+		settings->peerIdDisplayValue() | rpl::on_next([=](Mode value) {
+			group->setValue(value);
+		}, inner->lifetime());
+		return SectionBuilder::WidgetToAdd{ .widget = std::move(wrap) };
+	});
+}
+
 const auto kMain = BuildHelper({
 	.id = MyOwnGram::Id(),
 	.parentId = MainId(),
@@ -203,6 +238,8 @@ const auto kMain = BuildHelper({
 		.icon = { &st::menuIconLock },
 		.keywords = { u"analytics"_q, u"tracking"_q, u"telemetry"_q },
 	});
+	builder.addSkip();
+	AddPeerIdSelector(builder);
 	builder.addSkip();
 	builder.addDividerText(tr::lng_myowngram_about());
 });

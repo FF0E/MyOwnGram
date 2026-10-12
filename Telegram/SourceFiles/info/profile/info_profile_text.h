@@ -12,6 +12,12 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <rpl/producer.h>
 
+class PeerData;
+
+namespace Main {
+class SessionShow;
+} // namespace Main
+
 namespace style {
 struct FlatLabel;
 } // namespace style
@@ -23,14 +29,19 @@ template <typename Widget>
 class SlideWrap;
 } // namespace Ui
 
-namespace Info {
-namespace Profile {
+namespace Info::Profile {
 
 struct TextWithLabel {
 	object_ptr<Ui::SlideWrap<Ui::VerticalLayout>> wrap;
 	not_null<Ui::FlatLabel*> text;
 	not_null<Ui::FlatLabel*> subtext;
 };
+
+object_ptr<Ui::SlideWrap<Ui::VerticalLayout>> CreatePeerIdRow(
+	QWidget *parent,
+	not_null<PeerData*> peer,
+	std::shared_ptr<Main::SessionShow> show,
+	MsgId topicRootId = 0);
 
 TextWithLabel CreateTextWithLabel(
 	QWidget *parent,
@@ -41,5 +52,4 @@ TextWithLabel CreateTextWithLabel(
 	const style::margins &padding,
 	const style::PopupMenu &stMenu = st::defaultPopupMenu);
 
-} // namespace Profile
-} // namespace Info
+} // namespace Info::Profile
