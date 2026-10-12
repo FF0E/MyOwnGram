@@ -1142,6 +1142,14 @@ public:
 	}
 	void setPeerIdDisplay(PeerIdDisplay value);
 
+	[[nodiscard]] bool showMessageIdInTooltip() const {
+		return _showMessageIdInTooltip.current();
+	}
+	[[nodiscard]] rpl::producer<bool> showMessageIdInTooltipValue() const {
+		return _showMessageIdInTooltip.value();
+	}
+	void setShowMessageIdInTooltip(bool enabled);
+
 	void resetOnLastLogout();
 
 private:
@@ -1294,6 +1302,7 @@ private:
 	rpl::variable<AdPreferences> _adSettings = AdPreferences();
 	rpl::variable<bool> _sendReadMetrics = true;
 	rpl::variable<PeerIdDisplay> _peerIdDisplay = PeerIdDisplay::Hidden;
+	rpl::variable<bool> _showMessageIdInTooltip = false;
 	rpl::variable<bool> _sendPremiumPromoAnalytics = true;
 	rpl::variable<bool> _confirmBotLinks = false;
 	rpl::variable<bool> _sendDrafts = true;

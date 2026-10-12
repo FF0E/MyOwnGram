@@ -239,6 +239,20 @@ const auto kMain = BuildHelper({
 		.keywords = { u"analytics"_q, u"tracking"_q, u"telemetry"_q },
 	});
 	builder.addSkip();
+	const auto settings = &Core::App().settings();
+	const auto messageId = builder.addButton({
+		.id = u"myowngram/message-id-tooltip"_q,
+		.title = tr::lng_myowngram_show_message_id_in_tooltip(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->showMessageIdInTooltipValue(),
+		.keywords = { u"message"_q, u"id"_q, u"date"_q, u"tooltip"_q },
+	});
+	if (messageId) {
+		messageId->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setShowMessageIdInTooltip(enabled);
+		}, messageId->lifetime());
+	}
+	builder.addSkip();
 	AddPeerIdSelector(builder);
 	builder.addSkip();
 	builder.addDividerText(tr::lng_myowngram_about());

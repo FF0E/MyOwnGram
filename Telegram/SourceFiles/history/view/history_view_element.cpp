@@ -31,6 +31,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history.h"
 #include "history/history_item_components.h"
 #include "history/history_item_helpers.h"
+#include "data/business/data_shortcut_messages.h"
+#include "data/components/scheduled_messages.h"
 #include "data/data_channel.h"
 #include "data/data_session.h"
 #include "iv/iv_cached_media.h"
@@ -748,6 +750,21 @@ QString DateTooltipText(not_null<Element*> view) {
 	}
 	if (const auto stars = item->out() ? item->starsPaid() : 0) {
 		dateText += '\n' + tr::lng_you_paid_stars(tr::now, lt_count, stars);
+	}
+	if (Core::App().settings().showMessageIdInTooltip()
+		&& !item->isSending()
+		&& !item->hasFailed()) {
+		const auto id = item->isScheduled()
+			? item->history()->session().scheduledMessages().lookupId(item)
+			: item->isBusinessShortcut()
+			? item->history()->owner().shortcutMessages().lookupId(item)
+			: item->isRegular() ? item->id : MsgId();
+		if (id) {
+			dateText += '\n' + tr::lng_myowngram_message_id(
+				tr::now,
+				lt_id,
+				QString::number(id.bare));
+		}
 	}
 	return dateText;
 }
