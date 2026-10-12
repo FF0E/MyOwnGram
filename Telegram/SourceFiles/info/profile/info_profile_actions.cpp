@@ -3323,7 +3323,9 @@ object_ptr<Ui::SlideWrap<Ui::VerticalLayout>> CreatePeerIdRow(
 	const auto label = layout->add(object_ptr<Ui::FlatLabel>(
 		layout,
 		settings->peerIdDisplayValue() | rpl::map([=](Core::PeerIdDisplay mode) {
-			return Ui::Text::Code(PeerIdText(peer, topicRootId, mode));
+			return Ui::Text::Wrapped(
+				tr::marked(PeerIdText(peer, topicRootId, mode)),
+				EntityType::Code);
 		}),
 		st::infoLabeledOneLine));
 	label->setSelectable(true);
@@ -3336,29 +3338,27 @@ object_ptr<Ui::SlideWrap<Ui::VerticalLayout>> CreatePeerIdRow(
 		show->showToast(tr::lng_text_copied(tr::now));
 	});
 	if (!topicRootId) {
-		const auto caption = layout->add(
-			object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
-				layout,
-				object_ptr<Ui::VerticalLayout>(layout)));
-		const auto inner = caption->entity();
-		inner->add(Ui::CreateSkipWidget(inner, st::infoLabelSkip));
 		auto dc = peer->session().changes().peerFlagsValue(
 			peer,
 			Data::PeerUpdate::Flag::Photo | Data::PeerUpdate::Flag::FullInfo
 		) | rpl::map([=] {
 			return PeerDcId(peer);
 		}) | rpl::distinct_until_changed()
-			| rpl::start_spawning(caption->lifetime());
-		inner->add(object_ptr<Ui::FlatLabel>(
-			inner,
-			rpl::duplicate(dc) | rpl::map(DcTextValue) | rpl::flatten_latest(),
-			st::infoLabel));
+			| rpl::start_spawning(layout->lifetime());
+		const auto caption = layout->add(
+			object_ptr<Ui::SlideWrap<Ui::FlatLabel>>(
+				layout,
+				object_ptr<Ui::FlatLabel>(
+					layout,
+					rpl::duplicate(dc)
+						| rpl::map(DcTextValue)
+						| rpl::flatten_latest(),
+					st::infoLabel),
+				QMargins(0, st::infoLabelSkip, 0, 0)));
 		caption->toggleOn(std::move(dc) | rpl::map(rpl::mappers::_1 != 0));
-		caption->finishAnimating();
 	}
 	result->toggleOn(settings->peerIdDisplayValue() | rpl::map(
 		rpl::mappers::_1 != Core::PeerIdDisplay::Hidden));
-	result->finishAnimating();
 	return result;
 }
 
