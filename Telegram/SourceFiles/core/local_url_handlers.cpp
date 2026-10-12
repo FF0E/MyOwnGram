@@ -19,6 +19,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/update_checker.h"
 #include "core/application.h"
 #include "core/click_handler_types.h"
+#include "core/core_settings.h"
 #include "dialogs/ui/dialogs_suggestions.h"
 #include "boxes/background_preview_box.h"
 #include "ui/boxes/confirm_box.h"
@@ -39,6 +40,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "passport/passport_form_controller.h"
 #include "ui/text/text_utilities.h"
 #include "ui/toast/toast.h"
+#include "ui/widgets/labels.h"
 #include "ui/vertical_list.h"
 #include "data/components/credits.h"
 #include "data/data_ai_compose_tones.h"
@@ -76,9 +78,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "iv/iv_instance.h"
 #include "apiwrap.h"
 
-#include "styles/style_chat_helpers.h"
-
 #include <QtGui/QGuiApplication>
+#include <array>
+
+#include "styles/style_chat_helpers.h"
+#include "styles/style_layers.h"
 
 namespace Core {
 namespace {
@@ -563,17 +567,49 @@ bool ShowWallPaper(
 	return result;
 }
 
-bool ResolveUsernameOrPhone(
-		Window::SessionController *controller,
-		const Match &match,
-		const QVariant &context) {
-	if (!controller) {
+[[nodiscard]] bool BotLinkRequiresConfirmation(
+		const QMap<QString, QString> &params) {
+	if (!App().settings().confirmBotLinks()) {
 		return false;
 	}
-	const auto params = url_parse_params(
-		match->captured(1),
-		qthelp::UrlParamNameTransform::ToLower);
+	static const auto keys = std::array{
+		u"start"_q,
+		u"ref"_q,
+		u"startgroup"_q,
+		u"startchannel"_q,
+		u"game"_q,
+		u"startapp"_q,
+		u"startattach"_q,
+		u"attach"_q,
+	};
+	return ranges::any_of(keys, [&](const QString &key) {
+		return params.contains(key);
+	});
+}
 
+void ConfirmLinkBox(
+		not_null<Ui::GenericBox*> box,
+		const QString &url,
+		Fn<void()> open) {
+	Ui::ConfirmBox(box, {
+		.confirmed = [=](Fn<void()> close) {
+			close();
+			open();
+		},
+		.confirmText = tr::lng_open_link(),
+		.title = tr::lng_open_this_link(),
+	});
+	auto label = object_ptr<Ui::FlatLabel>(box, url, st::boxLabel);
+	label->setBreakEverywhere(true);
+	label->setSelectable(true);
+	label->setContextCopyText(tr::lng_context_copy_link(tr::now));
+	box->addRow(std::move(label));
+}
+
+bool ResolveUsernameOrPhoneWithParams(
+		Window::SessionController *controller,
+		const QMap<QString, QString> &params,
+		const QVariant &context) {
 	if (params.contains(u"acc"_q)) {
 		const auto switched = ApplyAccountIndex(
 			controller,
@@ -758,6 +794,28 @@ bool ResolveUsernameOrPhone(
 			(params.value(u"tdesktop_target"_q) == u"blank"_q),
 	});
 	return true;
+}
+
+bool ResolveUsernameOrPhone(
+		Window::SessionController *controller,
+		const Match &match,
+		const QVariant &context) {
+	if (!controller) {
+		return false;
+	}
+	const auto params = url_parse_params(
+		match->captured(1),
+		qthelp::UrlParamNameTransform::ToLower);
+	if (BotLinkRequiresConfirmation(params)) {
+		const auto url = context.value<ClickHandlerContext>().originalUrl;
+		App().hideMediaView();
+		controller->show(Box(ConfirmLinkBox, url, crl::guard(controller, [=] {
+			ResolveUsernameOrPhoneWithParams(controller, params, context);
+		})));
+		controller->window().activate();
+		return true;
+	}
+	return ResolveUsernameOrPhoneWithParams(controller, params, context);
 }
 
 bool ResolvePrivatePost(

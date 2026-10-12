@@ -270,6 +270,19 @@ const auto kPrivacy = BuildHelper({
 }, [](SectionBuilder &builder) {
 	const auto settings = &Core::App().settings();
 	builder.addSkip();
+	const auto botLinks = builder.addButton({
+		.id = u"myowngram/privacy/confirm-bot-links"_q,
+		.title = tr::lng_myowngram_confirm_bot_links(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->confirmBotLinksValue(),
+		.keywords = { u"links"_q, u"bots"_q, u"parameters"_q, u"referrals"_q },
+	});
+	if (botLinks) {
+		botLinks->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setConfirmBotLinks(enabled);
+		}, botLinks->lifetime());
+	}
+	builder.addSkip();
 	const auto button = builder.addButton({
 		.id = u"myowngram/privacy/reading-analytics"_q,
 		.title = tr::lng_myowngram_reading_analytics(),

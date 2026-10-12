@@ -1102,6 +1102,14 @@ public:
 	}
 	void setSendPremiumPromoAnalytics(bool enabled);
 
+	[[nodiscard]] bool confirmBotLinks() const {
+		return _confirmBotLinks.current();
+	}
+	[[nodiscard]] rpl::producer<bool> confirmBotLinksValue() const {
+		return _confirmBotLinks.value();
+	}
+	void setConfirmBotLinks(bool enabled);
+
 	[[nodiscard]] bool sendDrafts() const {
 		return _sendDrafts.current();
 	}
@@ -1287,6 +1295,7 @@ private:
 	rpl::variable<bool> _sendReadMetrics = true;
 	rpl::variable<PeerIdDisplay> _peerIdDisplay = PeerIdDisplay::Hidden;
 	rpl::variable<bool> _sendPremiumPromoAnalytics = true;
+	rpl::variable<bool> _confirmBotLinks = false;
 	rpl::variable<bool> _sendDrafts = true;
 	rpl::variable<bool> _receiveDrafts = true;
 	rpl::variable<ActivitySettings> _activitySettings;

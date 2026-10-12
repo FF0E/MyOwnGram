@@ -56,6 +56,7 @@ struct ClickHandlerContext {
 	base::weak_ptr<Window::SessionController> sessionWindow;
 	std::shared_ptr<InlineBots::WebViewContext> botWebviewContext;
 	std::shared_ptr<Ui::Show> show;
+	QString originalUrl;
 	bool mayShowConfirmation = false;
 	bool skipBotAutoLogin = false;
 	bool keepWebAuthTokens = false; // Only for urls accepted by the server.

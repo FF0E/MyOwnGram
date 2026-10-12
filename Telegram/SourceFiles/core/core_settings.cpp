@@ -34,6 +34,8 @@ constexpr auto kSendReadMetricsKey
 	= std::string_view("myowngram-send-read-metrics");
 constexpr auto kSendPremiumPromoAnalyticsKey
 	= std::string_view("myowngram-send-premium-promo-analytics");
+constexpr auto kConfirmBotLinksKey
+	= std::string_view("myowngram-confirm-bot-links");
 constexpr auto kSendDraftsKey = std::string_view("myowngram-send-drafts");
 constexpr auto kReceiveDraftsKey = std::string_view("myowngram-receive-drafts");
 constexpr auto kPeerIdDisplayKey = std::string_view("myowngram-peer-id-display");
@@ -1377,6 +1379,7 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 	_sendPremiumPromoAnalytics = readPref<bool>(
 		kSendPremiumPromoAnalyticsKey,
 		true);
+	_confirmBotLinks = readPref<bool>(kConfirmBotLinksKey, false);
 	_sendDrafts = readPref<bool>(kSendDraftsKey, true);
 	_receiveDrafts = readPref<bool>(kReceiveDraftsKey, true);
 	auto activity = ActivitySettings();
@@ -1441,6 +1444,14 @@ void Settings::setSendPremiumPromoAnalytics(bool enabled) {
 	}
 	writePref<bool>(kSendPremiumPromoAnalyticsKey, enabled);
 	_sendPremiumPromoAnalytics = enabled;
+}
+
+void Settings::setConfirmBotLinks(bool enabled) {
+	if (_confirmBotLinks.current() == enabled) {
+		return;
+	}
+	writePref<bool>(kConfirmBotLinksKey, enabled);
+	_confirmBotLinks = enabled;
 }
 
 void Settings::setSendDrafts(bool enabled) {
@@ -1907,6 +1918,7 @@ void Settings::resetOnLastLogout() {
 	writePrefGeneric(kPeerIdDisplayKey, QByteArray::number(int(peerIdDisplay())));
 	writePref<bool>(kSendReadMetricsKey, sendReadMetrics());
 	writePref<bool>(kSendPremiumPromoAnalyticsKey, sendPremiumPromoAnalytics());
+	writePref<bool>(kConfirmBotLinksKey, confirmBotLinks());
 	writePref<bool>(kSendDraftsKey, sendDrafts());
 	writePref<bool>(kReceiveDraftsKey, receiveDrafts());
 	for (const auto &[flag, key] : kActivityPreferences) {

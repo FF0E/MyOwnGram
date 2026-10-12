@@ -1220,8 +1220,10 @@ void Application::checkStartUrls() {
 				iv().showTonSite(url.toString(), {});
 				return false;
 			} else if (_lastActivePrimaryWindow) {
-				const auto local = TryConvertUrlToLocal(url.toString());
-				return !openLocalUrl(local, {});
+				const auto original = url.toString();
+				const auto local = TryConvertUrlToLocal(original);
+				return !openLocalUrl(local, QVariant::fromValue(
+					ClickHandlerContext{ .originalUrl = original }));
 			}
 			return true;
 		}) | ranges::to<QList<QUrl>>;
@@ -1254,7 +1256,11 @@ bool Application::openLocalUrl(const QString &url, QVariant context) {
 	if (urlTrimmed.startsWith(protocol, Qt::CaseInsensitive)
 		&& !passcodeLocked()) {
 		const auto command = urlTrimmed.mid(protocol.size());
-		const auto my = context.value<ClickHandlerContext>();
+		auto my = context.value<ClickHandlerContext>();
+		if (my.originalUrl.isEmpty()) {
+			my.originalUrl = url;
+			context = QVariant::fromValue(my);
+		}
 		const auto controller = my.sessionWindow.get()
 			? my.sessionWindow.get()
 			: _lastActivePrimaryWindow
