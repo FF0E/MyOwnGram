@@ -367,6 +367,11 @@ Session::Session(not_null<Main::Session*> session)
 	setupPeerNameViewer();
 	setupUserIsContactViewer();
 
+	Core::App().settings().showMessageSecondsValue(
+	) | rpl::on_next([=] {
+		refreshMessageTimes();
+	}, _lifetime);
+
 	_chatsList.unreadStateChanges(
 	) | rpl::on_next([=] {
 		notifyUnreadBadgeChanged();
@@ -1932,6 +1937,30 @@ void Session::enumerateItemViews(
 	if (const auto i = _views.find(item); i != _views.end()) {
 		for (const auto &view : i->second) {
 			method(view);
+		}
+	}
+}
+
+void Session::refreshMessageTimes() {
+	auto resize = std::vector<base::weak_ptr<ViewElement>>();
+	for (const auto &[item, views] : _views) {
+		for (const auto view : views) {
+			if (view->updateBottomInfo()) {
+				view->setPendingResize();
+				resize.push_back(base::make_weak(view.get()));
+			} else {
+				view->repaint();
+			}
+		}
+	}
+	// A list layout also consumes the pending resizes of its other views.
+	for (const auto &weak : resize) {
+		if (const auto view = weak.get()) {
+			if (view->pendingResize()) {
+				requestViewResize(view);
+			} else {
+				notifyViewLayoutChange(view);
+			}
 		}
 	}
 }

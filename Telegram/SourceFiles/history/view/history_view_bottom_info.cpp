@@ -15,6 +15,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/text/text_options.h"
 #include "ui/text/text_utilities.h"
 #include "ui/painter.h"
+#include "core/application.h"
+#include "core/core_settings.h"
 #include "core/ui_integration.h"
 #include "lang/lang_keys.h"
 #include "history/history_item_components.h"
@@ -69,9 +71,11 @@ namespace {
 	return map.back().text;
 }
 
-[[nodiscard]] QString FormatEditedDate(QDateTime sent, QDateTime edited) {
+[[nodiscard]] QString FormatEditedDate(
+		QDateTime sent,
+		QDateTime edited,
+		const QString &time) {
 	const auto today = QDateTime::currentDateTime().date();
-	const auto time = QLocale().toString(edited.time(), QLocale::ShortFormat);
 	if (sent.date() == today && edited.date() == today) {
 		return tr::lng_edited_at(tr::now, lt_time, time);
 	}
@@ -500,11 +504,23 @@ void BottomInfo::layoutDateText() {
 		: QString();
 	const auto author = _data.author;
 	const auto prefix = !author.isEmpty() ? u", "_q : QString();
+	const auto locale = QLocale();
+	const auto shortFormat = locale.timeFormat(QLocale::ShortFormat);
+	const auto timeValue = (editedPrimary
+		? _data.editedDate
+		: _data.date).time();
+	const auto time = Core::App().settings().showMessageSeconds()
+		? locale.toString(
+			timeValue,
+			shortFormat.contains(u"AP"_q, Qt::CaseInsensitive)
+				? u"h:mm:ss AP"_q
+				: u"HH:mm:ss"_q)
+		: locale.toString(timeValue, QLocale::ShortFormat);
 	const auto date = editedPrimary
-		? FormatEditedDate(_data.date, _data.editedDate)
+		? FormatEditedDate(_data.date, _data.editedDate, time)
 		: edited + ((_data.flags & Data::Flag::ForwardedDate)
-		? Ui::FormatDateTimeSavedFrom(_data.date)
-		: QLocale().toString(_data.date.time(), QLocale::ShortFormat));
+		? Ui::FormatDateTimeSavedFrom(_data.date, time)
+		: time);
 	const auto afterAuthor = prefix + date;
 	const auto afterAuthorWidth = st::msgDateFont->width(afterAuthor);
 	const auto authorWidth = st::msgDateFont->width(author);

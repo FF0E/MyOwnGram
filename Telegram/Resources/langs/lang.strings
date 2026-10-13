@@ -8825,6 +8825,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_copy_message_details" = "Copy message details";
 "lng_myowngram_message_id" = "Message ID: {id}";
 "lng_myowngram_show_message_id_in_tooltip" = "Show message ID in date tooltip";
+"lng_myowngram_show_message_seconds" = "Show seconds in message times";
 
 "lng_myowngram_peer_ids" = "UID and DC";
 "lng_myowngram_peer_ids_hidden" = "Hidden";

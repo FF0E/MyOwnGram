@@ -285,6 +285,7 @@ public:
 	[[nodiscard]] bool bottomInfoIsWide() const override;
 	[[nodiscard]] bool isSignedAuthorElided() const override;
 
+	[[nodiscard]] bool updateBottomInfo() override;
 	void itemDataChanged() override;
 
 	VerticalRepaintRange verticalRepaintRange() const override;
@@ -315,8 +316,6 @@ private:
 
 	void refreshDataIdHook() override;
 	bool hasHeavyPart() const override;
-
-	bool updateBottomInfo();
 
 	void initPaidInformation();
 	void refreshSuggestedInfo(

@@ -1049,6 +1049,7 @@ private:
 	void setupChannelLeavingViewer();
 	void setupPeerNameViewer();
 	void setupUserIsContactViewer();
+	void refreshMessageTimes();
 
 	void checkLocalUsersWentOffline();
 

@@ -1150,6 +1150,14 @@ public:
 	}
 	void setShowMessageIdInTooltip(bool enabled);
 
+	[[nodiscard]] bool showMessageSeconds() const {
+		return _showMessageSeconds.current();
+	}
+	[[nodiscard]] rpl::producer<bool> showMessageSecondsValue() const {
+		return _showMessageSeconds.value();
+	}
+	void setShowMessageSeconds(bool enabled);
+
 	void resetOnLastLogout();
 
 private:
@@ -1303,6 +1311,7 @@ private:
 	rpl::variable<bool> _sendReadMetrics = true;
 	rpl::variable<PeerIdDisplay> _peerIdDisplay = PeerIdDisplay::Hidden;
 	rpl::variable<bool> _showMessageIdInTooltip = false;
+	rpl::variable<bool> _showMessageSeconds = false;
 	rpl::variable<bool> _sendPremiumPromoAnalytics = true;
 	rpl::variable<bool> _confirmBotLinks = false;
 	rpl::variable<bool> _sendDrafts = true;

@@ -252,6 +252,18 @@ const auto kMain = BuildHelper({
 			settings->setShowMessageIdInTooltip(enabled);
 		}, messageId->lifetime());
 	}
+	const auto seconds = builder.addButton({
+		.id = u"myowngram/message-seconds"_q,
+		.title = tr::lng_myowngram_show_message_seconds(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->showMessageSecondsValue(),
+		.keywords = { u"message"_q, u"time"_q, u"seconds"_q, u"timestamp"_q },
+	});
+	if (seconds) {
+		seconds->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setShowMessageSeconds(enabled);
+		}, seconds->lifetime());
+	}
 	builder.addSkip();
 	AddPeerIdSelector(builder);
 	builder.addSkip();

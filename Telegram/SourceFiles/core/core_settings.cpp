@@ -41,6 +41,8 @@ constexpr auto kReceiveDraftsKey = std::string_view("myowngram-receive-drafts");
 constexpr auto kPeerIdDisplayKey = std::string_view("myowngram-peer-id-display");
 constexpr auto kShowMessageIdInTooltipKey
 	= std::string_view("myowngram-show-message-id-in-tooltip");
+constexpr auto kShowMessageSecondsKey
+	= std::string_view("myowngram-show-message-seconds");
 
 constexpr auto kActivityPreferences = std::array{
 	std::pair{
@@ -1390,6 +1392,7 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 	}
 	_activitySettings = activity;
 	_showMessageIdInTooltip = readPref<bool>(kShowMessageIdInTooltipKey, false);
+	_showMessageSeconds = readPref<bool>(kShowMessageSecondsKey, false);
 	const auto peerIds = readPrefGeneric(kPeerIdDisplayKey)
 		.value_or(QByteArray()).toInt();
 	switch (PeerIdDisplay(peerIds)) {
@@ -1439,6 +1442,14 @@ void Settings::setShowMessageIdInTooltip(bool enabled) {
 	}
 	writePref<bool>(kShowMessageIdInTooltipKey, enabled);
 	_showMessageIdInTooltip = enabled;
+}
+
+void Settings::setShowMessageSeconds(bool enabled) {
+	if (_showMessageSeconds.current() == enabled) {
+		return;
+	}
+	writePref<bool>(kShowMessageSecondsKey, enabled);
+	_showMessageSeconds = enabled;
 }
 
 void Settings::setSendReadMetrics(bool enabled) {
@@ -1928,6 +1939,7 @@ void Settings::resetOnLastLogout() {
 	_prefs.clear();
 	writePrefGeneric(kPeerIdDisplayKey, QByteArray::number(int(peerIdDisplay())));
 	writePref<bool>(kShowMessageIdInTooltipKey, showMessageIdInTooltip());
+	writePref<bool>(kShowMessageSecondsKey, showMessageSeconds());
 	writePref<bool>(kSendReadMetricsKey, sendReadMetrics());
 	writePref<bool>(kSendPremiumPromoAnalyticsKey, sendPremiumPromoAnalytics());
 	writePref<bool>(kConfirmBotLinksKey, confirmBotLinks());

@@ -2974,6 +2974,10 @@ bool Element::updateReactions() {
 	return (wasReactions != nowReactions);
 }
 
+bool Element::updateBottomInfo() {
+	return false;
+}
+
 void Element::itemDataChanged() {
 	if (updateReactions()) {
 		history()->owner().requestViewResize(this);

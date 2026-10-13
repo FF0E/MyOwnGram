@@ -668,6 +668,7 @@ public:
 
 	[[nodiscard]] virtual bool isSignedAuthorElided() const;
 
+	[[nodiscard]] virtual bool updateBottomInfo();
 	virtual void itemDataChanged();
 	void itemTextUpdated();
 	void blockquoteExpandChanged();
