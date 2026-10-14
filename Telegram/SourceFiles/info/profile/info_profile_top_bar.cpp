@@ -482,6 +482,16 @@ TopBar::TopBar(
 		setupShowLastSeen(controller);
 	}
 
+	if (_peer->isUser() && !_customStatus) {
+		_statusLabel->setMutualContactLinkCallback([=] {
+			controller->showToast(
+				tr::lng_myowngram_mutual_contact_about(tr::now));
+		});
+		_status->widthValue() | rpl::on_next([=] {
+			updateStatusPosition(_progress.current());
+		}, _status->lifetime());
+	}
+
 	bindStatus();
 
 	_title->setContextCopyText(tr::lng_profile_copy_fullname(tr::now));
@@ -666,6 +676,8 @@ void TopBar::adjustColors(const std::optional<QColor> &edgeColor) {
 	{
 		const auto membersLinkCallback = _statusLabel->membersLinkCallback();
 		const auto hiddenLinkCallback = _statusLabel->hiddenLinkCallback();
+		const auto mutualContactLinkCallback
+			= _statusLabel->mutualContactLinkCallback();
 		const auto onlineCount = _statusLabel->onlineCount();
 		{
 			_statusLabel = nullptr;
@@ -693,6 +705,7 @@ void TopBar::adjustColors(const std::optional<QColor> &edgeColor) {
 		_statusLabel = std::make_unique<StatusLabel>(_status.data(), _peer);
 		_statusLabel->setMembersLinkCallback(membersLinkCallback);
 		_statusLabel->setHiddenLinkCallback(hiddenLinkCallback);
+		_statusLabel->setMutualContactLinkCallback(mutualContactLinkCallback);
 		if (_customStatus) {
 			rpl::duplicate(
 				_customStatus

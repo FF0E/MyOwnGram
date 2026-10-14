@@ -8827,6 +8827,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_show_message_id_in_tooltip" = "Show message ID in date tooltip";
 "lng_myowngram_show_message_seconds" = "Show seconds in message times";
 
+"lng_myowngram_mutual_contact_about" = "You've added each other as contacts.";
+
 "lng_myowngram_peer_ids" = "UID and DC";
 "lng_myowngram_peer_ids_hidden" = "Hidden";
 "lng_myowngram_peer_ids_telegram" = "Telegram API";

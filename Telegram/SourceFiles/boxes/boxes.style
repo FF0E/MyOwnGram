@@ -62,6 +62,9 @@ contactsSortButton: IconButton(defaultIconButton) {
 contactsSortOnlineIcon: icon{{ "contacts_online", boxTitleCloseFg }};
 contactsSortOnlineIconOver: icon{{ "contacts_online", boxTitleCloseFgOver }};
 
+contactsMutualIcon: icon{{ "mini_replace-16x16", contactsStatusFg }};
+contactsMutualIconOver: icon{{ "mini_replace-16x16", contactsStatusFgOver }};
+
 contactsSortHeaderHeight: 29px;
 contactsSortHeaderFont: font(13px);
 contactsSortHeaderPosition: point(16px, 7px);

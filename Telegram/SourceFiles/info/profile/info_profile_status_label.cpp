@@ -198,7 +198,24 @@ void StatusLabel::refresh() {
 		}
 		return tr::lng_chat_status_unaccessible(tr::now, WithEntities);
 	}();
+	const auto user = _peer->asUser();
+	const auto mutual = user
+		&& _mutualContactLinkCallback
+		&& (user->flags() & UserDataFlag::MutualContact);
+	if (mutual) {
+		statusText.append(' ').append(Ui::Text::Link(
+			Ui::Text::IconEmoji(&st::infoStatusMutualIcon),
+			3));
+	}
+	if (_mutualContactLinkCallback) {
+		_label->setAttribute(Qt::WA_TransparentForMouseEvents, !mutual);
+	}
 	_label->setMarkedText(statusText);
+	if (mutual) {
+		_label->setLink(
+			3,
+			std::make_shared<LambdaClickHandler>(_mutualContactLinkCallback));
+	}
 	if (hasMembersLink && _membersLinkCallback) {
 		_label->setLink(
 			1,
@@ -217,6 +234,23 @@ void StatusLabel::setHiddenLinkCallback(Fn<void()> callback) {
 
 Fn<void()> StatusLabel::hiddenLinkCallback() const {
 	return _hiddenLinkCallback;
+}
+
+void StatusLabel::setMutualContactLinkCallback(Fn<void()> callback) {
+	_mutualContactLinkCallback = std::move(callback);
+	const auto user = _peer->asUser();
+	if (user && _mutualContactLinkCallback) {
+		Data::PeerFlagValue(
+			user,
+			UserDataFlag::MutualContact
+		) | rpl::on_next([=] {
+			refresh();
+		}, _lifetime);
+	}
+}
+
+Fn<void()> StatusLabel::mutualContactLinkCallback() const {
+	return _mutualContactLinkCallback;
 }
 
 void StatusLabel::setMembersLinkCallback(Fn<void()> callback) {

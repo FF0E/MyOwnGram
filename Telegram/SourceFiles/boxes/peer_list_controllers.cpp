@@ -23,6 +23,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/painter.h"
 #include "ui/ui_utility.h"
 #include "main/main_session.h"
+#include "main/session/session_show.h"
 #include "data/data_peer_values.h"
 #include "data/data_saved_messages.h"
 #include "data/data_saved_sublist.h"
@@ -62,6 +63,67 @@ namespace {
 constexpr auto kSortByOnlineThrottle = 3 * crl::time(1000);
 constexpr auto kSearchPerPage = 50;
 
+class MutualContactRow final : public PeerListRow {
+public:
+	MutualContactRow(
+		not_null<UserData*> user,
+		Fn<void(not_null<PeerListRow*>)> refresh);
+
+	[[nodiscard]] QSize rightActionSize() const override;
+	[[nodiscard]] QMargins rightActionMargins() const override;
+	void rightActionPaint(
+		Painter &p,
+		int x,
+		int y,
+		int outerWidth,
+		bool selected,
+		bool actionSelected) override;
+
+private:
+	rpl::lifetime _lifetime;
+
+};
+
+MutualContactRow::MutualContactRow(
+	not_null<UserData*> user,
+	Fn<void(not_null<PeerListRow*>)> refresh)
+: PeerListRow(user) {
+	Data::PeerFlagValue(
+		user.get(),
+		UserDataFlag::MutualContact
+	) | rpl::skip(1) | rpl::on_next([=] {
+		refresh(this);
+	}, _lifetime);
+}
+
+QSize MutualContactRow::rightActionSize() const {
+	return (peer()->asUser()->flags() & UserDataFlag::MutualContact)
+		? st::contactsMutualIcon.size()
+		: QSize();
+}
+
+QMargins MutualContactRow::rightActionMargins() const {
+	const auto &st = st::contactsWithStories.item;
+	return QMargins(
+		st.photoPosition.x(),
+		(st.height - st::contactsMutualIcon.height()) / 2,
+		st.photoPosition.x(),
+		0);
+}
+
+void MutualContactRow::rightActionPaint(
+		Painter &p,
+		int x,
+		int y,
+		int outerWidth,
+		bool selected,
+		bool actionSelected) {
+	const auto &icon = (selected || actionSelected)
+		? st::contactsMutualIconOver
+		: st::contactsMutualIcon;
+	icon.paint(p, x, y, outerWidth);
+}
+
 } // namespace
 
 Data::CommunityInfo *JoinedCommunityChats(not_null<PeerData*> peer) {
@@ -86,9 +148,19 @@ object_ptr<Ui::BoxContent> PrepareContactsBox(
 	protected:
 		std::unique_ptr<PeerListRow> createRow(
 				not_null<UserData*> user) override {
-			return !user->isSelf()
-				? ContactsBoxController::createRow(user)
-				: nullptr;
+			if (user->isSelf()) {
+				return nullptr;
+			}
+			return std::make_unique<MutualContactRow>(
+				user,
+				[=](not_null<PeerListRow*> row) {
+					delegate()->peerListUpdateRow(row);
+				});
+		}
+
+		void rowRightActionClicked(not_null<PeerListRow*> row) override {
+			delegate()->peerListUiShow()->showToast(
+				tr::lng_myowngram_mutual_contact_about(tr::now));
 		}
 
 		void rowMiddleClicked(
