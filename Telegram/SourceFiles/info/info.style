@@ -445,7 +445,7 @@ infoStatusHiddenIcon: IconEmoji {
 	useIconColor: false;
 }
 infoStatusMutualIcon: IconEmoji {
-	icon: icon{{ "mini_replace-16x16", windowSubTextFg }};
+	icon: icon{{ "folders/svg/folders_group-16x16", windowSubTextFg }};
 	padding: margins(0px, 2px, 0px, 0px);
 	useIconColor: false;
 }
