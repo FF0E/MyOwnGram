@@ -8779,60 +8779,67 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // Keep MyOwnGram strings separate for upstream merges.
 "lng_myowngram_title" = "MyOwnGram";
-"lng_myowngram_about" = "Custom settings shared by all accounts in this installation. Your choices are saved locally and kept when you log out.";
+"lng_myowngram_chats_profiles_title" = "Chats and profiles";
+"lng_myowngram_profiles_title" = "Profiles";
 "lng_myowngram_ads_title" = "Ads";
 "lng_myowngram_ads_show" = "Show ads";
-"lng_myowngram_ads_show_about" = "Choose where sponsored content can appear. Turning a switch off also removes already-loaded ads. Ordinary messages and promotional posts are unaffected.";
-"lng_myowngram_ads_get" = "Get ads";
-"lng_myowngram_ads_get_about" = "Allow normal ad-data requests. If Show ads is off, responses are discarded before loading ad media. Turning off Get ads can leave already-loaded ads visible. Requests already sent cannot be recalled.";
+"lng_myowngram_ads_get" = "Request ads";
+"lng_myowngram_ads_get_about" = "Allow the client to request new ads from Telegram.";
 "lng_myowngram_ads_show_channel" = "Show channel ads";
-"lng_myowngram_ads_show_bot" = "Show bot banners";
+"lng_myowngram_ads_show_bot" = "Show bot ads";
 "lng_myowngram_ads_show_search" = "Show search ads";
-"lng_myowngram_ads_show_video" = "Show media-player ads";
-"lng_myowngram_ads_get_channel" = "Get channel ads";
-"lng_myowngram_ads_get_bot" = "Get bot banners";
-"lng_myowngram_ads_get_search" = "Get search ads";
-"lng_myowngram_ads_get_video" = "Get media-player ads";
+"lng_myowngram_ads_show_video" = "Show ads during playback";
+"lng_myowngram_ads_get_channel" = "Request channel ads";
+"lng_myowngram_ads_get_bot" = "Request bot ads";
+"lng_myowngram_ads_get_search" = "Request search ads";
+"lng_myowngram_ads_get_video" = "Request ads during playback";
 
 "lng_myowngram_privacy_title" = "Privacy";
-"lng_myowngram_confirm_bot_links" = "Confirm bot links with parameters";
-"lng_myowngram_reading_analytics" = "Send reading analytics";
-"lng_myowngram_reading_analytics_about" = "Send Telegram viewing-time and visibility statistics for messages with view counters. Read receipts and post view counts are unaffected.";
+"lng_myowngram_links_title" = "Links";
+"lng_myowngram_confirm_bot_links" = "Confirm bot links";
+"lng_myowngram_confirm_bot_links_about" = "Ask before opening bot links with certain parameters.";
+"lng_myowngram_usage_reports_title" = "Usage reports";
+"lng_myowngram_reading_analytics" = "Share reading statistics";
+"lng_myowngram_reading_analytics_about" = "Let Telegram know how long you view messages with view counts and how much of them you see.";
 
-"lng_myowngram_premium_promo_analytics" = "Send Premium promotion analytics";
-"lng_myowngram_premium_promo_analytics_about" = "Send Telegram reports about opening the Premium promotion page and certain subscription-button clicks. Offers and purchases are unaffected. Requests already started may still be sent.";
+"lng_myowngram_premium_promo_analytics" = "Share Premium offer statistics";
+"lng_myowngram_premium_promo_analytics_about" = "Let Telegram know when you view premium offers or click certain subscription buttons.";
 
-"lng_myowngram_drafts_title" = "Drafts";
-"lng_myowngram_send_drafts" = "Send drafts to Telegram";
-"lng_myowngram_send_drafts_about" = "Turning this off stops syncing draft changes to Telegram, not local saving. Full rich drafts stay in memory but are not saved locally for restart. Attachments may still upload, and requests already started may finish.";
-"lng_myowngram_receive_drafts" = "Receive drafts from Telegram";
-"lng_myowngram_receive_drafts_about" = "Apply draft changes from Telegram, including cleared drafts. Turning this off prevents those updates from replacing local drafts; draft data can still arrive inside normal chat updates.";
+"lng_myowngram_drafts_title" = "Draft sync";
+"lng_myowngram_send_drafts" = "Save drafts to Telegram";
+"lng_myowngram_receive_drafts" = "Use drafts from Telegram";
 
-"lng_myowngram_activity_title" = "Activity";
-"lng_myowngram_send_online_status" = "Send online status";
-"lng_myowngram_online_status_about" = "Turning this off stops this client from reporting that you are online. Normal offline reports continue. Other actions and devices may still show you as online; this does not force you offline.";
-"lng_myowngram_send_typing_status" = "Send typing status";
-"lng_myowngram_send_recording_status" = "Send recording status";
-"lng_myowngram_send_upload_status" = "Send upload status";
-"lng_myowngram_send_sticker_selection_status" = "Send sticker selection status";
-"lng_myowngram_send_game_activity_status" = "Send game activity status";
-"lng_myowngram_send_group_call_speaking_status" = "Send group-call speaking status";
-"lng_myowngram_activity_status_about" = "These switches stop activity notices, not writing, recording, uploading, stickers, games, or calls. The speaking switch does not mute you or hide all speaker indicators. Read confirmations stay unchanged. Notices already received may remain briefly.";
+"lng_myowngram_activity_title" = "Activity sharing";
+"lng_myowngram_chat_activity" = "Chat activity";
+"lng_myowngram_send_online_status" = "Share online status";
+"lng_myowngram_send_typing_status" = "Share typing status";
+"lng_myowngram_send_recording_status" = "Share recording status";
+"lng_myowngram_send_upload_status" = "Share upload status";
+"lng_myowngram_send_sticker_selection_status" = "Share sticker activity";
+"lng_myowngram_send_game_activity_status" = "Share game activity";
+"lng_myowngram_group_calls" = "Group calls";
+"lng_myowngram_send_group_call_speaking_status" = "Share speaking status";
+"lng_myowngram_emoji_effects" = "Emoji effects";
 "lng_myowngram_share_emoji_effects" = "Share emoji effects";
-"lng_myowngram_send_emoji_watching_status" = "Send watching animations status";
-"lng_myowngram_emoji_activity_about" = "Sharing lets your taps on animated emoji start effects on the other person's screen. The watching status tells them when an incoming effect starts playing. Turning these off keeps local effects, emoji messages, reactions, and read confirmations working.";
+"lng_myowngram_share_emoji_effects_about" = "Allow the animated emoji effects from your taps to play on the other person's screen as well.";
+"lng_myowngram_send_emoji_watching_status" = "Share emoji viewing status";
+"lng_myowngram_emoji_watching_about" = "Let the other person know when their emoji effect is activated.";
 
 "lng_myowngram_copy_message_details" = "Copy message details";
 "lng_myowngram_message_id" = "Message ID: {id}";
-"lng_myowngram_show_message_id_in_tooltip" = "Show message ID in date tooltip";
-"lng_myowngram_show_message_seconds" = "Show seconds in message times";
+"lng_myowngram_show_message_id_in_tooltip" = "Show message IDs";
+"lng_myowngram_message_id_tooltip_about" = "Show the message's ID when hovering over the timestamp.";
+"lng_myowngram_show_message_seconds" = "Show seconds";
 
 "lng_myowngram_mutual_contact_about" = "You've added each other as contacts.";
 
-"lng_myowngram_peer_ids" = "UID and DC";
+"lng_myowngram_peer_ids" = "Profile IDs";
+"lng_myowngram_peer_ids_about" = "Choose a format to show user and chat IDs in profiles. Telegram data center details appear when available.";
 "lng_myowngram_peer_ids_hidden" = "Hidden";
 "lng_myowngram_peer_ids_telegram" = "Telegram API";
+"lng_myowngram_peer_ids_telegram_about" = "Positive IDs for users, groups and channels.";
 "lng_myowngram_peer_ids_bot" = "Bot API";
+"lng_myowngram_peer_ids_bot_about" = "Negative IDs for groups and channels. User IDs stay the same.";
 "lng_myowngram_copy_id" = "Copy ID";
 "lng_myowngram_id" = "ID";
 "lng_myowngram_dc_miami" = "Miami FL, USA";

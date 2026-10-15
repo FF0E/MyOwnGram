@@ -17,6 +17,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/vertical_list.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/checkbox.h"
+#include "ui/widgets/labels.h"
 #include "ui/wrap/slide_wrap.h"
 #include "ui/wrap/vertical_layout.h"
 #include "window/window_session_controller.h"
@@ -254,9 +255,18 @@ Ui::RpWidget *SectionBuilder::addControl(ControlArgs &&args) {
 Ui::SettingsButton *SectionBuilder::addButton(ButtonArgs &&args) {
 	const auto &st = args.st ? *args.st : st::settingsButton;
 	auto iconForSearch = IconDescriptor{ args.icon.icon };
-	const auto factory = [&](not_null<Ui::VerticalLayout*> container) {
+	auto result = (Ui::SettingsButton*)nullptr;
+	if (args.description) {
+		args.keywords.push_back(ResolveTitle(rpl::duplicate(args.description)));
+	}
+	const auto factory = [&](not_null<Ui::VerticalLayout*> container)
+	-> object_ptr<Ui::RpWidget> {
+		const auto parent = args.container ? args.container : container.get();
+		auto wrap = args.description
+			? object_ptr<Ui::VerticalLayout>(parent)
+			: object_ptr<Ui::VerticalLayout>(nullptr);
 		auto button = CreateButtonWithIcon(
-			args.container ? args.container : container.get(),
+			wrap ? wrap.data() : parent,
 			rpl::duplicate(args.title),
 			st,
 			std::move(args.icon));
@@ -273,18 +283,46 @@ Ui::SettingsButton *SectionBuilder::addButton(ButtonArgs &&args) {
 		if (args.toggled) {
 			button->toggleOn(std::move(args.toggled));
 		}
-		return button;
+		result = button.data();
+		if (!wrap) {
+			return std::move(button);
+		}
+		result = button.release();
+		// Keep the button's text for its accessible name.
+		result->setColorOverride(QColor(Qt::transparent));
+		const auto inner = wrap.data();
+		const auto title = inner->add(
+			object_ptr<Ui::FlatLabel>(
+				inner,
+				std::move(args.title),
+				st::settingsExperimentalTitle),
+			st::settingsExperimentalTitlePadding);
+		const auto about = inner->add(
+			object_ptr<Ui::FlatLabel>(
+				inner,
+				std::move(args.description),
+				st::settingsExperimentalAbout),
+			st::settingsExperimentalAboutPadding);
+		title->setAttribute(Qt::WA_TransparentForMouseEvents);
+		about->setAttribute(Qt::WA_TransparentForMouseEvents);
+		inner->sizeValue() | rpl::on_next([=](QSize size) {
+			result->resize(size);
+		}, result->lifetime());
+		result->show();
+		return std::move(wrap);
 	};
-	return static_cast<Ui::SettingsButton*>(addControl({
+	addControl({
 		.factory = factory,
 		.id = std::move(args.id),
 		.title = rpl::duplicate(args.title),
+		.align = args.description ? style::al_justify : style::al_left,
 		.highlight = std::move(args.highlight),
 		.shown = std::move(args.shown),
 
 		.keywords = std::move(args.keywords),
 		.searchIcon = std::move(iconForSearch),
-	}));
+	});
+	return result;
 }
 
 Ui::SettingsButton *SectionBuilder::addSectionButton(SectionArgs &&args) {

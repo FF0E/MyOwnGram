@@ -186,6 +186,7 @@ public:
 	struct ButtonArgs {
 		QString id;
 		rpl::producer<QString> title;
+		rpl::producer<QString> description;
 		const style::SettingsButton *st = nullptr;
 		IconDescriptor icon;
 		Ui::VerticalLayout *container = nullptr;
