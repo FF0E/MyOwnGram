@@ -7,12 +7,15 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "settings/sections/settings_myowngram.h"
 
+#include "apiwrap.h"
 #include "core/application.h"
 #include "core/core_settings.h"
 #include "lang/lang_keys.h"
+#include "main/main_session.h"
 #include "settings/sections/settings_main.h"
 #include "settings/settings_builder.h"
 #include "settings/settings_common_session.h"
+#include "ui/boxes/confirm_box.h"
 #include "ui/layers/generic_box.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/checkbox.h"
@@ -223,6 +226,25 @@ void AddActivityToggles(SectionBuilder &builder) {
 	}
 }
 
+void ConfirmClearCloudDrafts(not_null<Window::SessionController*> controller) {
+	controller->show(Ui::MakeConfirmBox({
+		.text = tr::lng_myowngram_clear_cloud_drafts_sure(),
+		.confirmed = crl::guard(controller, [=](Fn<void()> close) {
+			close();
+			controller->session().api().request(MTPmessages_ClearAllDrafts(
+			)).done(crl::guard(controller, [=] {
+				controller->showToast(
+					tr::lng_myowngram_cloud_drafts_cleared(tr::now));
+			})).fail(crl::guard(controller, [=](const MTP::Error &error) {
+				MTP::ShowErrorFallback(controller, error);
+			})).send();
+		}),
+		.confirmText = tr::lng_recent_clear_all(),
+		.confirmStyle = &st::attentionBoxButton,
+		.title = tr::lng_myowngram_clear_cloud_drafts(),
+	}));
+}
+
 void PeerIdBox(not_null<Ui::GenericBox*> box) {
 	using Mode = Core::PeerIdDisplay;
 	const auto settings = &Core::App().settings();
@@ -427,6 +449,15 @@ const auto kChatsAndProfiles = BuildHelper({
 			settings->setReceiveDrafts(enabled);
 		}, receiveDrafts->lifetime());
 	}
+	builder.addButton({
+		.id = u"myowngram/clear-cloud-drafts"_q,
+		.title = tr::lng_myowngram_clear_cloud_drafts(),
+		.st = &st::settingsButtonNoIcon,
+		.onClick = [controller = builder.controller()] {
+			ConfirmClearCloudDrafts(controller);
+		},
+		.keywords = { u"drafts"_q, u"clear"_q, u"cloud"_q },
+	});
 });
 
 const auto kPrivacy = BuildHelper({
