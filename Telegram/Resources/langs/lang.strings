@@ -8830,6 +8830,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_show_message_id_in_tooltip" = "Show message IDs";
 "lng_myowngram_message_id_tooltip_about" = "Show the message's ID when hovering over the timestamp.";
 "lng_myowngram_show_message_seconds" = "Show seconds";
+"lng_myowngram_click_twice_stickers" = "Click twice to send stickers";
+"lng_myowngram_click_twice_gifs" = "Click twice to send GIFs";
+"lng_myowngram_click_again_sticker" = "Click again to send this sticker.";
+"lng_myowngram_click_again_gif" = "Click again to send this GIF.";
 
 "lng_myowngram_mutual_contact_about" = "You've added each other as contacts.";
 

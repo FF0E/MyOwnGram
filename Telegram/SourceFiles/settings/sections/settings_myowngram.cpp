@@ -370,6 +370,30 @@ const auto kChatsAndProfiles = BuildHelper({
 			settings->setShowMessageIdInTooltip(enabled);
 		}, messageId->lifetime());
 	}
+	const auto stickers = builder.addButton({
+		.id = u"myowngram/click-twice-stickers"_q,
+		.title = tr::lng_myowngram_click_twice_stickers(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->clickTwiceToSendStickersValue(),
+		.keywords = { u"stickers"_q, u"send"_q, u"confirm"_q, u"click"_q },
+	});
+	if (stickers) {
+		stickers->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setClickTwiceToSendStickers(enabled);
+		}, stickers->lifetime());
+	}
+	const auto gifs = builder.addButton({
+		.id = u"myowngram/click-twice-gifs"_q,
+		.title = tr::lng_myowngram_click_twice_gifs(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->clickTwiceToSendGifsValue(),
+		.keywords = { u"gifs"_q, u"send"_q, u"confirm"_q, u"click"_q },
+	});
+	if (gifs) {
+		gifs->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setClickTwiceToSendGifs(enabled);
+		}, gifs->lifetime());
+	}
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();

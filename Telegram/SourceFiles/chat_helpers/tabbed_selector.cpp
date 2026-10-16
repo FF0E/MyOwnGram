@@ -10,6 +10,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "chat_helpers/emoji_list_widget.h"
 #include "chat_helpers/stickers_list_widget.h"
 #include "chat_helpers/gifs_list_widget.h"
+#include "core/application.h"
+#include "core/core_settings.h"
 #include "menu/menu_send.h"
 #include "ui/controls/swipe_handler.h"
 #include "ui/controls/tabbed_search.h"
@@ -702,7 +704,11 @@ TabbedSelector::Tab TabbedSelector::createTab(SelectorTab type, int index) {
 		}
 		Unexpected("Type in TabbedSelector::createTab.");
 	};
-	return Tab{ type, index, createWidget() };
+	auto widget = createWidget();
+	if (full()) {
+		widget->setSendConfirmationTab(type);
+	}
+	return Tab{ type, index, std::move(widget) };
 }
 
 bool TabbedSelector::full() const {
@@ -1097,6 +1103,7 @@ void TabbedSelector::showStarted() {
 }
 
 void TabbedSelector::beforeHiding() {
+	currentTab()->widget()->clearSendConfirmation();
 	if (!_scroll->isHidden()) {
 		currentTab()->widget()->beforeHiding();
 		if (_beforeHidingCallback) {
@@ -1119,6 +1126,9 @@ void TabbedSelector::afterShown() {
 }
 
 void TabbedSelector::setCurrentPeer(PeerData *peer) {
+	for (const auto &tab : _tabs) {
+		tab.widget()->clearSendConfirmation();
+	}
 	if (hasGifsTab()) {
 		gifs()->setInlineQueryPeer(peer);
 	}
@@ -1532,6 +1542,36 @@ TabbedSelector::Inner::Inner(
 , _paused(paused) {
 }
 
+bool TabbedSelector::Inner::confirmSendClick(const void *item) {
+	constexpr auto kConfirmationWindow = crl::time(2500);
+	const auto &settings = Core::App().settings();
+	const auto sticker = (_sendConfirmationTab == SelectorTab::Stickers);
+	const auto enabled = sticker
+		? settings.clickTwiceToSendStickers()
+		: (_sendConfirmationTab == SelectorTab::Gifs
+			&& settings.clickTwiceToSendGifs());
+	if (!enabled) {
+		clearSendConfirmation();
+		return true;
+	}
+	const auto now = crl::now();
+	if (_sendConfirmationItem == item && now < _sendConfirmationUntil) {
+		clearSendConfirmation();
+		return true;
+	}
+	_sendConfirmationItem = item;
+	_sendConfirmationUntil = now + kConfirmationWindow;
+	_show->showToast(sticker
+		? tr::lng_myowngram_click_again_sticker(tr::now)
+		: tr::lng_myowngram_click_again_gif(tr::now));
+	return false;
+}
+
+void TabbedSelector::Inner::clearSendConfirmation() {
+	_sendConfirmationItem = nullptr;
+	_sendConfirmationUntil = 0;
+}
+
 rpl::producer<int> TabbedSelector::Inner::scrollToRequests() const {
 	return _scrollToRequests.events();
 }
@@ -1630,6 +1670,7 @@ int TabbedSelector::Inner::defaultMinimalHeight() const {
 }
 
 void TabbedSelector::Inner::hideFinished() {
+	clearSendConfirmation();
 	processHideFinished();
 	if (auto footer = getFooter()) {
 		footer->processHideFinished();

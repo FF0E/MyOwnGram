@@ -1158,6 +1158,22 @@ public:
 	}
 	void setShowMessageSeconds(bool enabled);
 
+	[[nodiscard]] bool clickTwiceToSendStickers() const {
+		return _clickTwiceToSendStickers.current();
+	}
+	[[nodiscard]] rpl::producer<bool> clickTwiceToSendStickersValue() const {
+		return _clickTwiceToSendStickers.value();
+	}
+	void setClickTwiceToSendStickers(bool enabled);
+
+	[[nodiscard]] bool clickTwiceToSendGifs() const {
+		return _clickTwiceToSendGifs.current();
+	}
+	[[nodiscard]] rpl::producer<bool> clickTwiceToSendGifsValue() const {
+		return _clickTwiceToSendGifs.value();
+	}
+	void setClickTwiceToSendGifs(bool enabled);
+
 	void resetOnLastLogout();
 
 private:
@@ -1312,6 +1328,8 @@ private:
 	rpl::variable<PeerIdDisplay> _peerIdDisplay = PeerIdDisplay::Hidden;
 	rpl::variable<bool> _showMessageIdInTooltip = false;
 	rpl::variable<bool> _showMessageSeconds = false;
+	rpl::variable<bool> _clickTwiceToSendStickers = false;
+	rpl::variable<bool> _clickTwiceToSendGifs = false;
 	rpl::variable<bool> _sendPremiumPromoAnalytics = true;
 	rpl::variable<bool> _confirmBotLinks = false;
 	rpl::variable<bool> _sendDrafts = true;

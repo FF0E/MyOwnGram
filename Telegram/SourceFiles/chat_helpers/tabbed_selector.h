@@ -362,6 +362,11 @@ public:
 		std::shared_ptr<Show> show,
 		Fn<bool()> paused);
 
+	void setSendConfirmationTab(SelectorTab tab) {
+		_sendConfirmationTab = tab;
+	}
+	void clearSendConfirmation();
+
 	[[nodiscard]] Main::Session &session() const {
 		return *_session;
 	}
@@ -436,6 +441,7 @@ protected:
 
 	void showBoxPreventHide(object_ptr<Ui::BoxContent> box);
 	void preventHideWithBox(base::weak_qptr<Ui::BoxContent> weak);
+	[[nodiscard]] bool confirmSendClick(const void *item);
 
 	void paintEmptySearchResults(
 		Painter &p,
@@ -449,6 +455,9 @@ private:
 	const not_null<Main::Session*> _session;
 	const Fn<bool()> _paused;
 
+	const void *_sendConfirmationItem = nullptr;
+	crl::time _sendConfirmationUntil = 0;
+	SelectorTab _sendConfirmationTab = SelectorTab::Emoji;
 	int _visibleTop = 0;
 	int _visibleBottom = 0;
 	std::optional<int> _minimalHeight;

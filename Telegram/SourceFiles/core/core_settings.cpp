@@ -43,6 +43,10 @@ constexpr auto kShowMessageIdInTooltipKey
 	= std::string_view("myowngram-show-message-id-in-tooltip");
 constexpr auto kShowMessageSecondsKey
 	= std::string_view("myowngram-show-message-seconds");
+constexpr auto kClickTwiceToSendStickersKey
+	= std::string_view("myowngram-click-twice-to-send-stickers");
+constexpr auto kClickTwiceToSendGifsKey
+	= std::string_view("myowngram-click-twice-to-send-gifs");
 
 constexpr auto kActivityPreferences = std::array{
 	std::pair{
@@ -1393,6 +1397,10 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 	_activitySettings = activity;
 	_showMessageIdInTooltip = readPref<bool>(kShowMessageIdInTooltipKey, false);
 	_showMessageSeconds = readPref<bool>(kShowMessageSecondsKey, false);
+	_clickTwiceToSendStickers = readPref<bool>(
+		kClickTwiceToSendStickersKey,
+		false);
+	_clickTwiceToSendGifs = readPref<bool>(kClickTwiceToSendGifsKey, false);
 	const auto peerIds = readPrefGeneric(kPeerIdDisplayKey)
 		.value_or(QByteArray()).toInt();
 	switch (PeerIdDisplay(peerIds)) {
@@ -1450,6 +1458,22 @@ void Settings::setShowMessageSeconds(bool enabled) {
 	}
 	writePref<bool>(kShowMessageSecondsKey, enabled);
 	_showMessageSeconds = enabled;
+}
+
+void Settings::setClickTwiceToSendStickers(bool enabled) {
+	if (_clickTwiceToSendStickers.current() == enabled) {
+		return;
+	}
+	writePref<bool>(kClickTwiceToSendStickersKey, enabled);
+	_clickTwiceToSendStickers = enabled;
+}
+
+void Settings::setClickTwiceToSendGifs(bool enabled) {
+	if (_clickTwiceToSendGifs.current() == enabled) {
+		return;
+	}
+	writePref<bool>(kClickTwiceToSendGifsKey, enabled);
+	_clickTwiceToSendGifs = enabled;
 }
 
 void Settings::setSendReadMetrics(bool enabled) {
@@ -1940,6 +1964,8 @@ void Settings::resetOnLastLogout() {
 	writePrefGeneric(kPeerIdDisplayKey, QByteArray::number(int(peerIdDisplay())));
 	writePref<bool>(kShowMessageIdInTooltipKey, showMessageIdInTooltip());
 	writePref<bool>(kShowMessageSecondsKey, showMessageSeconds());
+	writePref<bool>(kClickTwiceToSendStickersKey, clickTwiceToSendStickers());
+	writePref<bool>(kClickTwiceToSendGifsKey, clickTwiceToSendGifs());
 	writePref<bool>(kSendReadMetricsKey, sendReadMetrics());
 	writePref<bool>(kSendPremiumPromoAnalyticsKey, sendPremiumPromoAnalytics());
 	writePref<bool>(kConfirmBotLinksKey, confirmBotLinks());

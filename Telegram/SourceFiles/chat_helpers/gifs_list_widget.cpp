@@ -499,6 +499,7 @@ void GifsListWidget::selectInlineResult(
 		};
 	};
 
+	const auto confirmClick = !forceSend;
 	forceSend |= base::IsCtrlPressed();
 	if (const auto photo = item->getPhoto()) {
 		using Data::PhotoSize;
@@ -506,6 +507,9 @@ void GifsListWidget::selectInlineResult(
 		if (forceSend
 			|| (media && media->image(PhotoSize::Thumbnail))
 			|| (media && media->image(PhotoSize::Large))) {
+			if (confirmClick && !confirmSendClick(item)) {
+				return;
+			}
 			_photoChosen.fire({
 				.photo = photo,
 				.options = options
@@ -517,6 +521,9 @@ void GifsListWidget::selectInlineResult(
 		const auto media = document->activeMediaView();
 		const auto preview = Data::VideoPreviewState(media.get());
 		if (forceSend || (media && preview.loaded())) {
+			if (confirmClick && !confirmSendClick(item)) {
+				return;
+			}
 			_fileChosen.fire({
 				.document = document,
 				.options = options,
@@ -534,6 +541,9 @@ void GifsListWidget::selectInlineResult(
 		}
 	} else if (const auto inlineResult = item->getResult()) {
 		if (inlineResult->onChoose(item)) {
+			if (confirmClick && !confirmSendClick(item)) {
+				return;
+			}
 			options.hideViaBot = true;
 			_inlineResultChosen.fire({
 				.result = inlineResult,
@@ -564,6 +574,7 @@ void GifsListWidget::enterFromChildEvent(QEvent *e, QWidget *child) {
 }
 
 void GifsListWidget::clearSelection() {
+	clearSendConfirmation();
 	if (_selected >= 0) {
 		ClickHandler::clearActive(_mosaic.itemAt(_selected));
 		setCursor(style::cur_default);
@@ -633,6 +644,7 @@ void GifsListWidget::refreshSavedGifs() {
 
 void GifsListWidget::clearInlineRows(bool resultsDeleted) {
 	if (resultsDeleted) {
+		clearSendConfirmation();
 		_selected = _pressed = -1;
 	} else {
 		clearSelection();
@@ -976,6 +988,7 @@ void GifsListWidget::updateSelected() {
 	const auto link = exact ? item->getState(relative, {}).link : nullptr;
 
 	if (_selected != selected) {
+		clearSendConfirmation();
 		if (const auto s = _mosaic.maybeItemAt(_selected)) {
 			s->update();
 		}
@@ -1006,6 +1019,7 @@ void GifsListWidget::showPreview() {
 		return;
 	}
 	if (const auto layout = _mosaic.maybeItemAt(_pressed)) {
+		clearSendConfirmation();
 		if (const auto previewDocument = layout->getPreviewDocument()) {
 			_previewShown = _show->showMediaPreview(
 				Data::FileOriginSavedGifs(),

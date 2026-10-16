@@ -2872,6 +2872,9 @@ void StickersListWidget::mouseReleaseEvent(QMouseEvent *e) {
 				&& (e->modifiers() & Qt::ControlModifier)) {
 				showStickerSetBox(document, set.id);
 			} else {
+				if (!confirmSendClick(document)) {
+					return;
+				}
 				_chosen.fire({
 					.document = document,
 					.messageSendingFrom = messageSentAnimationInfo(
@@ -3717,6 +3720,7 @@ bool StickersListWidget::stickerHasDeleteButton(const Set &set, int index) const
 
 void StickersListWidget::setSelected(OverState newSelected) {
 	if (_selected != newSelected) {
+		clearSendConfirmation();
 		setCursor(!v::is_null(newSelected)
 			? style::cur_pointer
 			: style::cur_default);
@@ -3770,6 +3774,7 @@ void StickersListWidget::setSelected(OverState newSelected) {
 
 void StickersListWidget::showPreview() {
 	if (const auto sticker = std::get_if<OverSticker>(&_pressed)) {
+		clearSendConfirmation();
 		const auto &sets = shownSets();
 		Assert(sticker->section >= 0 && sticker->section < sets.size());
 		const auto &set = sets[sticker->section];
