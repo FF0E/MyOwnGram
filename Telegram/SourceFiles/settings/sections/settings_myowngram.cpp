@@ -15,6 +15,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/sections/settings_main.h"
 #include "settings/settings_builder.h"
 #include "settings/settings_common_session.h"
+#include "storage/storage_account.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/layers/generic_box.h"
 #include "ui/widgets/buttons.h"
@@ -245,6 +246,21 @@ void ConfirmClearCloudDrafts(not_null<Window::SessionController*> controller) {
 	}));
 }
 
+void ConfirmClearLocalDrafts(not_null<Window::SessionController*> controller) {
+	controller->show(Ui::MakeConfirmBox({
+		.text = tr::lng_myowngram_clear_local_drafts_sure(),
+		.confirmed = crl::guard(controller, [=](Fn<void()> close) {
+			close();
+			controller->session().local().clearDrafts();
+			controller->showToast(
+				tr::lng_myowngram_local_drafts_cleared(tr::now));
+		}),
+		.confirmText = tr::lng_recent_clear_all(),
+		.confirmStyle = &st::attentionBoxButton,
+		.title = tr::lng_myowngram_clear_local_drafts(),
+	}));
+}
+
 void PeerIdBox(not_null<Ui::GenericBox*> box) {
 	using Mode = Core::PeerIdDisplay;
 	const auto settings = &Core::App().settings();
@@ -457,6 +473,15 @@ const auto kChatsAndProfiles = BuildHelper({
 			ConfirmClearCloudDrafts(controller);
 		},
 		.keywords = { u"drafts"_q, u"clear"_q, u"cloud"_q },
+	});
+	builder.addButton({
+		.id = u"myowngram/clear-local-drafts"_q,
+		.title = tr::lng_myowngram_clear_local_drafts(),
+		.st = &st::settingsButtonNoIcon,
+		.onClick = [controller = builder.controller()] {
+			ConfirmClearLocalDrafts(controller);
+		},
+		.keywords = { u"drafts"_q, u"clear"_q, u"local"_q },
 	});
 });
 

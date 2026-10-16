@@ -8811,6 +8811,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_clear_cloud_drafts" = "Clear cloud drafts";
 "lng_myowngram_clear_cloud_drafts_sure" = "Clear all drafts saved to Telegram for this account? This can't be undone.";
 "lng_myowngram_cloud_drafts_cleared" = "Cloud drafts cleared.";
+"lng_myowngram_clear_local_drafts" = "Clear local drafts";
+"lng_myowngram_clear_local_drafts_sure" = "Clear saved local drafts for this account? This can't be undone.";
+"lng_myowngram_local_drafts_cleared" = "Local drafts cleared.";
 
 "lng_myowngram_activity_title" = "Activity sharing";
 "lng_myowngram_chat_activity" = "Chat activity";

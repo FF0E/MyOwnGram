@@ -1283,6 +1283,17 @@ void Account::unregisterDraftSource(
 	}
 }
 
+void Account::clearDrafts() {
+	for (const auto &[peerId, key] : base::take(_draftsMap)) {
+		ClearKey(key, _basePath);
+	}
+	for (const auto &[peerId, key] : base::take(_draftCursorsMap)) {
+		ClearKey(key, _basePath);
+	}
+	_draftsNotReadMap.clear();
+	writeMapQueued();
+}
+
 void Account::writeDrafts(not_null<History*> history) {
 	const auto peerId = history->peer->id;
 	const auto &map = history->draftsMap();

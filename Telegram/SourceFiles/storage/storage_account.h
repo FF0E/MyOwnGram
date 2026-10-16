@@ -94,6 +94,7 @@ public:
 	void unregisterDraftSource(
 		not_null<History*> history,
 		Data::DraftKey key);
+	void clearDrafts();
 	void writeDrafts(not_null<History*> history);
 	void readDraftsWithCursors(not_null<History*> history);
 	void writeDraftCursors(not_null<History*> history);
