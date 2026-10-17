@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include "chat_helpers/send_click_confirmation.h"
 #include "ui/rp_widget.h"
 #include "ui/abstract_button.h"
 #include "ui/widgets/tooltip.h"
@@ -169,6 +170,7 @@ private:
 	QString _restrictedLabelKey;
 
 	base::unique_qptr<Ui::PopupMenu> _menu;
+	ChatHelpers::SendClickConfirmation _sendConfirmation;
 
 	Mosaic::Layout::MosaicLayout<InlineBots::Layout::ItemBase> _mosaic;
 

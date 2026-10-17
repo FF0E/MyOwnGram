@@ -522,6 +522,8 @@ PRIVATE
     chat_helpers/message_field.h
     chat_helpers/rich_paste_toast.cpp
     chat_helpers/rich_paste_toast.h
+    chat_helpers/send_click_confirmation.cpp
+    chat_helpers/send_click_confirmation.h
     chat_helpers/share_message_phrase_factory.cpp
     chat_helpers/share_message_phrase_factory.h
     chat_helpers/spellchecker_common.cpp

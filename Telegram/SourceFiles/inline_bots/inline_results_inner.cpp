@@ -282,6 +282,13 @@ void Inner::mouseReleaseEvent(QMouseEvent *e) {
 	using namespace InlineBots::Layout;
 	const auto open = dynamic_cast<OpenFileClickHandler*>(activated.get());
 	if (dynamic_cast<SendClickHandler*>(activated.get()) || open) {
+		const auto document = _mosaic.itemAt(_selected)->getPreviewDocument();
+		if (!open && document && document->sticker()
+			&& !_sendConfirmation.confirm(
+				_controller->uiShow().get(),
+				document)) {
+			return;
+		}
 		selectInlineResult(_selected, {}, !!open);
 	} else {
 		ActivateClickHandler(window(), activated, {
@@ -363,6 +370,7 @@ void Inner::contextMenuEvent(QContextMenuEvent *e) {
 	if (_selected < 0 || _pressed >= 0) {
 		return;
 	}
+	_sendConfirmation.clear();
 	auto details = _sendMenuDetails
 		? _sendMenuDetails()
 		: SendMenu::Details();
@@ -415,6 +423,7 @@ void Inner::contextMenuEvent(QContextMenuEvent *e) {
 }
 
 void Inner::clearSelection() {
+	_sendConfirmation.clear();
 	if (_selected >= 0) {
 		ClickHandler::clearActive(_mosaic.itemAt(_selected));
 		setCursor(style::cur_default);
@@ -440,6 +449,7 @@ void Inner::inlineBotChanged() {
 
 void Inner::clearInlineRows(bool resultsDeleted) {
 	if (resultsDeleted) {
+		_sendConfirmation.clear();
 		_selected = _pressed = -1;
 	} else {
 		clearSelection();
@@ -656,6 +666,7 @@ void Inner::updateSelected() {
 	const auto link = exact ? item->getState(relative, {}).link : nullptr;
 
 	if (_selected != selected) {
+		_sendConfirmation.clear();
 		if (const auto s = _mosaic.maybeItemAt(_selected)) {
 			s->update();
 		}
@@ -693,6 +704,7 @@ void Inner::showPreview() {
 	}
 
 	if (const auto layout = _mosaic.maybeItemAt(_pressed)) {
+		_sendConfirmation.clear();
 		if (const auto previewDocument = layout->getPreviewDocument()) {
 			_previewShown = _controller->widget()->showMediaPreview(
 				Data::FileOrigin(),

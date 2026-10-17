@@ -16,6 +16,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/sticker_set_box.h"
 #include "chat_helpers/compose/compose_show.h"
 #include "chat_helpers/message_field.h" // PrepareMentionTag.
+#include "chat_helpers/send_click_confirmation.h"
 #include "chat_helpers/stickers_lottie.h"
 #include "chat_helpers/tabbed_selector.h" // ChatHelpers::FileChosen.
 #include "core/application.h"
@@ -177,6 +178,7 @@ private:
 	const not_null<HashtagRows*> _hrows;
 	const not_null<BotCommandRows*> _brows;
 	const not_null<StickerRows*> _srows;
+	SendClickConfirmation _sendConfirmation;
 	Ui::RoundRect _overBg;
 	rpl::lifetime _stickersLifetime;
 	std::weak_ptr<Lottie::FrameRenderer> _lottieRenderer;
@@ -1511,6 +1513,7 @@ QRect FieldAutocomplete::Inner::ephemeralIconRect(int index) const {
 }
 
 void FieldAutocomplete::Inner::clearSel(bool hidden) {
+	_sendConfirmation.clear();
 	_overDelete = false;
 	_mouseSelection = false;
 	_lastMousePosition = std::nullopt;
@@ -1688,6 +1691,9 @@ void FieldAutocomplete::Inner::mouseReleaseEvent(QMouseEvent *e) {
 	} else if (_sel < 0 || _sel != pressed || _srows->empty()) {
 		return;
 	}
+	if (!_sendConfirmation.confirm(_show.get(), (*_srows)[_sel].document)) {
+		return;
+	}
 	chooseSelected(FieldAutocomplete::ChooseMethod::ByClick);
 }
 
@@ -1695,6 +1701,7 @@ void FieldAutocomplete::Inner::contextMenuEvent(QContextMenuEvent *e) {
 	if (_sel < 0 || _srows->empty() || _down >= 0) {
 		return;
 	}
+	_sendConfirmation.clear();
 	const auto index = _sel;
 	const auto details = _sendMenuDetails
 		? _sendMenuDetails()
@@ -1774,6 +1781,9 @@ void FieldAutocomplete::Inner::updateSelectedRow() {
 }
 
 void FieldAutocomplete::Inner::setSel(int sel, bool scroll) {
+	if (_sel != sel) {
+		_sendConfirmation.clear();
+	}
 	updateSelectedRow();
 	_sel = sel;
 	updateSelectedRow();
@@ -1796,6 +1806,7 @@ void FieldAutocomplete::Inner::setSel(int sel, bool scroll) {
 }
 
 void FieldAutocomplete::Inner::rowsUpdated() {
+	_sendConfirmation.clear();
 	if (_srows->empty()) {
 		_stickersLifetime.destroy();
 	}
@@ -1948,6 +1959,7 @@ void FieldAutocomplete::Inner::onParentGeometryChanged() {
 
 void FieldAutocomplete::Inner::showPreview() {
 	if (_down >= 0 && _down < _srows->size()) {
+		_sendConfirmation.clear();
 		const auto document = (*_srows)[_down].document;
 		_show->showMediaPreview(document->stickerSetOrigin(), document);
 		_previewShown = true;

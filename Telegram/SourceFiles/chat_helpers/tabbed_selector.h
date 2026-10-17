@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "api/api_common.h"
 #include "chat_helpers/compose/compose_features.h"
+#include "chat_helpers/send_click_confirmation.h"
 #include "ui/rp_widget.h"
 #include "ui/controls/swipe_handler_data.h"
 #include "ui/effects/animations.h"
@@ -17,7 +18,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/cached_round_corners.h"
 #include "mtproto/sender.h"
 #include "base/object_ptr.h"
-#include "base/weak_ptr.h"
 
 namespace InlineBots {
 struct ResultSelected;
@@ -36,10 +36,6 @@ class FlatLabel;
 class BoxContent;
 class TabbedSearch;
 } // namespace Ui
-
-namespace Ui::Toast {
-class Instance;
-} // namespace Ui::Toast
 
 namespace SendMenu {
 struct Details;
@@ -460,9 +456,7 @@ private:
 	const not_null<Main::Session*> _session;
 	const Fn<bool()> _paused;
 
-	const void *_sendConfirmationItem = nullptr;
-	crl::time _sendConfirmationUntil = 0;
-	base::weak_ptr<Ui::Toast::Instance> _sendConfirmationToast;
+	SendClickConfirmation _sendConfirmation;
 	SelectorTab _sendConfirmationTab = SelectorTab::Emoji;
 	int _visibleTop = 0;
 	int _visibleBottom = 0;

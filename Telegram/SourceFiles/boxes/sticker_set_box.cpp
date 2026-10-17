@@ -18,6 +18,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/share_box.h"
 #include "boxes/sticker_creator_box.h"
 #include "chat_helpers/compose/compose_show.h"
+#include "chat_helpers/send_click_confirmation.h"
 #include "chat_helpers/stickers_list_widget.h"
 #include "chat_helpers/stickers_lottie.h"
 #include "chat_helpers/tabbed_panel.h"
@@ -600,6 +601,7 @@ private:
 
 	const std::shared_ptr<ChatHelpers::Show> _show;
 	const not_null<Main::Session*> _session;
+	ChatHelpers::SendClickConfirmation _sendConfirmation;
 
 	MTP::Sender _api;
 	std::vector<Element> _elements;
@@ -1183,6 +1185,7 @@ StickerSetBox::Inner::Inner(
 }
 
 void StickerSetBox::Inner::applySet(const TLStickerSet &set) {
+	_sendConfirmation.clear();
 	_pack.clear();
 	_emoji.clear();
 	_elements.clear();
@@ -1550,6 +1553,7 @@ void StickerSetBox::Inner::showPreviewAt(QPoint globalPos) {
 	const auto index = stickerFromGlobalPos(globalPos);
 	const auto document = elementDocument(index);
 	if (document && index != _previewShown) {
+		_sendConfirmation.clear();
 		_previewShown = index;
 		_show->showMediaPreview(
 			Data::FileOriginStickerSet(_setId, _setAccessHash),
@@ -1709,6 +1713,10 @@ void StickerSetBox::Inner::mouseReleaseEvent(QMouseEvent *e) {
 	if (!document) {
 		return;
 	}
+	if (setType() == Data::StickersType::Stickers
+		&& !_sendConfirmation.confirm(_show.get(), document)) {
+		return;
+	}
 	chosen(index, document, {});
 }
 
@@ -1754,6 +1762,7 @@ void StickerSetBox::Inner::contextMenuEvent(QContextMenuEvent *e) {
 	if (!chosenDocument || setType() == Data::StickersType::Masks) {
 		return;
 	}
+	_sendConfirmation.clear();
 	_previewTimer.cancel();
 	_menu = base::make_unique_q<Ui::PopupMenu>(
 		this,
@@ -2009,6 +2018,7 @@ void StickerSetBox::Inner::setAddCellHovered(bool hovered) {
 
 void StickerSetBox::Inner::setSelected(int selected) {
 	if (_selected != selected) {
+		_sendConfirmation.clear();
 		startOverAnimation(_selected, 1., 0.);
 		_selected = selected;
 		startOverAnimation(_selected, 0., 1.);

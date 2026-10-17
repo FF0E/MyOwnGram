@@ -10,13 +10,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "chat_helpers/emoji_list_widget.h"
 #include "chat_helpers/stickers_list_widget.h"
 #include "chat_helpers/gifs_list_widget.h"
-#include "core/application.h"
-#include "core/core_settings.h"
 #include "menu/menu_send.h"
 #include "ui/controls/swipe_handler.h"
 #include "ui/controls/tabbed_search.h"
 #include "ui/text/text_utilities.h"
-#include "ui/toast/toast.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/labels.h"
 #include "ui/widgets/shadow.h"
@@ -1544,37 +1541,20 @@ TabbedSelector::Inner::Inner(
 }
 
 bool TabbedSelector::Inner::confirmSendClick(const void *item) {
-	constexpr auto kConfirmationWindow = crl::time(2500);
-	const auto &settings = Core::App().settings();
-	const auto sticker = (_sendConfirmationTab == SelectorTab::Stickers);
-	const auto enabled = sticker
-		? settings.clickTwiceToSendStickers()
-		: (_sendConfirmationTab == SelectorTab::Gifs
-			&& settings.clickTwiceToSendGifs());
-	if (!enabled) {
-		clearSendConfirmation();
+	if (_sendConfirmationTab != SelectorTab::Stickers
+		&& _sendConfirmationTab != SelectorTab::Gifs) {
 		return true;
 	}
-	const auto now = crl::now();
-	if (_sendConfirmationItem == item && now < _sendConfirmationUntil) {
-		clearSendConfirmation();
-		return true;
-	}
-	clearSendConfirmation();
-	_sendConfirmationItem = item;
-	_sendConfirmationUntil = now + kConfirmationWindow;
-	_sendConfirmationToast = _show->showToast(sticker
-		? tr::lng_myowngram_click_again_sticker(tr::now)
-		: tr::lng_myowngram_click_again_gif(tr::now));
-	return false;
+	return _sendConfirmation.confirm(
+		_show.get(),
+		item,
+		(_sendConfirmationTab == SelectorTab::Stickers)
+			? SendClickConfirmation::Type::Sticker
+			: SendClickConfirmation::Type::Gif);
 }
 
 void TabbedSelector::Inner::clearSendConfirmation() {
-	_sendConfirmationItem = nullptr;
-	_sendConfirmationUntil = 0;
-	if (const auto toast = base::take(_sendConfirmationToast).get()) {
-		toast->hide();
-	}
+	_sendConfirmation.clear();
 }
 
 rpl::producer<int> TabbedSelector::Inner::scrollToRequests() const {
