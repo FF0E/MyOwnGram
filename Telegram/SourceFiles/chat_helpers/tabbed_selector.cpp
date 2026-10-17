@@ -16,6 +16,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/controls/swipe_handler.h"
 #include "ui/controls/tabbed_search.h"
 #include "ui/text/text_utilities.h"
+#include "ui/toast/toast.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/labels.h"
 #include "ui/widgets/shadow.h"
@@ -1559,9 +1560,10 @@ bool TabbedSelector::Inner::confirmSendClick(const void *item) {
 		clearSendConfirmation();
 		return true;
 	}
+	clearSendConfirmation();
 	_sendConfirmationItem = item;
 	_sendConfirmationUntil = now + kConfirmationWindow;
-	_show->showToast(sticker
+	_sendConfirmationToast = _show->showToast(sticker
 		? tr::lng_myowngram_click_again_sticker(tr::now)
 		: tr::lng_myowngram_click_again_gif(tr::now));
 	return false;
@@ -1570,6 +1572,9 @@ bool TabbedSelector::Inner::confirmSendClick(const void *item) {
 void TabbedSelector::Inner::clearSendConfirmation() {
 	_sendConfirmationItem = nullptr;
 	_sendConfirmationUntil = 0;
+	if (const auto toast = base::take(_sendConfirmationToast).get()) {
+		toast->hide();
+	}
 }
 
 rpl::producer<int> TabbedSelector::Inner::scrollToRequests() const {

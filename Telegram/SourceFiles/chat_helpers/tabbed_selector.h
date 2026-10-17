@@ -17,6 +17,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/cached_round_corners.h"
 #include "mtproto/sender.h"
 #include "base/object_ptr.h"
+#include "base/weak_ptr.h"
 
 namespace InlineBots {
 struct ResultSelected;
@@ -35,6 +36,10 @@ class FlatLabel;
 class BoxContent;
 class TabbedSearch;
 } // namespace Ui
+
+namespace Ui::Toast {
+class Instance;
+} // namespace Ui::Toast
 
 namespace SendMenu {
 struct Details;
@@ -457,6 +462,7 @@ private:
 
 	const void *_sendConfirmationItem = nullptr;
 	crl::time _sendConfirmationUntil = 0;
+	base::weak_ptr<Ui::Toast::Instance> _sendConfirmationToast;
 	SelectorTab _sendConfirmationTab = SelectorTab::Emoji;
 	int _visibleTop = 0;
 	int _visibleBottom = 0;
