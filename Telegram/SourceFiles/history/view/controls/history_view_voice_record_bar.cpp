@@ -15,6 +15,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "calls/calls_instance.h"
 #include "chat_helpers/compose/compose_show.h"
 #include "core/application.h"
+#include "core/core_settings.h"
 #include "data/data_document.h"
 #include "data/data_document_media.h"
 #include "data/data_session.h"
@@ -2808,9 +2809,14 @@ void VoiceRecordBar::recordUpdated(quint16 level, int samples) {
 }
 
 void VoiceRecordBar::stop(bool send) {
+	const auto &settings = Core::App().settings();
 	if (isHidden() && !send) {
 		return;
-	} else if (send && _pauseInsteadSend) {
+	} else if (send
+		&& (_pauseInsteadSend
+			|| (_recordingVideo
+				? settings.previewVideoMessages()
+				: settings.previewVoiceMessages()))) {
 		_fullRecord = true;
 		stopRecording(StopType::Listen);
 		_lockShowing = false;

@@ -432,6 +432,30 @@ const auto kChatsAndProfiles = BuildHelper({
 			settings->setClickTwiceToSendGifs(enabled);
 		}, gifs->lifetime());
 	}
+	const auto voicePreview = builder.addButton({
+		.id = u"myowngram/preview-voice-messages"_q,
+		.title = tr::lng_myowngram_preview_voice_messages(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->previewVoiceMessagesValue(),
+		.keywords = { u"voice"_q, u"recording"_q, u"preview"_q, u"send"_q },
+	});
+	if (voicePreview) {
+		voicePreview->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setPreviewVoiceMessages(enabled);
+		}, voicePreview->lifetime());
+	}
+	const auto videoPreview = builder.addButton({
+		.id = u"myowngram/preview-video-messages"_q,
+		.title = tr::lng_myowngram_preview_video_messages(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->previewVideoMessagesValue(),
+		.keywords = { u"video"_q, u"round"_q, u"recording"_q, u"preview"_q },
+	});
+	if (videoPreview) {
+		videoPreview->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setPreviewVideoMessages(enabled);
+		}, videoPreview->lifetime());
+	}
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();

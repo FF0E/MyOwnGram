@@ -47,6 +47,10 @@ constexpr auto kClickTwiceToSendStickersKey
 	= std::string_view("myowngram-click-twice-to-send-stickers");
 constexpr auto kClickTwiceToSendGifsKey
 	= std::string_view("myowngram-click-twice-to-send-gifs");
+constexpr auto kPreviewVoiceMessagesKey
+	= std::string_view("myowngram-preview-voice-messages");
+constexpr auto kPreviewVideoMessagesKey
+	= std::string_view("myowngram-preview-video-messages");
 
 constexpr auto kActivityPreferences = std::array{
 	std::pair{
@@ -1401,6 +1405,8 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 		kClickTwiceToSendStickersKey,
 		false);
 	_clickTwiceToSendGifs = readPref<bool>(kClickTwiceToSendGifsKey, false);
+	_previewVoiceMessages = readPref<bool>(kPreviewVoiceMessagesKey, false);
+	_previewVideoMessages = readPref<bool>(kPreviewVideoMessagesKey, false);
 	const auto peerIds = readPrefGeneric(kPeerIdDisplayKey)
 		.value_or(QByteArray()).toInt();
 	switch (PeerIdDisplay(peerIds)) {
@@ -1474,6 +1480,22 @@ void Settings::setClickTwiceToSendGifs(bool enabled) {
 	}
 	writePref<bool>(kClickTwiceToSendGifsKey, enabled);
 	_clickTwiceToSendGifs = enabled;
+}
+
+void Settings::setPreviewVoiceMessages(bool enabled) {
+	if (_previewVoiceMessages.current() == enabled) {
+		return;
+	}
+	writePref<bool>(kPreviewVoiceMessagesKey, enabled);
+	_previewVoiceMessages = enabled;
+}
+
+void Settings::setPreviewVideoMessages(bool enabled) {
+	if (_previewVideoMessages.current() == enabled) {
+		return;
+	}
+	writePref<bool>(kPreviewVideoMessagesKey, enabled);
+	_previewVideoMessages = enabled;
 }
 
 void Settings::setSendReadMetrics(bool enabled) {
@@ -1966,6 +1988,8 @@ void Settings::resetOnLastLogout() {
 	writePref<bool>(kShowMessageSecondsKey, showMessageSeconds());
 	writePref<bool>(kClickTwiceToSendStickersKey, clickTwiceToSendStickers());
 	writePref<bool>(kClickTwiceToSendGifsKey, clickTwiceToSendGifs());
+	writePref<bool>(kPreviewVoiceMessagesKey, previewVoiceMessages());
+	writePref<bool>(kPreviewVideoMessagesKey, previewVideoMessages());
 	writePref<bool>(kSendReadMetricsKey, sendReadMetrics());
 	writePref<bool>(kSendPremiumPromoAnalyticsKey, sendPremiumPromoAnalytics());
 	writePref<bool>(kConfirmBotLinksKey, confirmBotLinks());

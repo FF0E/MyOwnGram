@@ -8838,6 +8838,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_show_message_seconds" = "Show seconds";
 "lng_myowngram_click_twice_stickers" = "Click twice to send stickers";
 "lng_myowngram_click_twice_gifs" = "Click twice to send GIFs";
+"lng_myowngram_preview_voice_messages" = "Preview voice messages before sending";
+"lng_myowngram_preview_video_messages" = "Preview video messages before sending";
 "lng_myowngram_click_again_sticker" = "Click again to send this sticker.";
 "lng_myowngram_click_again_gif" = "Click again to send this GIF.";
 

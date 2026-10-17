@@ -1174,6 +1174,22 @@ public:
 	}
 	void setClickTwiceToSendGifs(bool enabled);
 
+	[[nodiscard]] bool previewVoiceMessages() const {
+		return _previewVoiceMessages.current();
+	}
+	[[nodiscard]] rpl::producer<bool> previewVoiceMessagesValue() const {
+		return _previewVoiceMessages.value();
+	}
+	void setPreviewVoiceMessages(bool enabled);
+
+	[[nodiscard]] bool previewVideoMessages() const {
+		return _previewVideoMessages.current();
+	}
+	[[nodiscard]] rpl::producer<bool> previewVideoMessagesValue() const {
+		return _previewVideoMessages.value();
+	}
+	void setPreviewVideoMessages(bool enabled);
+
 	void resetOnLastLogout();
 
 private:
@@ -1330,6 +1346,8 @@ private:
 	rpl::variable<bool> _showMessageSeconds = false;
 	rpl::variable<bool> _clickTwiceToSendStickers = false;
 	rpl::variable<bool> _clickTwiceToSendGifs = false;
+	rpl::variable<bool> _previewVoiceMessages = false;
+	rpl::variable<bool> _previewVideoMessages = false;
 	rpl::variable<bool> _sendPremiumPromoAnalytics = true;
 	rpl::variable<bool> _confirmBotLinks = false;
 	rpl::variable<bool> _sendDrafts = true;
