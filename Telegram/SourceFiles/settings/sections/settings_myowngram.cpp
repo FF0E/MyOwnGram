@@ -115,7 +115,7 @@ void AddAdToggles(
 			.st = &st::settingsButtonNoIcon,
 			.toggled = settings->adSettingsValue(placement)
 				| rpl::map([=](Core::AdSettings value) {
-					return value.*flag;
+					return !(value.*flag);
 				}),
 			.keywords = {
 				u"sponsored"_q,
@@ -126,7 +126,7 @@ void AddAdToggles(
 		if (button) {
 			button->toggledValue() | rpl::on_next([=](bool enabled) {
 				auto value = settings->adSettings(placement);
-				value.*flag = enabled;
+				value.*flag = !enabled;
 				settings->setAdSettings(placement, value);
 			}, button->lifetime());
 		}
@@ -213,14 +213,14 @@ void AddActivityToggles(SectionBuilder &builder) {
 			.st = &st::settingsButtonNoIcon,
 			.toggled = settings->activitySettingsValue()
 				| rpl::map([=](const Core::ActivitySettings &value) {
-					return value.*flag;
+					return !(value.*flag);
 				}) | rpl::distinct_until_changed(),
 			.keywords = { u"activity"_q, u"status"_q },
 		});
 		if (button) {
 			button->toggledValue() | rpl::on_next([=](bool enabled) {
 				auto value = settings->activitySettings();
-				value.*flag = enabled;
+				value.*flag = !enabled;
 				settings->setActivitySettings(value);
 			}, button->lifetime());
 		}
@@ -469,24 +469,26 @@ const auto kChatsAndProfiles = BuildHelper({
 		.id = u"myowngram/privacy/send-drafts"_q,
 		.title = tr::lng_myowngram_send_drafts(),
 		.st = &st::settingsButtonNoIcon,
-		.toggled = settings->sendDraftsValue(),
+		.toggled = settings->sendDraftsValue()
+			| rpl::map(!rpl::mappers::_1),
 		.keywords = { u"drafts"_q, u"sync"_q, u"cloud"_q },
 	});
 	if (sendDrafts) {
 		sendDrafts->toggledValue() | rpl::on_next([=](bool enabled) {
-			settings->setSendDrafts(enabled);
+			settings->setSendDrafts(!enabled);
 		}, sendDrafts->lifetime());
 	}
 	const auto receiveDrafts = builder.addButton({
 		.id = u"myowngram/privacy/receive-drafts"_q,
 		.title = tr::lng_myowngram_receive_drafts(),
 		.st = &st::settingsButtonNoIcon,
-		.toggled = settings->receiveDraftsValue(),
+		.toggled = settings->receiveDraftsValue()
+			| rpl::map(!rpl::mappers::_1),
 		.keywords = { u"drafts"_q, u"sync"_q, u"cloud"_q },
 	});
 	if (receiveDrafts) {
 		receiveDrafts->toggledValue() | rpl::on_next([=](bool enabled) {
-			settings->setReceiveDrafts(enabled);
+			settings->setReceiveDrafts(!enabled);
 		}, receiveDrafts->lifetime());
 	}
 	builder.addButton({
@@ -548,7 +550,8 @@ const auto kPrivacy = BuildHelper({
 		.title = tr::lng_myowngram_reading_analytics(),
 		.description = tr::lng_myowngram_reading_analytics_about(),
 		.st = &st::settingsButtonNoIcon,
-		.toggled = settings->sendReadMetricsValue(),
+		.toggled = settings->sendReadMetricsValue()
+			| rpl::map(!rpl::mappers::_1),
 		.keywords = {
 			u"analytics"_q,
 			u"tracking"_q,
@@ -558,7 +561,7 @@ const auto kPrivacy = BuildHelper({
 	});
 	if (button) {
 		button->toggledValue() | rpl::on_next([=](bool enabled) {
-			settings->setSendReadMetrics(enabled);
+			settings->setSendReadMetrics(!enabled);
 		}, button->lifetime());
 	}
 	const auto premium = builder.addButton({
@@ -566,7 +569,8 @@ const auto kPrivacy = BuildHelper({
 		.title = tr::lng_myowngram_premium_promo_analytics(),
 		.description = tr::lng_myowngram_premium_promo_analytics_about(),
 		.st = &st::settingsButtonNoIcon,
-		.toggled = settings->sendPremiumPromoAnalyticsValue(),
+		.toggled = settings->sendPremiumPromoAnalyticsValue()
+			| rpl::map(!rpl::mappers::_1),
 		.keywords = {
 			u"analytics"_q,
 			u"tracking"_q,
@@ -576,7 +580,7 @@ const auto kPrivacy = BuildHelper({
 	});
 	if (premium) {
 		premium->toggledValue() | rpl::on_next([=](bool enabled) {
-			settings->setSendPremiumPromoAnalytics(enabled);
+			settings->setSendPremiumPromoAnalytics(!enabled);
 		}, premium->lifetime());
 	}
 });
