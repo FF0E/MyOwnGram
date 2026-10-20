@@ -8832,6 +8832,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_send_emoji_watching_status" = "Disable emoji viewing status sharing";
 "lng_myowngram_emoji_watching_about" = "Stop notifying the other person when their emoji effect is activated.";
 
+"lng_myowngram_jump_to_beginning" = "Jump to the beginning";
 "lng_myowngram_copy_message_details" = "Copy message details";
 "lng_myowngram_message_id" = "Message ID: {id}";
 "lng_myowngram_show_message_id_in_tooltip" = "Show message IDs";

@@ -131,6 +131,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_boxes.h"
 #include "styles/style_layers.h"
 
+#include <array>
 #include <limits>
 #include <QtCore/QMimeData>
 
@@ -186,10 +187,14 @@ constexpr auto kPsaAboutPrefix = "cloud_lng_about_psa_";
 }
 
 [[nodiscard]] bool IsSpecialShowAtMsgId(MsgId id) {
-	return (id == ShowAtTheEndMsgId)
-		|| (id == ShowAndStartBotMsgId)
-		|| (id == ShowAndMaybeStartBotMsgId)
-		|| (id == ShowForChooseMessagesMsgId);
+	const auto ids = std::array{
+		ShowAtTheEndMsgId,
+		ShowAndStartBotMsgId,
+		ShowAndMaybeStartBotMsgId,
+		ShowForChooseMessagesMsgId,
+		ShowAtTheStartMsgId,
+	};
+	return ranges::contains(ids, id);
 }
 
 [[nodiscard]] FullMsgId ResolveHighlightId(
@@ -216,7 +221,12 @@ ChatMemento::ChatMemento(
 , _activateChooseForReport(highlightId == ShowForChooseMessagesMsgId)
 , _sendBotStart(highlightId == ShowAndStartBotMsgId)
 , _maybeSendBotStart(highlightId == ShowAndMaybeStartBotMsgId) {
-	if ((highlightId == ShowAtTheEndMsgId)
+	if (highlightId == ShowAtTheStartMsgId) {
+		_list.setAroundPosition(Data::MinMessagePosition);
+		_list.setScrollTopState(ListMemento::ScrollTopState{
+			.item = Data::MinMessagePosition,
+		});
+	} else if ((highlightId == ShowAtTheEndMsgId)
 		|| _sendBotStart
 		|| _maybeSendBotStart) {
 		_list.setAroundPosition(Data::MaxMessagePosition);
@@ -3892,6 +3902,9 @@ bool ChatWidget::showInternal(
 				_composeControls->applyDraft(
 					ComposeControls::FieldHistoryAction::NewEntry);
 				refreshSuggestFromDraft();
+			} else if (logMemento->list()->aroundPosition()
+				== Data::MinMessagePosition) {
+				showAtStart();
 			} else if ((mode() == Mode::History)
 				&& !logMemento->highlightId()
 				&& !logMemento->sendBotStart()

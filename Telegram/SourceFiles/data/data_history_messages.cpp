@@ -69,7 +69,9 @@ struct HistoryMessagesAround {
 		not_null<History*> history,
 		MessagePosition around,
 		FullMsgId fallback) {
-	if ((around.fullId.msg == ShowAtTheEndMsgId)
+	if (around == MinMessagePosition) {
+		return around;
+	} else if ((around.fullId.msg == ShowAtTheEndMsgId)
 		|| (around == MaxMessagePosition)) {
 		return MaxMessagePosition;
 	} else if (around.fullId.msg == ShowAtUnreadMsgId) {
@@ -250,6 +252,11 @@ void AppendHistoryClientSideMessages(
 		result.target.fullId = FullMsgId(
 			peerId,
 			(result.query < 0) ? (result.query + ServerMaxMsgId) : result.query);
+	} else if (aroundId == MinMessagePosition) {
+		const auto first = MinMessagePosition.fullId.msg;
+		result.query = history->peer->migrateFrom()
+			? (first - ServerMaxMsgId)
+			: first;
 	} else if ((aroundId.fullId.msg == ShowAtTheEndMsgId)
 		|| (aroundId == MaxMessagePosition)) {
 		result.query = (ServerMaxMsgId - 1);
@@ -466,7 +473,9 @@ rpl::producer<MessagesSlice> HistoryMessagesViewer(
 				&& !viewer->slice.skippedBefore
 				&& !viewer->slice.skippedAfter
 				&& (viewer->slice.fullCount.value_or(0) > 0);
-			if (unresolvedCountOnly) {
+			if (unresolvedCountOnly
+				|| (viewer->around == MinMessagePosition
+					&& viewer->slice.skippedBefore != 0)) {
 				return;
 			}
 			consumer.put_next_copy(viewer->slice);

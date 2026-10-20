@@ -1026,7 +1026,9 @@ ListWidget::InjectAfterLookup ListWidget::lookupInjectAfter(
 
 std::optional<int> ListWidget::scrollTopForPosition(
 		Data::MessagePosition position) const {
-	auto messageUnknown = !position.date && position.fullId;
+	auto messageUnknown = !position.date
+		&& position.fullId.peer
+		&& position.fullId.msg;
 	if (messageUnknown) {
 		if (const auto item = session().data().message(position.fullId)) {
 			position = item->position();
@@ -1041,6 +1043,13 @@ std::optional<int> ListWidget::scrollTopForPosition(
 		position = Data::MaxMessagePosition;
 	}
 	if (_visibleTop >= _visibleBottom) {
+		return std::nullopt;
+	} else if (position == Data::MinMessagePosition) {
+		if (_inverted ? loadedAtBottom() : loadedAtTop()) {
+			return _inverted
+				? height() - (_visibleBottom - _visibleTop)
+				: 0;
+		}
 		return std::nullopt;
 	} else if (position == Data::MaxMessagePosition) {
 		if (_inverted) {
@@ -1324,7 +1333,8 @@ bool ListWidget::showAtPositionNow(
 	if (!scrollTop.has_value()) {
 		return false;
 	}
-	if (position != Data::MaxMessagePosition
+	if (position != Data::MinMessagePosition
+		&& position != Data::MaxMessagePosition
 		&& position != Data::UnreadMessagePosition) {
 		const auto item = session().data().message(position.fullId);
 		const auto mayScrollToPart = !params.highlight.empty()

@@ -305,6 +305,7 @@ private:
 	void addToggleMuteSubmenu(bool addSeparator);
 	void addSupportInfo();
 	void addInfo();
+	void addJumpToBeginning();
 	void addStoryArchive();
 	void addNewWindow(bool addSeparator = true);
 	void addUngroup();
@@ -651,6 +652,22 @@ void Filler::addInfo() {
 			}
 		}
 	}, infoPeer->isUser() ? &st::menuIconProfile : &st::menuIconInfo);
+}
+
+void Filler::addJumpToBeginning() {
+	if (!_thread || (_topic && _topic->creating())) {
+		return;
+	}
+	const auto controller = _controller;
+	const auto weak = base::make_weak(_thread);
+	_addAction(tr::lng_myowngram_jump_to_beginning(tr::now), [=] {
+		if (const auto thread = weak.get()) {
+			controller->showThread(
+				thread,
+				ShowAtTheStartMsgId,
+				SectionShow::Way::Forward);
+		}
+	}, &st::menuIconShowInChat);
 }
 
 void Filler::addStoryArchive() {
@@ -1929,6 +1946,7 @@ void Filler::fillHistoryActions() {
 	addToggleMuteSubmenu(true);
 	addCreateTopic();
 	addInfo();
+	addJumpToBeginning();
 	addViewAsTopics();
 	addManageChat();
 	addStoryArchive();
@@ -1980,6 +1998,7 @@ void Filler::fillProfileActions() {
 void Filler::fillRepliesActions() {
 	if (_topic) {
 		addInfo();
+		addJumpToBeginning();
 		addManageTopic();
 	}
 	addBoostChat();
