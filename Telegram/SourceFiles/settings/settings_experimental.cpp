@@ -23,6 +23,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/widgets/kinetic_scroller.h"
 #include "ui/widgets/labels.h"
 #include "ui/widgets/popup_menu.h"
+#include "ui/widgets/tooltip.h"
 #include "ui/vertical_list.h"
 #include "ui/gl/gl_detection.h"
 #include "ui/chat/chat_style_radius.h"
@@ -142,7 +143,8 @@ void SetupCopyDeepLink(
 		not_null<Ui::VerticalLayout*> container,
 		const QString &name,
 		const QString &description,
-		const style::SettingsButton &st) {
+		const style::SettingsButton &st,
+		bool readOnly) {
 	if (description.isEmpty()) {
 		return container->add(object_ptr<Button>(
 			container,
@@ -159,7 +161,9 @@ void SetupCopyDeepLink(
 		object_ptr<Ui::FlatLabel>(
 			container,
 			name,
-			st::settingsExperimentalTitle),
+			(readOnly
+				? st::settingsExperimentalTitleDisabled
+				: st::settingsExperimentalTitle)),
 		titlePadding);
 	const auto about = container->add(
 		object_ptr<Ui::FlatLabel>(
@@ -199,6 +203,7 @@ QString AddOption(
 		Fn<void(const QString&, not_null<QWidget*>)> registerHighlight) {
 	const auto name = option.name().isEmpty() ? option.id() : option.name();
 	const auto &description = option.description();
+	const auto required = (option.id() == QLatin1String(kOptionUseNewChatView));
 
 	const auto wrap = container->add(
 		object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
@@ -223,10 +228,23 @@ QString AddOption(
 		inner,
 		name,
 		description,
-		(option.relevant()
+		(required
+			? st::settingsOptionRequired
+			: option.relevant()
 			? st::settingsButtonNoIcon
-			: st::settingsOptionDisabled)
-	)->toggleOn(toggles->events_starting_with(option.value()));
+			: st::settingsOptionDisabled),
+		required
+	)->toggleOn(
+		toggles->events_starting_with(option.value()) | rpl::map([=](bool value) {
+			return required || value;
+		}),
+		required);
+	if (required) {
+		button->setDisabled(true);
+		Ui::InstallTooltip(button, [] {
+			return tr::lng_myowngram_new_chat_view_required(tr::now);
+		});
+	}
 
 	if (registerHighlight) {
 		registerHighlight(u"experimental/"_q + option.id(), button);

@@ -52,6 +52,9 @@ settingsAttentionButtonWithIcon: SettingsButton(settingsButton) {
 settingsExperimentalTitle: FlatLabel(defaultFlatLabel) {
 	minWidth: 100px;
 }
+settingsExperimentalTitleDisabled: FlatLabel(settingsExperimentalTitle) {
+	textFg: windowSubTextFg;
+}
 settingsExperimentalAbout: FlatLabel(defaultFlatLabel) {
 	textFg: windowSubTextFg;
 	minWidth: 100px;
@@ -67,6 +70,14 @@ settingsOptionDisabled: SettingsButton(settingsButtonNoIcon) {
 	textBg: windowBg;
 	textBgOver: windowBg;
 	toggleOver: infoProfileToggle;
+}
+settingsOptionRequired: SettingsButton(settingsOptionDisabled) {
+	toggle: Toggle(infoProfileToggle) {
+		toggledFg: menuIconFg;
+	}
+	toggleOver: Toggle(infoProfileToggle) {
+		toggledFg: menuIconFg;
+	}
 }
 settingsButtonDisabledWithIcon: SettingsButton(settingsButton) {
 	textFg: windowSubTextFg;

@@ -8779,6 +8779,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // Keep MyOwnGram strings separate for upstream merges.
 "lng_myowngram_title" = "MyOwnGram";
+"lng_myowngram_new_chat_view_required" = "Required by MyOwnGram. This setting is always enabled.";
 "lng_myowngram_chats_profiles_title" = "Chats and profiles";
 "lng_myowngram_profiles_title" = "Profiles";
 "lng_myowngram_ads_title" = "Ads";

@@ -120,7 +120,8 @@ base::options::toggle ForceComposeSearchOneColumn({
 base::options::toggle OptionUseNewChatView({
 	.id = kOptionUseNewChatView,
 	.name = "New chat view",
-	.description = "Open chats through the new section."
+	.description = "Open chats through the new section.",
+	.defaultValue = true,
 });
 
 } // namespace
@@ -1483,7 +1484,7 @@ void MainWidget::showHistory(
 		_controller->window().activate();
 	}
 
-	if (peerId && OptionUseNewChatView.value()) {
+	if (peerId) {
 		const auto history = session().data().history(peerId);
 		if (showAtMsgId == ShowAndStartBotMsgId) {
 			if (const auto user = history->peer->asUser()) {
@@ -2378,9 +2379,7 @@ bool MainWidget::showBackFromStack(const SectionShow &params) {
 	_stack.pop_back();
 	const auto currentHistoryPeer = _history->peer()
 		? _history->peer()
-		: OptionUseNewChatView.value()
-		? _controller->activeChatCurrent().peer()
-		: nullptr;
+		: _controller->activeChatCurrent().peer();
 	if (currentHistoryPeer) {
 		ClearBotStartToken(currentHistoryPeer);
 	}
