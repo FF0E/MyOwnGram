@@ -28,7 +28,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_about_view.h"
 #include "history/view/history_view_drag.h"
 #include "history/view/history_view_message.h"
-#include "history/view/history_view_message_details.h"
 #include "history/view/history_view_service_message.h"
 #include "history/view/history_view_cursor_state.h"
 #include "history/view/history_view_reply_button.h"
@@ -422,10 +421,6 @@ HistoryInner::HistoryInner(
 
 	setMouseTracking(true);
 	setAccessibleName(tr::lng_sr_message_list(tr::now));
-	Core::App().settings().sendReadMetricsValue(
-	) | rpl::on_next([=](bool) {
-		markReadMetricsStale();
-	}, lifetime());
 	Core::App().inAppKeyPressed(
 	) | rpl::on_next([=] {
 		registerReadMetricsActivity();
@@ -3837,12 +3832,6 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 			_menu,
 			textItem ? textItem : _dragStateItem,
 			!added);
-	}
-	if (_dragStateItem && !hasSelected) {
-		HistoryView::AddMessageDetailsAction(
-			_menu,
-			_dragStateItem,
-			_controller->uiShow());
 	}
 	if (hasWhoReactedItem) {
 		HistoryView::AddWhoReactedAction(

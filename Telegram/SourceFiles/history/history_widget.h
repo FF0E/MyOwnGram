@@ -782,7 +782,6 @@ private:
 	void refreshSendAsToggle();
 	void refreshAttachBotsMenu();
 
-	void requestSponsoredMessages();
 	void injectSponsoredMessages() const;
 
 	bool kbWasHidden() const;
