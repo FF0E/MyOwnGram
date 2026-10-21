@@ -82,6 +82,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/qt/qt_key_modifiers.h"
 #include "core/ad_settings.h"
 #include "core/application.h"
+#include "core/core_settings.h"
 #include "core/shortcuts.h"
 #include "core/click_handler_types.h"
 #include "core/mime_type.h"
@@ -1092,6 +1093,13 @@ ChatWidget::ChatWidget(
 	refreshSuggestPostToggle();
 
 	refreshAboutView();
+
+	if (_peer->isUser() && !_peer->isBot() && !_peer->isSelf()) {
+		Core::App().settings().hideGreetingStickersValue(
+		) | rpl::skip(1) | rpl::on_next([=] {
+			refreshAboutView(true);
+		}, lifetime());
+	}
 
 	if (_topControls) {
 		_topControls->finishAnimating();
@@ -5931,7 +5939,8 @@ void ChatWidget::refreshAboutView(bool force) {
 	}
 	const auto refreshExisting = [&] {
 		const auto was = _aboutView->view();
-		if (_aboutView->refresh()) {
+		if (_aboutView->refresh(
+				Core::App().settings().hideGreetingStickers())) {
 			_inner->aboutViewReplaced(was);
 			_inner->updateSize();
 			_inner->update();
@@ -5952,7 +5961,8 @@ void ChatWidget::refreshAboutView(bool force) {
 			_aboutView->refreshRequests() | rpl::on_next([=] {
 				if (_aboutView) {
 					const auto was = _aboutView->view();
-					if (_aboutView->refresh()) {
+					if (_aboutView->refresh(
+							Core::App().settings().hideGreetingStickers())) {
 						_inner->aboutViewReplaced(was);
 						_inner->updateSize();
 						_inner->update();

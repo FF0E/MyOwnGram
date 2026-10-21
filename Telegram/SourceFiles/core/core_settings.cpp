@@ -51,6 +51,8 @@ constexpr auto kPreviewVoiceMessagesKey
 	= std::string_view("myowngram-preview-voice-messages");
 constexpr auto kPreviewVideoMessagesKey
 	= std::string_view("myowngram-preview-video-messages");
+constexpr auto kHideGreetingStickersKey
+	= std::string_view("myowngram-hide-greeting-stickers");
 
 constexpr auto kActivityPreferences = std::array{
 	std::pair{
@@ -1407,6 +1409,7 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 	_clickTwiceToSendGifs = readPref<bool>(kClickTwiceToSendGifsKey, false);
 	_previewVoiceMessages = readPref<bool>(kPreviewVoiceMessagesKey, false);
 	_previewVideoMessages = readPref<bool>(kPreviewVideoMessagesKey, false);
+	_hideGreetingStickers = readPref<bool>(kHideGreetingStickersKey, false);
 	const auto peerIds = readPrefGeneric(kPeerIdDisplayKey)
 		.value_or(QByteArray()).toInt();
 	switch (PeerIdDisplay(peerIds)) {
@@ -1496,6 +1499,14 @@ void Settings::setPreviewVideoMessages(bool enabled) {
 	}
 	writePref<bool>(kPreviewVideoMessagesKey, enabled);
 	_previewVideoMessages = enabled;
+}
+
+void Settings::setHideGreetingStickers(bool enabled) {
+	if (_hideGreetingStickers.current() == enabled) {
+		return;
+	}
+	writePref<bool>(kHideGreetingStickersKey, enabled);
+	_hideGreetingStickers = enabled;
 }
 
 void Settings::setSendReadMetrics(bool enabled) {
@@ -1990,6 +2001,7 @@ void Settings::resetOnLastLogout() {
 	writePref<bool>(kClickTwiceToSendGifsKey, clickTwiceToSendGifs());
 	writePref<bool>(kPreviewVoiceMessagesKey, previewVoiceMessages());
 	writePref<bool>(kPreviewVideoMessagesKey, previewVideoMessages());
+	writePref<bool>(kHideGreetingStickersKey, hideGreetingStickers());
 	writePref<bool>(kSendReadMetricsKey, sendReadMetrics());
 	writePref<bool>(kSendPremiumPromoAnalyticsKey, sendPremiumPromoAnalytics());
 	writePref<bool>(kConfirmBotLinksKey, confirmBotLinks());

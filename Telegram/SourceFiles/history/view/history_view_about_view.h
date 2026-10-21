@@ -27,7 +27,7 @@ public:
 	[[nodiscard]] HistoryItem *item() const;
 	[[nodiscard]] bool aboveHistory() const;
 
-	bool refresh();
+	bool refresh(bool hideGreetingStickers = false);
 
 	void setDisplayedEmptyOverride(Fn<bool()> value);
 

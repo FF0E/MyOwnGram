@@ -456,6 +456,18 @@ const auto kChatsAndProfiles = BuildHelper({
 			settings->setPreviewVideoMessages(enabled);
 		}, videoPreview->lifetime());
 	}
+	const auto greetingStickers = builder.addButton({
+		.id = u"myowngram/hide-greeting-stickers"_q,
+		.title = tr::lng_myowngram_hide_greeting_stickers(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->hideGreetingStickersValue(),
+		.keywords = { u"greeting"_q, u"stickers"_q, u"empty chat"_q },
+	});
+	if (greetingStickers) {
+		greetingStickers->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setHideGreetingStickers(enabled);
+		}, greetingStickers->lifetime());
+	}
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();

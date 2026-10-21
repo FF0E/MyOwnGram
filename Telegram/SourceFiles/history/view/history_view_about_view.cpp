@@ -729,7 +729,7 @@ bool AboutView::displayedEmpty() const {
 		: _history->isDisplayedEmpty();
 }
 
-bool AboutView::refresh() {
+bool AboutView::refresh(bool hideGreetingStickers) {
 	if (_history->peer->isVerifyCodes()) {
 		if (_item) {
 			return false;
@@ -764,6 +764,8 @@ bool AboutView::refresh() {
 				makeIntro(user);
 			} else if (const auto stars = user->starsPerMessageChecked()) {
 				setItem(makeStarsPerMessage(stars), nullptr);
+			} else if (hideGreetingStickers) {
+				return false;
 			} else {
 				makeIntro(user);
 			}

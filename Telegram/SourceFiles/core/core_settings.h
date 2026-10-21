@@ -1190,6 +1190,14 @@ public:
 	}
 	void setPreviewVideoMessages(bool enabled);
 
+	[[nodiscard]] bool hideGreetingStickers() const {
+		return _hideGreetingStickers.current();
+	}
+	[[nodiscard]] rpl::producer<bool> hideGreetingStickersValue() const {
+		return _hideGreetingStickers.value();
+	}
+	void setHideGreetingStickers(bool enabled);
+
 	void resetOnLastLogout();
 
 private:
@@ -1348,6 +1356,7 @@ private:
 	rpl::variable<bool> _clickTwiceToSendGifs = false;
 	rpl::variable<bool> _previewVoiceMessages = false;
 	rpl::variable<bool> _previewVideoMessages = false;
+	rpl::variable<bool> _hideGreetingStickers = false;
 	rpl::variable<bool> _sendPremiumPromoAnalytics = true;
 	rpl::variable<bool> _confirmBotLinks = false;
 	rpl::variable<bool> _sendDrafts = true;
