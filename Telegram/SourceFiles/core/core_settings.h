@@ -1206,6 +1206,14 @@ public:
 	}
 	void setHideQuickForward(bool enabled);
 
+	[[nodiscard]] bool onlyAddedPacks() const {
+		return _onlyAddedPacks.current();
+	}
+	[[nodiscard]] rpl::producer<bool> onlyAddedPacksValue() const {
+		return _onlyAddedPacks.value();
+	}
+	void setOnlyAddedPacks(bool enabled);
+
 	void resetOnLastLogout();
 
 private:
@@ -1366,6 +1374,7 @@ private:
 	rpl::variable<bool> _previewVideoMessages = false;
 	rpl::variable<bool> _hideGreetingStickers = false;
 	rpl::variable<bool> _hideQuickForward = false;
+	rpl::variable<bool> _onlyAddedPacks = false;
 	rpl::variable<bool> _sendPremiumPromoAnalytics = true;
 	rpl::variable<bool> _confirmBotLinks = false;
 	rpl::variable<bool> _sendDrafts = true;

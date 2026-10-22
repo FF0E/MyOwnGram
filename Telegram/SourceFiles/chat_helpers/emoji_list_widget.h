@@ -303,6 +303,7 @@ private:
 		}
 	};
 
+	[[nodiscard]] bool customSetShown(const CustomSet &set) const;
 	template <typename Callback>
 	bool enumerateSections(Callback callback) const;
 	[[nodiscard]] SectionInfo sectionInfo(int section) const;

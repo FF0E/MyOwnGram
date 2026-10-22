@@ -8844,6 +8844,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_preview_video_messages" = "Preview video messages before sending";
 "lng_myowngram_hide_greeting_stickers" = "Hide greeting stickers";
 "lng_myowngram_hide_quick_forward" = "Hide quick-forward arrows";
+"lng_myowngram_only_added_packs" = "Show only added sticker and emoji packs";
 "lng_myowngram_click_again_sticker" = "Click again to send this sticker.";
 "lng_myowngram_click_again_gif" = "Click again to send this GIF.";
 

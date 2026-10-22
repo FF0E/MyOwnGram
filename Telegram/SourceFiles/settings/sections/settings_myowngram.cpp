@@ -480,6 +480,18 @@ const auto kChatsAndProfiles = BuildHelper({
 			settings->setHideQuickForward(enabled);
 		}, quickForward->lifetime());
 	}
+	const auto addedPacks = builder.addButton({
+		.id = u"myowngram/only-added-packs"_q,
+		.title = tr::lng_myowngram_only_added_packs(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->onlyAddedPacksValue(),
+		.keywords = { u"stickers"_q, u"emoji"_q, u"packs"_q, u"suggestions"_q },
+	});
+	if (addedPacks) {
+		addedPacks->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setOnlyAddedPacks(enabled);
+		}, addedPacks->lifetime());
+	}
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();

@@ -607,6 +607,15 @@ EmojiListWidget::EmojiListWidget(
 		updateSelected();
 	}, lifetime());
 
+	Core::App().settings().onlyAddedPacksValue(
+	) | rpl::skip(1) | rpl::on_next([=] {
+		clearSelection();
+		refreshCustom();
+		resizeToWidth(width());
+		unloadNotSeenCustom(getVisibleTop(), getVisibleBottom());
+		updateSelected();
+	}, lifetime());
+
 	rpl::combine(
 		Data::AmPremiumValue(&session()),
 		session().premiumPossibleValue()
@@ -1617,6 +1626,13 @@ void EmojiListWidget::unloadNotSeenCustom(
 		}
 		return true;
 	});
+	if (!_searchMode && Core::App().settings().onlyAddedPacks()) {
+		for (auto i = 0, count = int(_custom.size()); i != count; ++i) {
+			if (!customSetShown(_custom[i])) {
+				unloadCustomIn({ .section = _staticCount + i });
+			}
+		}
+	}
 }
 
 void EmojiListWidget::unloadAllCustom() {
@@ -1705,6 +1721,17 @@ void EmojiListWidget::beforeHiding() {
 	}
 }
 
+bool EmojiListWidget::customSetShown(const CustomSet &set) const {
+	return !Core::App().settings().onlyAddedPacks()
+		|| (set.id == Data::Stickers::MegagroupSetId)
+		|| (set.id == Data::Stickers::CollectibleSetId)
+		|| (_features.megagroupSet
+			&& _megagroupSet
+			&& set.id == _megagroupSet->mgInfo->emojiSet.id)
+		|| ((set.set->flags & Data::StickersSetFlag::Installed)
+			&& !(set.set->flags & Data::StickersSetFlag::Archived));
+}
+
 template <typename Callback>
 bool EmojiListWidget::enumerateSections(Callback callback) const {
 	Expects(_columnCount > 0);
@@ -1761,6 +1788,9 @@ bool EmojiListWidget::enumerateSections(Callback callback) const {
 	}
 	for (auto &section : _custom) {
 		info.section = i++;
+		if (!customSetShown(section)) {
+			continue;
+		}
 		info.premiumRequired = section.premiumRequired;
 		info.count = int(section.list.size());
 		info.collapsed = !section.expanded
@@ -1790,13 +1820,9 @@ EmojiListWidget::SectionInfo EmojiListWidget::sectionInfo(int section) const {
 EmojiListWidget::SectionInfo EmojiListWidget::sectionInfoByOffset(
 		int yOffset) const {
 	auto result = SectionInfo();
-	const auto count = sectionsCount();
-	enumerateSections([&result, count, yOffset](const SectionInfo &info) {
-		if (yOffset < info.rowsBottom || info.section == count - 1) {
-			result = info;
-			return false;
-		}
-		return true;
+	enumerateSections([&](const SectionInfo &info) {
+		result = info;
+		return (yOffset >= info.rowsBottom);
 	});
 	return result;
 }
@@ -1863,9 +1889,13 @@ int EmojiListWidget::countDesiredHeight(int newWidth) {
 	refreshSearchShortcutsScroll(newWidth);
 
 	const auto countResult = [this](int minimalLastHeight) {
-		const auto info = sectionInfo(sectionsCount() - 1);
-		return info.top
-			+ std::max(info.rowsBottom - info.top, minimalLastHeight);
+		auto last = SectionInfo();
+		enumerateSections([&](const SectionInfo &info) {
+			last = info;
+			return true;
+		});
+		return last.top
+			+ std::max(last.rowsBottom - last.top, minimalLastHeight);
 	};
 	const auto minimalHeight = this->minimalHeight();
 	const auto minimalLastHeight = std::max(
@@ -3855,10 +3885,13 @@ void EmojiListWidget::refreshMegagroupStickers(
 std::vector<StickerIcon> EmojiListWidget::fillIcons() {
 	auto result = std::vector<StickerIcon>();
 	result.reserve(2 + _custom.size());
+	auto shown = _custom | ranges::views::filter([&](const CustomSet &set) {
+		return customSetShown(set);
+	});
 
 	result.emplace_back(RecentEmojiSectionSetId());
 	if (_mode != Mode::Full) {
-	} else if (_custom.empty()) {
+	} else if (ranges::empty(shown)) {
 		using Section = Ui::Emoji::Section;
 		for (auto i = int(Section::People); i <= int(Section::Symbols); ++i) {
 			result.emplace_back(EmojiSectionSetId(Section(i)));
@@ -3867,7 +3900,7 @@ std::vector<StickerIcon> EmojiListWidget::fillIcons() {
 		result.emplace_back(AllEmojiSectionSetId());
 	}
 	const auto esize = StickersListFooter::IconFrameSize();
-	for (const auto &custom : _custom) {
+	for (const auto &custom : shown) {
 		if (custom.id == Data::Stickers::MegagroupSetId) {
 			result.emplace_back(Data::Stickers::MegagroupSetId);
 			result.back().megagroup = _megagroupSet;

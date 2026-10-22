@@ -294,6 +294,13 @@ FieldAutocomplete::FieldAutocomplete(
 		_inner->onParentGeometryChanged();
 	}), lifetime());
 
+	Core::App().settings().onlyAddedPacksValue(
+	) | rpl::skip(1) | rpl::on_next([=] {
+		if (_emoji && !_hiding && !isHidden()) {
+			updateFiltered(false);
+		}
+	}, lifetime());
+
 	_session->topGuestChatBots().updates(
 	) | rpl::on_next([=] {
 		if (_hiding
@@ -464,9 +471,12 @@ bool FieldAutocomplete::clearFilteredBotCommands() {
 FieldAutocomplete::StickerRows FieldAutocomplete::getStickerSuggestions() {
 	const auto data = &_session->data().stickers();
 	const auto list = data->getListByEmoji({ _emoji }, _stickersSeed);
+	const auto onlyAddedPacks = Core::App().settings().onlyAddedPacks();
 	auto result = ranges::views::all(
 		list
-	) | ranges::views::transform([](not_null<DocumentData*> sticker) {
+	) | ranges::views::filter([=](not_null<DocumentData*> sticker) {
+		return !onlyAddedPacks || sticker->isStickerSetInstalled();
+	}) | ranges::views::transform([](not_null<DocumentData*> sticker) {
 		return StickerSuggestion{
 			sticker,
 			sticker->createMediaView()
