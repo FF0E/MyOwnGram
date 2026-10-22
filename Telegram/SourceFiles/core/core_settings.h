@@ -1198,6 +1198,14 @@ public:
 	}
 	void setHideGreetingStickers(bool enabled);
 
+	[[nodiscard]] bool hideQuickForward() const {
+		return _hideQuickForward.current();
+	}
+	[[nodiscard]] rpl::producer<bool> hideQuickForwardValue() const {
+		return _hideQuickForward.value();
+	}
+	void setHideQuickForward(bool enabled);
+
 	void resetOnLastLogout();
 
 private:
@@ -1357,6 +1365,7 @@ private:
 	rpl::variable<bool> _previewVoiceMessages = false;
 	rpl::variable<bool> _previewVideoMessages = false;
 	rpl::variable<bool> _hideGreetingStickers = false;
+	rpl::variable<bool> _hideQuickForward = false;
 	rpl::variable<bool> _sendPremiumPromoAnalytics = true;
 	rpl::variable<bool> _confirmBotLinks = false;
 	rpl::variable<bool> _sendDrafts = true;

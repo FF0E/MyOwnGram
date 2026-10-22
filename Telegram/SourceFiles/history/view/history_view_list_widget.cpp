@@ -662,6 +662,16 @@ ListWidget::ListWidget(
 		}
 	}, lifetime());
 
+	Core::App().settings().hideQuickForwardValue(
+	) | rpl::skip(1) | rpl::on_next([=] {
+		for (const auto &view : _items) {
+			view->setPendingResize();
+		}
+		updateSize();
+		markReadMetricsStale();
+		mouseActionUpdate();
+	}, lifetime());
+
 	_session->downloaderTaskFinished(
 	) | rpl::on_next([=] {
 		update();

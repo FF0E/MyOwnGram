@@ -468,6 +468,18 @@ const auto kChatsAndProfiles = BuildHelper({
 			settings->setHideGreetingStickers(enabled);
 		}, greetingStickers->lifetime());
 	}
+	const auto quickForward = builder.addButton({
+		.id = u"myowngram/hide-quick-forward"_q,
+		.title = tr::lng_myowngram_hide_quick_forward(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->hideQuickForwardValue(),
+		.keywords = { u"forward"_q, u"share"_q, u"arrow"_q, u"button"_q },
+	});
+	if (quickForward) {
+		quickForward->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setHideQuickForward(enabled);
+		}, quickForward->lifetime());
+	}
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();
