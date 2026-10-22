@@ -202,7 +202,12 @@ void StatusLabel::refresh() {
 	const auto mutual = user
 		&& _mutualContactLinkCallback
 		&& (user->flags() & UserDataFlag::MutualContact);
+	_mutualContactWidth = 0;
 	if (mutual) {
+		_mutualContactWidth = st::infoStatusMutualIcon.icon.width()
+			+ st::infoStatusMutualIcon.padding.left()
+			+ st::infoStatusMutualIcon.padding.right()
+			+ _label->st().style.font->spacew;
 		statusText.append(' ').append(Ui::Text::Link(
 			Ui::Text::IconEmoji(&st::infoStatusMutualIcon),
 			3));
@@ -251,6 +256,10 @@ void StatusLabel::setMutualContactLinkCallback(Fn<void()> callback) {
 
 Fn<void()> StatusLabel::mutualContactLinkCallback() const {
 	return _mutualContactLinkCallback;
+}
+
+int StatusLabel::mutualContactWidth() const {
+	return _mutualContactWidth;
 }
 
 void StatusLabel::setMembersLinkCallback(Fn<void()> callback) {

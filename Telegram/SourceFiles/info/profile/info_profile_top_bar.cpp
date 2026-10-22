@@ -2098,6 +2098,7 @@ void TopBar::updateStatusPosition(float64 progressCurrent) {
 		st::infoProfileTopBarStatusTop,
 		progressCurrent) + swapShift;
 	const auto totalElementsWidth = _status->width()
+		- (_statusLabel ? _statusLabel->mutualContactWidth() : 0)
 		+ (_starsRating ? _starsRating->width() : 0)
 		+ (_showLastSeen->toggled() ? _showLastSeen->width() : 0);
 	const auto statusLeft = anim::interpolate(
