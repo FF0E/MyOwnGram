@@ -8848,6 +8848,12 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_click_again_sticker" = "Click again to send this sticker.";
 "lng_myowngram_click_again_gif" = "Click again to send this GIF.";
 
+"lng_myowngram_show_personal_stories" = "Show personal stories";
+"lng_myowngram_show_channel_stories" = "Show channel/group stories";
+"lng_myowngram_show_story_strip" = "Show story strip";
+"lng_myowngram_auto_load_story_feed" = "Automatically load the story feed";
+"lng_myowngram_auto_load_story_feed_about" = "Fetch the story feed and preload its media automatically. Turning this off keeps loaded stories; incoming updates and stories you open can still refresh them.";
+
 "lng_myowngram_mutual_contact_about" = "You've added each other as contacts.";
 
 "lng_myowngram_peer_ids" = "Profile IDs";

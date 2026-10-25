@@ -702,6 +702,11 @@ Widget::Widget(
 	if (_stories) {
 		setupStories();
 	}
+	Core::App().settings().storySettingsValue(
+	) | rpl::skip(1) | rpl::on_next([=] {
+		updateStoriesVisibility();
+		_inner->update();
+	}, lifetime());
 
 	_searchForNarrowLayout->setAccessibleName(tr::lng_dlg_filter(tr::now));
 	_searchForNarrowLayout->setClickedCallback([=] {
@@ -1071,6 +1076,7 @@ void Widget::chosenRow(const ChosenRow &row) {
 		&& row.userpicClick
 		&& (row.message.fullId.msg == ShowAtUnreadMsgId)
 		&& history->peer->hasActiveStories()
+		&& Data::StoriesShown(history->peer->id)
 		&& !history->peer->isSelf()) {
 		controller()->openPeerStories(history->peer->id);
 		return;
@@ -2873,6 +2879,7 @@ void Widget::updateStoriesVisibility() {
 	const auto pulledDown = _scroll->position().overscroll
 		< -st::dialogsFilterSkip;
 	const auto hiddenInstant = _showAnimation
+		|| !Core::App().settings().storySettings().strip
 		|| _openedForum
 		|| _openedCommunity
 		|| (widthAnimation && !suggestionsAnimation)

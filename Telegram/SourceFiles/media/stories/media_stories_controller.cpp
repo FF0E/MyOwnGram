@@ -770,7 +770,8 @@ void Controller::rebuildFromContext(
 			rebuildCachedSourcesList(sources, (i - begin(sources)));
 			_cachedSourcesList[_cachedSourceIndex].shownId = storyId.story;
 			showSiblings(&peer->session());
-			if (int(sources.end() - i) < kPreloadPeersCount) {
+			if (int(_cachedSourcesList.size()) - _cachedSourceIndex
+				< kPreloadPeersCount) {
 				stories.loadMore(list);
 			}
 		}
@@ -884,8 +885,11 @@ void Controller::show(
 			rebuildFromContext(peer, storyId);
 			checkMoveByDelta();
 		}, _contextLifetime);
-	}, [&](Data::StorySourcesList) {
+	}, [&](Data::StorySourcesList list) {
 		subscribeToSource();
+		stories.sourcesChanged(list) | rpl::on_next([=] {
+			rebuildFromContext(peer, storyId);
+		}, _contextLifetime);
 	});
 
 	const auto guard = gsl::finally([&] {
@@ -1631,14 +1635,18 @@ void Controller::rebuildCachedSourcesList(
 	Expects(index >= 0 && index < lists.size());
 
 	const auto currentPeerId = lists[index].id;
+	const auto sourceShown = [&](PeerId id) {
+		return (id == currentPeerId) || Data::StoriesShown(id);
+	};
 
 	// Remove removed.
 	_cachedSourcesList.erase(ranges::remove_if(_cachedSourcesList, [&](
 			CachedSource source) {
-		return !ranges::contains(
-			lists,
-			source.peerId,
-			&Data::StoriesSourceInfo::id);
+		return !sourceShown(source.peerId)
+			|| !ranges::contains(
+				lists,
+				source.peerId,
+				&Data::StoriesSourceInfo::id);
 	}), end(_cachedSourcesList));
 
 	// Find current, full rebuild if can't find.
@@ -1655,9 +1663,10 @@ void Controller::rebuildCachedSourcesList(
 	if (_cachedSourcesList.empty()) {
 		// Full rebuild.
 		const auto predicate = [&](const Data::StoriesSourceInfo &info) {
-			return !_showingUnreadSources
-				|| (info.unreadCount > 0)
-				|| (info.id == currentPeerId);
+			return sourceShown(info.id)
+				&& (!_showingUnreadSources
+					|| (info.unreadCount > 0)
+					|| (info.id == currentPeerId));
 		};
 		const auto mapper = [](const Data::StoriesSourceInfo &info) {
 			return CachedSource{ info.id };
@@ -1682,7 +1691,8 @@ void Controller::rebuildCachedSourcesList(
 		// All that go before the current push to front.
 		for (auto before = index; before > 0;) {
 			const auto &info = lists[--before];
-			if (_showingUnreadSources && !info.unreadCount) {
+			if (!sourceShown(info.id)
+				|| (_showingUnreadSources && !info.unreadCount)) {
 				continue;
 			} else if (!ranges::contains(
 					_cachedSourcesList,
@@ -1699,7 +1709,8 @@ void Controller::rebuildCachedSourcesList(
 			; after != count
 			; ++after) {
 			const auto &info = lists[after];
-			if (_showingUnreadSources && !info.unreadCount) {
+			if (!sourceShown(info.id)
+				|| (_showingUnreadSources && !info.unreadCount)) {
 				continue;
 			} else if (!ranges::contains(
 					_cachedSourcesList,

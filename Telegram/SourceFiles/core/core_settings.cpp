@@ -58,6 +58,25 @@ constexpr auto kHideQuickForwardKey
 constexpr auto kOnlyAddedPacksKey
 	= std::string_view("myowngram-only-added-packs");
 
+constexpr auto kStoryPreferences = std::array{
+	std::pair{
+		&StorySettings::personal,
+		std::string_view("myowngram-show-personal-stories"),
+	},
+	std::pair{
+		&StorySettings::channels,
+		std::string_view("myowngram-show-channel-stories"),
+	},
+	std::pair{
+		&StorySettings::strip,
+		std::string_view("myowngram-show-story-strip"),
+	},
+	std::pair{
+		&StorySettings::autoLoad,
+		std::string_view("myowngram-auto-load-story-feed"),
+	},
+};
+
 constexpr auto kActivityPreferences = std::array{
 	std::pair{
 		&ActivitySettings::online,
@@ -1405,6 +1424,11 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 		activity.*flag = readPref<bool>(key, true);
 	}
 	_activitySettings = activity;
+	auto stories = StorySettings();
+	for (const auto &[flag, key] : kStoryPreferences) {
+		stories.*flag = readPref<bool>(key, true);
+	}
+	_storySettings = stories;
 	_showMessageIdInTooltip = readPref<bool>(kShowMessageIdInTooltipKey, false);
 	_showMessageSeconds = readPref<bool>(kShowMessageSecondsKey, false);
 	_clickTwiceToSendStickers = readPref<bool>(
@@ -1569,6 +1593,19 @@ void Settings::setReceiveDrafts(bool enabled) {
 	}
 	writePref<bool>(kReceiveDraftsKey, enabled);
 	_receiveDrafts = enabled;
+}
+
+void Settings::setStorySettings(StorySettings value) {
+	const auto current = _storySettings.current();
+	if (current == value) {
+		return;
+	}
+	for (const auto &[flag, key] : kStoryPreferences) {
+		if (current.*flag != value.*flag) {
+			writePref<bool>(key, value.*flag);
+		}
+	}
+	_storySettings = value;
 }
 
 void Settings::setActivitySettings(ActivitySettings value) {
@@ -2033,6 +2070,9 @@ void Settings::resetOnLastLogout() {
 	writePref<bool>(kReceiveDraftsKey, receiveDrafts());
 	for (const auto &[flag, key] : kActivityPreferences) {
 		writePref<bool>(key, activitySettings().*flag);
+	}
+	for (const auto &[flag, key] : kStoryPreferences) {
+		writePref<bool>(key, storySettings().*flag);
 	}
 	if (!ads.isEmpty()) {
 		writePref<QByteArray>(kAdSettingsKey, ads);

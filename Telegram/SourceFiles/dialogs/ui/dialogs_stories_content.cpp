@@ -57,13 +57,16 @@ State::State(not_null<Data::Stories*> data, Data::StorySourcesList list)
 
 Content State::next() {
 	const auto &sources = _data->sources(_list);
-	auto result = Content{ .total = int(sources.size()) };
+	auto result = Content();
 	result.elements.reserve(sources.size());
 	auto userpics = base::flat_map<
 		not_null<PeerData*>,
 		std::shared_ptr<Ui::DynamicImage>>();
 	userpics.reserve(sources.size());
 	for (const auto &info : sources) {
+		if (!Data::StoriesShown(info.id)) {
+			continue;
+		}
 		const auto source = _data->source(info.id);
 		Assert(source != nullptr);
 
@@ -86,6 +89,7 @@ Content State::next() {
 		});
 	}
 	_userpics = std::move(userpics);
+	result.total = int(result.elements.size());
 	return result;
 }
 

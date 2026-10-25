@@ -1383,6 +1383,12 @@ void TopBar::setupUserpicButton(
 				| Data::PeerUpdate::Flag::FullInfo) | rpl::to_empty
 	) | rpl::on_next(invalidate, lifetime());
 
+	Data::StoriesShownValue(
+		_peer->id
+	) | rpl::skip(1) | rpl::on_next([=] {
+		Ui::PostponeCall(this, invalidate);
+	}, lifetime());
+
 	if (const auto broadcast = _peer->monoforumBroadcast()) {
 		_peer->session().changes().peerFlagsValue(
 			broadcast,
@@ -3760,8 +3766,8 @@ void TopBar::setupStoryOutline(const QRect &geometry) {
 	rpl::combine(
 		_edgeColor.value(),
 		rpl::merge(
-			rpl::single(rpl::empty_value()),
 			style::PaletteChanged(),
+			Data::StoriesShownValue(_peer->id) | rpl::to_empty,
 			_peer->session().changes().peerUpdates(
 				Data::PeerUpdate::Flag::StoriesState
 					| Data::PeerUpdate::Flag::ColorProfile
@@ -3800,12 +3806,13 @@ void TopBar::updateStoryOutline(std::optional<QColor> edgeColor) {
 		return;
 	}
 
+	const auto shown = Data::StoriesShown(_peer->id);
 	const auto hasActiveStories = (_source == Source::Preview)
 		? true
-		: (user ? user->hasActiveStories() : channel->hasActiveStories());
+		: (shown && _peer->hasActiveStories());
 	const auto hasLiveStories = (_source == Source::Preview)
 		? false
-		: (user ? user->hasActiveVideoStream() : false);
+		: (shown && user && user->hasActiveVideoStream());
 
 	if (_hasStories != hasActiveStories
 		|| _hasLiveStories != hasLiveStories) {

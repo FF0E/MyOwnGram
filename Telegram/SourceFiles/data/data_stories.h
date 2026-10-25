@@ -27,6 +27,9 @@ class Show;
 
 namespace Data {
 
+[[nodiscard]] bool StoriesShown(PeerId peerId);
+[[nodiscard]] rpl::producer<bool> StoriesShownValue(PeerId peerId);
+
 inline constexpr auto kStoriesAlbumIdSaved = 0;
 inline constexpr auto kStoriesAlbumIdArchive = -1;
 
@@ -381,6 +384,7 @@ private:
 	[[nodiscard]] FullStoryId nextPreloadId() const;
 	void startPreloading(not_null<Story*> story);
 	void preloadFinished(FullStoryId id, bool markAsPreloaded = false);
+	void refreshFeedLoading(bool enabled);
 	void preloadListsMore();
 
 	void notifySourcesChanged(StorySourcesList list);

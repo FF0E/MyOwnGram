@@ -15,6 +15,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_saved_messages.h"
 #include "data/data_saved_sublist.h"
 #include "data/data_session.h"
+#include "data/data_stories.h"
 #include "data/data_stories_ids.h"
 #include "data/data_user.h"
 #include "data/stickers/data_custom_emoji.h"
@@ -86,14 +87,20 @@ namespace {
 		not_null<Window::SessionNavigation*> navigation,
 		not_null<PeerData*> peer,
 		Ui::MultiSlideTracker &tracker) {
-	auto count = rpl::single(0) | rpl::then(Data::AlbumStoriesIds(
-		peer,
-		0, // = Data::kStoriesAlbumIdSaved
-		ServerMaxStoryId - 1,
-		0
-	) | rpl::map([](const Data::StoriesIdsSlice &slice) {
-		return slice.fullCount().value_or(0);
-	}));
+	auto count = Data::StoriesShownValue(peer->id) | rpl::map([=](bool shown)
+			-> rpl::producer<int> {
+		if (!shown) {
+			return rpl::single(0);
+		}
+		return rpl::single(0) | rpl::then(Data::AlbumStoriesIds(
+			peer,
+			0, // = Data::kStoriesAlbumIdSaved
+			ServerMaxStoryId - 1,
+			0
+		) | rpl::map([](const Data::StoriesIdsSlice &slice) {
+			return slice.fullCount().value_or(0);
+		}));
+	}) | rpl::flatten_latest();
 	const auto phrase = peer->isChannel() ? (+[](int count) {
 		return tr::lng_profile_posts(tr::now, lt_count, count);
 	}) : (+[](int count) {

@@ -227,6 +227,60 @@ void AddActivityToggles(SectionBuilder &builder) {
 	}
 }
 
+void AddStoryToggles(SectionBuilder &builder) {
+	struct Row {
+		bool Core::StorySettings::*flag = nullptr;
+		const tr::phrase<> *title = nullptr;
+		QString id;
+		const tr::phrase<> *about = nullptr;
+	};
+	const auto rows = std::array{
+		Row{
+			&Core::StorySettings::personal,
+			&tr::lng_myowngram_show_personal_stories,
+			u"personal"_q,
+		},
+		Row{
+			&Core::StorySettings::channels,
+			&tr::lng_myowngram_show_channel_stories,
+			u"channels"_q,
+		},
+		Row{
+			&Core::StorySettings::strip,
+			&tr::lng_myowngram_show_story_strip,
+			u"strip"_q,
+		},
+		Row{
+			&Core::StorySettings::autoLoad,
+			&tr::lng_myowngram_auto_load_story_feed,
+			u"auto-load"_q,
+			&tr::lng_myowngram_auto_load_story_feed_about,
+		},
+	};
+	const auto settings = &Core::App().settings();
+	for (const auto &row : rows) {
+		const auto flag = row.flag;
+		const auto button = builder.addButton({
+			.id = u"myowngram/stories/"_q + row.id,
+			.title = (*row.title)(),
+			.description = row.about ? (*row.about)() : nullptr,
+			.st = &st::settingsButtonNoIcon,
+			.toggled = settings->storySettingsValue()
+				| rpl::map([=](Core::StorySettings value) {
+					return value.*flag;
+				}) | rpl::distinct_until_changed(),
+			.keywords = { u"stories"_q, u"feed"_q, u"live"_q },
+		});
+		if (button) {
+			button->toggledValue() | rpl::on_next([=](bool enabled) {
+				auto value = settings->storySettings();
+				value.*flag = enabled;
+				settings->setStorySettings(value);
+			}, button->lifetime());
+		}
+	}
+}
+
 void ConfirmClearCloudDrafts(not_null<Window::SessionController*> controller) {
 	controller->show(Ui::MakeConfirmBox({
 		.text = tr::lng_myowngram_clear_cloud_drafts_sure(),
@@ -497,6 +551,11 @@ const auto kChatsAndProfiles = BuildHelper({
 	builder.addSkip();
 	builder.addSubsectionTitle(tr::lng_myowngram_profiles_title());
 	AddPeerIdSelector(builder);
+	builder.addSkip();
+	builder.addDivider();
+	builder.addSkip();
+	builder.addSubsectionTitle(tr::lng_media_type_stories());
+	AddStoryToggles(builder);
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();

@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/unixtime.h"
 #include "apiwrap.h"
 #include "core/application.h"
+#include "core/core_settings.h"
 #include "data/components/top_peers.h"
 #include "data/data_changes.h"
 #include "data/data_channel.h"
@@ -144,6 +145,18 @@ bool RemoveUnsorted(std::vector<StoryId> &list, StoryId id) {
 
 } // namespace
 
+bool StoriesShown(PeerId peerId) {
+	const auto settings = Core::App().settings().storySettings();
+	return peerIsUser(peerId) ? settings.personal : settings.channels;
+}
+
+rpl::producer<bool> StoriesShownValue(PeerId peerId) {
+	return Core::App().settings().storySettingsValue()
+		| rpl::map([=](Core::StorySettings settings) {
+			return peerIsUser(peerId) ? settings.personal : settings.channels;
+		}) | rpl::distinct_until_changed();
+}
+
 std::vector<StoryId> RespectingPinned(const StoriesIds &ids) {
 	if (ids.pinnedToTop.empty()) {
 		return ids.list;
@@ -191,6 +204,25 @@ Stories::Stories(not_null<Session*> owner)
 , _pollingTimer([=] { sendPollingRequests(); })
 , _pollingViewsTimer([=] { sendPollingViewsRequests(); }) {
 	crl::on_main(this, [=] {
+		Core::App().settings().storySettingsValue(
+		) | rpl::map([](Core::StorySettings settings) {
+			return std::pair(settings.personal, settings.channels);
+		}) | rpl::distinct_until_changed() | rpl::skip(1) | rpl::on_next([=] {
+			rebuildPreloadSources(StorySourcesList::NotHidden);
+			rebuildPreloadSources(StorySourcesList::Hidden);
+			continuePreloading();
+			notifySourcesChanged(StorySourcesList::NotHidden);
+			notifySourcesChanged(StorySourcesList::Hidden);
+			preloadListsMore();
+		}, _lifetime);
+
+		Core::App().settings().storySettingsValue(
+		) | rpl::map(&Core::StorySettings::autoLoad
+		) | rpl::distinct_until_changed() | rpl::skip(1) | rpl::on_next([=](
+				bool enabled) {
+			refreshFeedLoading(enabled);
+		}, _lifetime);
+
 		session().changes().peerUpdates(
 			Data::PeerUpdate::Flag::Rights
 		) | rpl::on_next([=](const Data::PeerUpdate &update) {
@@ -252,7 +284,9 @@ void Stories::apply(const MTPDupdateStory &data) {
 	}
 	const auto i = _all.find(peerId);
 	if (i == end(_all)) {
-		requestPeerStories(peer);
+		if (Core::App().settings().storySettings().autoLoad) {
+			requestPeerStories(peer);
+		}
 		return;
 	} else if (i->second.ids.contains(idDates)) {
 		return;
@@ -719,7 +753,11 @@ void Stories::savedStateChanged(not_null<Story*> story) {
 
 void Stories::loadMore(StorySourcesList list) {
 	const auto index = static_cast<int>(list);
-	if (_loadMoreRequestId[index] || _sourcesLoaded[index]) {
+	const auto settings = Core::App().settings().storySettings();
+	if (_loadMoreRequestId[index]
+		|| _sourcesLoaded[index]
+		|| !settings.autoLoad
+		|| (!settings.personal && !settings.channels)) {
 		return;
 	}
 	const auto hidden = (list == StorySourcesList::Hidden);
@@ -732,8 +770,6 @@ void Stories::loadMore(StorySourcesList list) {
 				: (Flag::f_next | Flag::f_state))),
 		MTP_string(_sourcesStates[index])
 	)).done([=](const MTPstories_AllStories &result) {
-		_loadMoreRequestId[index] = 0;
-
 		result.match([&](const MTPDstories_allStories &data) {
 			_owner->processUsers(data.vusers());
 			_owner->processChats(data.vchats());
@@ -742,7 +778,10 @@ void Stories::loadMore(StorySourcesList list) {
 			for (const auto &single : data.vpeer_stories().v) {
 				parseAndApply(single, ParseSource::MyStrip);
 			}
-		}, [](const MTPDstories_allStoriesNotModified &) {
+			_loadMoreRequestId[index] = 0;
+			notifySourcesChanged(list);
+		}, [&](const MTPDstories_allStoriesNotModified &) {
+			_loadMoreRequestId[index] = 0;
 		});
 
 		result.match([&](const auto &data) {
@@ -755,8 +794,30 @@ void Stories::loadMore(StorySourcesList list) {
 	}).send();
 }
 
+void Stories::refreshFeedLoading(bool enabled) {
+	for (const auto list : {
+		StorySourcesList::NotHidden,
+		StorySourcesList::Hidden }) {
+		const auto index = static_cast<int>(list);
+		if (enabled) {
+			_sourcesLoaded[index] = false;
+			_sourcesStates[index].clear();
+		} else {
+			session().api().request(
+				base::take(_loadMoreRequestId[index])).cancel();
+		}
+	}
+	rebuildPreloadSources(StorySourcesList::NotHidden);
+	rebuildPreloadSources(StorySourcesList::Hidden);
+	continuePreloading();
+	if (enabled) {
+		preloadListsMore();
+	}
+}
+
 void Stories::preloadListsMore() {
-	if (_loadMoreRequestId[static_cast<int>(StorySourcesList::NotHidden)]
+	if (!Core::App().settings().storySettings().autoLoad
+		|| _loadMoreRequestId[static_cast<int>(StorySourcesList::NotHidden)]
 		|| _loadMoreRequestId[static_cast<int>(StorySourcesList::Hidden)]) {
 		return;
 	}
@@ -765,7 +826,11 @@ void Stories::preloadListsMore() {
 	};
 	const auto countLoaded = [&](StorySourcesList list) {
 		const auto index = static_cast<int>(list);
-		return _sourcesLoaded[index] || !_sourcesStates[index].isEmpty();
+		return _sourcesLoaded[index]
+			|| (!_sourcesStates[index].isEmpty()
+				&& ranges::any_of(sources(list), [](const StoriesSourceInfo &info) {
+					return StoriesShown(info.id);
+				}));
 	};
 	const auto selfId = _owner->session().userPeerId();
 	constexpr auto archive = kStoriesAlbumIdArchive;
@@ -776,7 +841,7 @@ void Stories::preloadListsMore() {
 		loadMore(StorySourcesList::NotHidden);
 	} else if (!countLoaded(StorySourcesList::Hidden)) {
 		loadMore(StorySourcesList::Hidden);
-	} else if (!albumIdsCountKnown(selfId, archive)) {
+	} else if (StoriesShown(selfId) && !albumIdsCountKnown(selfId, archive)) {
 		albumIdsLoadMore(selfId, archive);
 	}
 }
@@ -790,7 +855,12 @@ void Stories::notifySourcesChanged(StorySourcesList list) {
 
 void Stories::pushHiddenCountsToFolder() {
 	const auto &list = sources(StorySourcesList::Hidden);
-	if (list.empty()) {
+	const auto count = int(ranges::count_if(
+		list,
+		[](const StoriesSourceInfo &info) {
+			return StoriesShown(info.id);
+		}));
+	if (!count) {
 		if (_folderForHidden) {
 			_folderForHidden->updateStoriesCount(0, 0);
 		}
@@ -799,10 +869,11 @@ void Stories::pushHiddenCountsToFolder() {
 	if (!_folderForHidden) {
 		_folderForHidden = _owner->folder(Folder::kId);
 	}
-	const auto count = int(list.size());
 	const auto unread = ranges::count_if(
 		list,
-		[](const StoriesSourceInfo &info) { return info.unreadCount > 0; });
+		[](const StoriesSourceInfo &info) {
+			return StoriesShown(info.id) && info.unreadCount > 0;
+		});
 	_folderForHidden->updateStoriesCount(count, unread);
 }
 
@@ -2542,12 +2613,15 @@ bool Stories::rebuildPreloadSources(StorySourcesList list) {
 	const auto &counter = (list == StorySourcesList::Hidden)
 		? _preloadingHiddenSourcesCounter
 		: _preloadingMainSourcesCounter;
-	if (!counter) {
+	if (!counter || !Core::App().settings().storySettings().autoLoad) {
 		return !base::take(_toPreloadSources[index]).empty();
 	}
 	auto now = std::vector<FullStoryId>();
 	auto processed = 0;
 	for (const auto &source : _sources[index]) {
+		if (!StoriesShown(source.id)) {
+			continue;
+		}
 		const auto i = _all.find(source.id);
 		if (i != end(_all)) {
 			if (const auto id = i->second.toOpen().id) {

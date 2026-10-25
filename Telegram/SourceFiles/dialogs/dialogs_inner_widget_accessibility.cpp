@@ -519,7 +519,7 @@ QString SubItemValue(
 		return {};
 	}
 	case SubItem::Stories: {
-		if (peer->hasActiveStories()) {
+		if (peer->hasActiveStories() && Data::StoriesShown(peer->id)) {
 			if (peer->hasUnreadStories()) {
 				const auto source = peer->owner().stories().source(
 					peer->id);

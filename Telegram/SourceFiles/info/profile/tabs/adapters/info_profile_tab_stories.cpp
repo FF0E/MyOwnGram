@@ -23,14 +23,20 @@ namespace {
 
 [[nodiscard]] rpl::producer<int> StoriesCountValue(
 		not_null<PeerData*> peer) {
-	return rpl::single(0) | rpl::then(Data::AlbumStoriesIds(
-		peer,
-		Data::kStoriesAlbumIdSaved,
-		ServerMaxStoryId - 1,
-		0
-	) | rpl::map([](const Data::StoriesIdsSlice &slice) {
-		return slice.fullCount().value_or(0);
-	}));
+	return Data::StoriesShownValue(peer->id) | rpl::map([=](bool shown)
+			-> rpl::producer<int> {
+		if (!shown) {
+			return rpl::single(0);
+		}
+		return rpl::single(0) | rpl::then(Data::AlbumStoriesIds(
+			peer,
+			Data::kStoriesAlbumIdSaved,
+			ServerMaxStoryId - 1,
+			0
+		) | rpl::map([](const Data::StoriesIdsSlice &slice) {
+			return slice.fullCount().value_or(0);
+		}));
+	}) | rpl::flatten_latest();
 }
 
 class StoriesSubController final : public AbstractController {

@@ -94,6 +94,7 @@ List::~List() = default;
 
 void List::showContent(Content &&content) {
 	if (_content == content) {
+		checkLoadMore();
 		return;
 	}
 	if (content.elements.empty()) {
@@ -101,6 +102,7 @@ void List::showContent(Content &&content) {
 		_data = {};
 		_empty = true;
 		validateTitle();
+		updateScrollMax();
 		return;
 	}
 	const auto wasCount = int(_data.items.size());
@@ -907,7 +909,8 @@ void List::checkDragging() {
 }
 
 void List::checkLoadMore() {
-	if (_scrollLeftMax - _scrollLeft < width() * kPreloadPages) {
+	if (_data.items.empty()
+		|| _scrollLeftMax - _scrollLeft < width() * kPreloadPages) {
 		_loadMoreRequests.fire({});
 	}
 }

@@ -664,7 +664,7 @@ bool PeerListStories::handleClick(not_null<PeerData*> peer) {
 	if (point && point->x() < st.photoPosition.x() + st.photoSize) {
 		if (const auto window = peer->session().tryResolveWindow()) {
 			if (const auto user = peer->asUser()) {
-				if (user->hasActiveStories()) {
+				if (user->hasActiveStories() && Data::StoriesShown(user->id)) {
 					window->openPeerStories(peer->id);
 					return true;
 				}
@@ -681,6 +681,17 @@ void PeerListStories::prepare(not_null<PeerListDelegate*> delegate) {
 	style::PaletteChanged() | rpl::on_next([=] {
 		_unreadBrush = PeerListStoriesGradient(_controller->computeListSt());
 		updateColors();
+	}, _lifetime);
+
+	Data::StoriesShownValue(
+		_session->userPeerId()
+	) | rpl::skip(1) | rpl::on_next([=] {
+		for (const auto &[id, counts] : _counts) {
+			if (const auto row = _delegate->peerListFindRow(id)) {
+				process(row);
+				_delegate->peerListUpdateRow(row);
+			}
+		}
 	}, _lifetime);
 
 	_session->changes().peerUpdates(
@@ -710,6 +721,9 @@ void PeerListStories::applyForRow(
 		not_null<PeerListRow*> row,
 		Counts counts,
 		bool force) {
+	if (!Data::StoriesShown(row->peer()->id)) {
+		counts = { 0, 0, false };
+	}
 	auto &existing = _counts[row->id()];
 	if (!force && existing == counts) {
 		return;

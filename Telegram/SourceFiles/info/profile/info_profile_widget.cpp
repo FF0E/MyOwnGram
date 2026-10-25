@@ -19,6 +19,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_channel.h"
 #include "data/data_forum_topic.h"
 #include "data/data_saved_sublist.h"
+#include "data/data_stories.h"
 #include "data/data_user.h"
 #include "lang/lang_keys.h"
 #include "info/info_controller.h"
@@ -358,7 +359,12 @@ rpl::producer<QString> Widget::title() {
 rpl::producer<Dialogs::Stories::Content> Widget::titleStories() {
 	const auto peer = controller()->key().peer();
 	if (peer && !peer->isChat()) {
-		return Dialogs::Stories::LastForPeer(peer);
+		return Data::StoriesShownValue(peer->id) | rpl::map([=](bool shown)
+				-> rpl::producer<Dialogs::Stories::Content> {
+			return shown
+				? Dialogs::Stories::LastForPeer(peer)
+				: rpl::single(Dialogs::Stories::Content());
+		}) | rpl::flatten_latest();
 	}
 	return nullptr;
 }

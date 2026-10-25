@@ -47,6 +47,15 @@ enum class PeerIdDisplay {
 	BotApi,
 };
 
+struct StorySettings {
+	bool personal = true;
+	bool channels = true;
+	bool strip = true;
+	bool autoLoad = true;
+
+	friend constexpr bool operator==(StorySettings, StorySettings) = default;
+};
+
 struct ActivitySettings {
 	bool online = true;
 	bool typing = true;
@@ -1126,6 +1135,14 @@ public:
 	}
 	void setReceiveDrafts(bool enabled);
 
+	[[nodiscard]] StorySettings storySettings() const {
+		return _storySettings.current();
+	}
+	[[nodiscard]] rpl::producer<StorySettings> storySettingsValue() const {
+		return _storySettings.value();
+	}
+	void setStorySettings(StorySettings value);
+
 	[[nodiscard]] ActivitySettings activitySettings() const {
 		return _activitySettings.current();
 	}
@@ -1380,6 +1397,7 @@ private:
 	rpl::variable<bool> _sendDrafts = true;
 	rpl::variable<bool> _receiveDrafts = true;
 	rpl::variable<ActivitySettings> _activitySettings;
+	rpl::variable<StorySettings> _storySettings;
 
 	bool _tabbedReplacedWithInfo = false; // per-window
 	rpl::event_stream<bool> _tabbedReplacedWithInfoValue; // per-window
