@@ -669,6 +669,7 @@ public:
 	[[nodiscard]] virtual bool isSignedAuthorElided() const;
 
 	[[nodiscard]] virtual bool updateBottomInfo();
+	void refreshReactions();
 	virtual void itemDataChanged();
 	void itemTextUpdated();
 	void blockquoteExpandChanged();
@@ -794,7 +795,6 @@ protected:
 	void checkSpecialOnlyEmoji();
 
 	void setupReactions(Element *replacing);
-	void refreshReactions();
 	bool updateReactions();
 
 	std::unique_ptr<Reactions::InlineList> _reactions;

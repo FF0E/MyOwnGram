@@ -227,6 +227,52 @@ void AddActivityToggles(SectionBuilder &builder) {
 	}
 }
 
+void AddReactionToggles(SectionBuilder &builder) {
+	struct Row {
+		bool Core::ReactionSettings::*flag = nullptr;
+		const tr::phrase<> *title = nullptr;
+		QString id;
+	};
+	const auto rows = std::array{
+		Row{
+			&Core::ReactionSettings::personal,
+			&tr::lng_myowngram_show_personal_reactions,
+			u"personal"_q,
+		},
+		Row{
+			&Core::ReactionSettings::groups,
+			&tr::lng_myowngram_show_group_reactions,
+			u"groups"_q,
+		},
+		Row{
+			&Core::ReactionSettings::channels,
+			&tr::lng_myowngram_show_channel_reactions,
+			u"channels"_q,
+		},
+	};
+	const auto settings = &Core::App().settings();
+	for (const auto &row : rows) {
+		const auto flag = row.flag;
+		const auto button = builder.addButton({
+			.id = u"myowngram/reactions/"_q + row.id,
+			.title = (*row.title)(),
+			.st = &st::settingsButtonNoIcon,
+			.toggled = settings->reactionSettingsValue()
+				| rpl::map([=](Core::ReactionSettings value) {
+					return value.*flag;
+				}) | rpl::distinct_until_changed(),
+			.keywords = { u"reactions"_q, u"emoji"_q, u"counts"_q },
+		});
+		if (button) {
+			button->toggledValue() | rpl::on_next([=](bool enabled) {
+				auto value = settings->reactionSettings();
+				value.*flag = enabled;
+				settings->setReactionSettings(value);
+			}, button->lifetime());
+		}
+	}
+}
+
 void AddStoryToggles(SectionBuilder &builder) {
 	struct Row {
 		bool Core::StorySettings::*flag = nullptr;
@@ -546,6 +592,11 @@ const auto kChatsAndProfiles = BuildHelper({
 			settings->setOnlyAddedPacks(enabled);
 		}, addedPacks->lifetime());
 	}
+	builder.addSkip();
+	builder.addDivider();
+	builder.addSkip();
+	builder.addSubsectionTitle(tr::lng_notification_reactions());
+	AddReactionToggles(builder);
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();

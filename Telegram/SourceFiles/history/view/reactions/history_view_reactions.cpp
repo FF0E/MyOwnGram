@@ -13,6 +13,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_cursor_state.h"
 #include "history/view/history_view_group_call_bar.h"
 #include "core/click_handler_types.h"
+#include "core/core_application.h"
+#include "core/core_settings.h"
 #include "data/stickers/data_custom_emoji.h"
 #include "data/data_channel.h"
 #include "data/data_chat.h"
@@ -910,9 +912,25 @@ void InlineList::continueAnimations(base::flat_map<
 	}
 }
 
+bool ShownForMessage(not_null<const HistoryItem*> item) {
+	if (item->reactionsAreTags()) {
+		return true;
+	}
+	const auto peer = item->history()->peer;
+	const auto settings = Core::App().settings().reactionSettings();
+	return peer->isUser()
+		? settings.personal
+		: peer->isBroadcast()
+		? settings.channels
+		: settings.groups;
+}
+
 InlineListData InlineListDataFromMessage(not_null<Element*> view) {
 	using Flag = InlineListData::Flag;
 	const auto item = view->data();
+	if (!ShownForMessage(item)) {
+		return {};
+	}
 	auto result = InlineListData();
 	result.reactions = item->reactionsWithLocal();
 

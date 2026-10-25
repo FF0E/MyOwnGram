@@ -58,6 +58,21 @@ constexpr auto kHideQuickForwardKey
 constexpr auto kOnlyAddedPacksKey
 	= std::string_view("myowngram-only-added-packs");
 
+constexpr auto kReactionPreferences = std::array{
+	std::pair{
+		&ReactionSettings::personal,
+		std::string_view("myowngram-show-personal-reactions"),
+	},
+	std::pair{
+		&ReactionSettings::groups,
+		std::string_view("myowngram-show-group-reactions"),
+	},
+	std::pair{
+		&ReactionSettings::channels,
+		std::string_view("myowngram-show-channel-reactions"),
+	},
+};
+
 constexpr auto kStoryPreferences = std::array{
 	std::pair{
 		&StorySettings::personal,
@@ -1424,6 +1439,11 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 		activity.*flag = readPref<bool>(key, true);
 	}
 	_activitySettings = activity;
+	auto reactions = ReactionSettings();
+	for (const auto &[flag, key] : kReactionPreferences) {
+		reactions.*flag = readPref<bool>(key, true);
+	}
+	_reactionSettings = reactions;
 	auto stories = StorySettings();
 	for (const auto &[flag, key] : kStoryPreferences) {
 		stories.*flag = readPref<bool>(key, true);
@@ -1593,6 +1613,19 @@ void Settings::setReceiveDrafts(bool enabled) {
 	}
 	writePref<bool>(kReceiveDraftsKey, enabled);
 	_receiveDrafts = enabled;
+}
+
+void Settings::setReactionSettings(ReactionSettings value) {
+	const auto current = _reactionSettings.current();
+	if (current == value) {
+		return;
+	}
+	for (const auto &[flag, key] : kReactionPreferences) {
+		if (current.*flag != value.*flag) {
+			writePref<bool>(key, value.*flag);
+		}
+	}
+	_reactionSettings = value;
 }
 
 void Settings::setStorySettings(StorySettings value) {
@@ -2070,6 +2103,9 @@ void Settings::resetOnLastLogout() {
 	writePref<bool>(kReceiveDraftsKey, receiveDrafts());
 	for (const auto &[flag, key] : kActivityPreferences) {
 		writePref<bool>(key, activitySettings().*flag);
+	}
+	for (const auto &[flag, key] : kReactionPreferences) {
+		writePref<bool>(key, reactionSettings().*flag);
 	}
 	for (const auto &[flag, key] : kStoryPreferences) {
 		writePref<bool>(key, storySettings().*flag);

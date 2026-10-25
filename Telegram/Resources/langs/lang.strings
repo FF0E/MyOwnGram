@@ -8848,6 +8848,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_click_again_sticker" = "Click again to send this sticker.";
 "lng_myowngram_click_again_gif" = "Click again to send this GIF.";
 
+"lng_myowngram_show_personal_reactions" = "Show reactions in personal chats";
+"lng_myowngram_show_group_reactions" = "Show reactions in groups";
+"lng_myowngram_show_channel_reactions" = "Show reactions in channels";
+
 "lng_myowngram_show_personal_stories" = "Show personal stories";
 "lng_myowngram_show_channel_stories" = "Show channel/group stories";
 "lng_myowngram_show_story_strip" = "Show story strip";

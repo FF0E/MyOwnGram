@@ -662,6 +662,17 @@ ListWidget::ListWidget(
 		}
 	}, lifetime());
 
+	Core::App().settings().reactionSettingsValue(
+	) | rpl::skip(1) | rpl::on_next([=] {
+		for (const auto &view : _items) {
+			view->refreshReactions();
+			view->setPendingResize();
+		}
+		updateSize();
+		markReadMetricsStale();
+		mouseActionUpdate();
+	}, lifetime());
+
 	Core::App().settings().hideQuickForwardValue(
 	) | rpl::skip(1) | rpl::on_next([=] {
 		for (const auto &view : _items) {
@@ -3156,6 +3167,7 @@ void ListWidget::paintEvent(QPaintEvent *e) {
 
 		const auto view = *i;
 		const auto item = view->data();
+		const auto reactionsShown = Reactions::ShownForMessage(item);
 		const auto height = view->height();
 		if (!sendingAnimation
 			|| !sendingAnimation->hasAnimatedMessage(item)) {
@@ -3189,7 +3201,9 @@ void ListWidget::paintEvent(QPaintEvent *e) {
 			&& (isSponsored
 				? view->markSponsoredViewed(_visibleBottom - top)
 				: withReaction
-				? yShown(top + context.reactionInfo->position.y())
+				? yShown(top + (reactionsShown
+					? context.reactionInfo->position.y()
+					: height))
 				: isUnread
 				? yShown(top + height)
 				: yShown(top + height / 2));
@@ -3227,7 +3241,9 @@ void ListWidget::paintEvent(QPaintEvent *e) {
 				readContents.insert(item);
 			}
 		}
-		session->data().reactions().poll(item, context.now);
+		if (reactionsShown) {
+			session->data().reactions().poll(item, context.now);
+		}
 		if (item->hasUnpaidContent()) {
 			session->api().views().pollExtendedMedia(item);
 		}

@@ -160,6 +160,8 @@ private:
 
 };
 
+[[nodiscard]] bool ShownForMessage(not_null<const HistoryItem*> item);
+
 [[nodiscard]] InlineListData InlineListDataFromMessage(
 	not_null<Element*> view);
 
