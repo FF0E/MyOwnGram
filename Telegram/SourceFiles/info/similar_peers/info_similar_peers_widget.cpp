@@ -101,8 +101,9 @@ void ListController::prepare() {
 
 	const auto participants = &_peer->session().api().chatParticipants();
 
-	Data::AmPremiumValue(
-		&_peer->session()
+	rpl::combine(
+		Data::AmPremiumValue(&_peer->session()),
+		participants->similarShownValue(_peer)
 	) | rpl::on_next([=] {
 		participants->loadSimilarPeers(_peer);
 		rebuild();
@@ -127,6 +128,11 @@ rpl::producer<int> ListController::unlockHeightValue() const {
 void ListController::rebuild() {
 	const auto participants = &_peer->session().api().chatParticipants();
 	const auto &list = participants->similar(_peer);
+	if (list.list.empty()) {
+		while (delegate()->peerListFullRowsCount()) {
+			delegate()->peerListRemoveRow(delegate()->peerListRowAt(0));
+		}
+	}
 	for (const auto &peer : list.list) {
 		if (!delegate()->peerListFindRow(peer->id.value)) {
 			delegate()->peerListAppendRow(createRow(peer));
@@ -253,8 +259,10 @@ void ListController::restoreState(
 	auto typeErasedState = state
 		? state->controllerState.get()
 		: nullptr;
-	if (dynamic_cast<SavedState*>(typeErasedState)) {
+	if (dynamic_cast<SavedState*>(typeErasedState)
+		&& _peer->session().api().chatParticipants().similarShown(_peer)) {
 		PeerListController::restoreState(std::move(state));
+		rebuild();
 	}
 }
 

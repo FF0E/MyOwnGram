@@ -227,6 +227,42 @@ void AddActivityToggles(SectionBuilder &builder) {
 	}
 }
 
+void AddRecommendationToggles(SectionBuilder &builder) {
+	struct Row {
+		bool Core::RecommendationSettings::*flag = nullptr;
+		const tr::phrase<> *title = nullptr;
+		QString id;
+	};
+	const auto rows = std::array{
+		Row{
+			&Core::RecommendationSettings::channels,
+			&tr::lng_myowngram_show_channel_recommendations,
+			u"channels"_q,
+		},
+	};
+	const auto settings = &Core::App().settings();
+	for (const auto &row : rows) {
+		const auto flag = row.flag;
+		const auto button = builder.addButton({
+			.id = u"myowngram/recommendations/"_q + row.id,
+			.title = (*row.title)(),
+			.st = &st::settingsButtonNoIcon,
+			.toggled = settings->recommendationSettingsValue()
+				| rpl::map([=](Core::RecommendationSettings value) {
+					return value.*flag;
+				}) | rpl::distinct_until_changed(),
+			.keywords = { u"recommendations"_q, u"similar"_q },
+		});
+		if (button) {
+			button->toggledValue() | rpl::on_next([=](bool enabled) {
+				auto value = settings->recommendationSettings();
+				value.*flag = enabled;
+				settings->setRecommendationSettings(value);
+			}, button->lifetime());
+		}
+	}
+}
+
 void AddReactionToggles(SectionBuilder &builder) {
 	struct Row {
 		bool Core::ReactionSettings::*flag = nullptr;
@@ -602,6 +638,11 @@ const auto kChatsAndProfiles = BuildHelper({
 	builder.addSkip();
 	builder.addSubsectionTitle(tr::lng_myowngram_profiles_title());
 	AddPeerIdSelector(builder);
+	builder.addSkip();
+	builder.addDivider();
+	builder.addSkip();
+	builder.addSubsectionTitle(tr::lng_myowngram_recommendations_title());
+	AddRecommendationToggles(builder);
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();

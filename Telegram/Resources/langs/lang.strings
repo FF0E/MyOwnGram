@@ -8848,6 +8848,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_click_again_sticker" = "Click again to send this sticker.";
 "lng_myowngram_click_again_gif" = "Click again to send this GIF.";
 
+"lng_myowngram_recommendations_title" = "Recommendations";
+"lng_myowngram_show_channel_recommendations" = "Show channel recommendations";
+
 "lng_myowngram_show_personal_reactions" = "Show reactions in personal chats";
 "lng_myowngram_show_group_reactions" = "Show reactions in groups";
 "lng_myowngram_show_channel_reactions" = "Show reactions in channels";

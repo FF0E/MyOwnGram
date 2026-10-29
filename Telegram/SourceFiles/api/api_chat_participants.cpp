@@ -10,6 +10,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "apiwrap.h"
 #include "boxes/add_contact_box.h" // ShowAddParticipantsError
 #include "boxes/peers/add_participants_box.h" // ChatInviteForbidden
+#include "core/application.h"
+#include "core/core_settings.h"
 #include "data/data_changes.h"
 #include "data/data_channel.h"
 #include "data/data_channel_admins.h"
@@ -422,6 +424,10 @@ QString ChatParticipant::rank() const {
 ChatParticipants::ChatParticipants(not_null<ApiWrap*> api)
 : _session(&api->session())
 , _api(&api->instance()) {
+	Core::App().settings().recommendationSettingsValue(
+	) | rpl::skip(1) | rpl::on_next([=] {
+		refreshRecommendationSettings();
+	}, _lifetime);
 }
 
 void ChatParticipants::requestForAdd(
@@ -858,7 +864,49 @@ void ChatParticipants::applyKicked(
 	i->second->value = kicked;
 }
 
+bool ChatParticipants::similarShown(not_null<PeerData*> peer) const {
+	const auto settings = Core::App().settings().recommendationSettings();
+	return (peer->isBroadcast() && settings.channels)
+		|| peer->isBot();
+}
+
+rpl::producer<bool> ChatParticipants::similarShownValue(
+		not_null<PeerData*> peer) const {
+	return Core::App().settings().recommendationSettingsValue(
+	) | rpl::map([=] {
+		return similarShown(peer);
+	}) | rpl::distinct_until_changed();
+}
+
+void ChatParticipants::refreshRecommendationSettings() {
+	for (auto i = begin(_similar); i != end(_similar);) {
+		auto &similar = i->second;
+		if (!similarShown(i->first) && similar.requestId) {
+			_api.request(base::take(similar.requestId)).cancel();
+			if (similar.peers.list.empty()) {
+				i = _similar.erase(i);
+				continue;
+			}
+		}
+		++i;
+	}
+	if (!Core::App().settings().recommendationSettings().channels
+		&& _recommendations.requestId) {
+		_api.request(base::take(_recommendations.requestId)).cancel();
+	}
+	_session->data().enumerateBroadcasts([=](not_null<ChannelData*> channel) {
+		if (const auto history = channel->owner().historyLoaded(channel)) {
+			if (const auto item = history->joinedMessageInstance()) {
+				history->owner().requestItemResize(item);
+			}
+		}
+	});
+}
+
 void ChatParticipants::loadSimilarPeers(not_null<PeerData*> peer) {
+	if (!similarShown(peer)) {
+		return;
+	}
 	if (const auto i = _similar.find(peer); i != end(_similar)) {
 		if (i->second.requestId
 			|| !i->second.peers.more
@@ -905,9 +953,7 @@ void ChatParticipants::loadSimilarPeers(not_null<PeerData*> peer) {
 
 auto ChatParticipants::similar(not_null<PeerData*> peer)
 -> const Peers & {
-	const auto i = (peer->isBroadcast() || peer->isBot())
-		? _similar.find(peer)
-		: end(_similar);
+	const auto i = similarShown(peer) ? _similar.find(peer) : end(_similar);
 	if (i != end(_similar)) {
 		return i->second.peers;
 	}
@@ -921,7 +967,9 @@ auto ChatParticipants::similarLoaded() const
 }
 
 void ChatParticipants::loadRecommendations() {
-	if (_recommendationsLoaded.current() || _recommendations.requestId) {
+	if (!Core::App().settings().recommendationSettings().channels
+		|| _recommendationsLoaded.current()
+		|| _recommendations.requestId) {
 		return;
 	}
 	_recommendations.requestId = _api.request(
@@ -938,7 +986,10 @@ void ChatParticipants::loadRecommendations() {
 }
 
 const ChatParticipants::Peers &ChatParticipants::recommendations() const {
-	return _recommendations.peers;
+	static const auto empty = Peers();
+	return Core::App().settings().recommendationSettings().channels
+		? _recommendations.peers
+		: empty;
 }
 
 rpl::producer<> ChatParticipants::recommendationsLoaded() const {

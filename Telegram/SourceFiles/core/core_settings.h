@@ -47,6 +47,14 @@ enum class PeerIdDisplay {
 	BotApi,
 };
 
+struct RecommendationSettings {
+	bool channels = true;
+
+	friend constexpr bool operator==(
+		RecommendationSettings,
+		RecommendationSettings) = default;
+};
+
 struct ReactionSettings {
 	bool personal = true;
 	bool groups = true;
@@ -1145,6 +1153,15 @@ public:
 	}
 	void setReceiveDrafts(bool enabled);
 
+	[[nodiscard]] RecommendationSettings recommendationSettings() const {
+		return _recommendationSettings.current();
+	}
+	[[nodiscard]] auto recommendationSettingsValue() const
+	-> rpl::producer<RecommendationSettings> {
+		return _recommendationSettings.value();
+	}
+	void setRecommendationSettings(RecommendationSettings value);
+
 	[[nodiscard]] ReactionSettings reactionSettings() const {
 		return _reactionSettings.current();
 	}
@@ -1415,6 +1432,7 @@ private:
 	rpl::variable<bool> _sendDrafts = true;
 	rpl::variable<bool> _receiveDrafts = true;
 	rpl::variable<ActivitySettings> _activitySettings;
+	rpl::variable<RecommendationSettings> _recommendationSettings;
 	rpl::variable<ReactionSettings> _reactionSettings;
 	rpl::variable<StorySettings> _storySettings;
 

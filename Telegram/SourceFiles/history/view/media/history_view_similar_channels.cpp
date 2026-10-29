@@ -484,7 +484,10 @@ TextState SimilarChannels::textState(
 		QPoint point,
 		StateRequest request) const {
 	auto result = TextState();
-	if (point.y() < 0 && !_empty) {
+	if (_empty) {
+		return result;
+	}
+	if (point.y() < 0) {
 		result.link = ensureToggleLink();
 		return result;
 	}
@@ -527,7 +530,7 @@ QSize SimilarChannels::countOptimalSize() {
 	_empty = similar.list.empty() ? 1 : 0;
 	_moreThumbnailsValid = 0;
 	using Flag = ChannelDataFlag;
-	_toggled = (channel->flags() & Flag::SimilarExpanded) ? 1 : 0;
+	_toggled = (!_empty && (channel->flags() & Flag::SimilarExpanded)) ? 1 : 0;
 	if (_empty || !_toggled) {
 		return {};
 	}

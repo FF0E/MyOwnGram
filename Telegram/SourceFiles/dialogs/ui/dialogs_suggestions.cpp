@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/choose_filter_box.h"
 #include "boxes/peer_list_box.h"
 #include "core/application.h"
+#include "core/core_settings.h"
 #include "core/ui_integration.h"
 #include "data/components/recent_peers.h"
 #include "data/components/top_peers.h"
@@ -558,7 +559,6 @@ private:
 	void appendRow(not_null<ChannelData*> channel);
 
 	History *_activeHistory = nullptr;
-	bool _requested = false;
 	rpl::lifetime _lifetime;
 
 };
@@ -1119,35 +1119,16 @@ RecommendationsController::RecommendationsController(
 
 void RecommendationsController::prepare() {
 	setupPlainDivider(tr::lng_channels_recommended());
-	fill();
-}
-
-void RecommendationsController::load() {
-	if (_requested || countCurrent()) {
-		return;
-	}
-	_requested = true;
 	const auto participants = &session().api().chatParticipants();
-	participants->loadRecommendations();
-	participants->recommendationsLoaded(
-	) | rpl::take(1) | rpl::on_next([=] {
+	rpl::merge(
+		Core::App().settings().recommendationSettingsValue()
+			| rpl::map([](Core::RecommendationSettings value) {
+				return value.channels;
+			}) | rpl::distinct_until_changed() | rpl::to_empty,
+		participants->recommendationsLoaded()
+	) | rpl::on_next([=] {
 		fill();
 	}, _lifetime);
-}
-
-void RecommendationsController::fill() {
-	const auto participants = &session().api().chatParticipants();
-	const auto &list = participants->recommendations().list;
-	if (list.empty()) {
-		return;
-	}
-	for (const auto &peer : list) {
-		if (const auto channel = peer->asBroadcast()) {
-			appendRow(channel);
-		}
-	}
-	delegate()->peerListRefreshRows();
-	setCount(delegate()->peerListFullRowsCount());
 
 	window()->activeChatValue() | rpl::on_next([=](const Key &key) {
 		const auto history = key.history();
@@ -1171,8 +1152,27 @@ void RecommendationsController::fill() {
 	}, _lifetime);
 }
 
+void RecommendationsController::load() {
+	session().api().chatParticipants().loadRecommendations();
+}
+
+void RecommendationsController::fill() {
+	while (delegate()->peerListFullRowsCount()) {
+		delegate()->peerListRemoveRow(delegate()->peerListRowAt(0));
+	}
+	const auto participants = &session().api().chatParticipants();
+	for (const auto &peer : participants->recommendations().list) {
+		if (const auto channel = peer->asBroadcast()) {
+			appendRow(channel);
+		}
+	}
+	delegate()->peerListRefreshRows();
+	setCount(delegate()->peerListFullRowsCount());
+}
+
 void RecommendationsController::appendRow(not_null<ChannelData*> channel) {
 	auto row = std::make_unique<ChannelRow>(channel);
+	row->setActive(_activeHistory && _activeHistory->peer == channel);
 	if (channel->membersCountKnown()) {
 		row->setCustomStatus((channel->isBroadcast()
 			? tr::lng_chat_status_subscribers
@@ -2554,9 +2554,15 @@ auto Suggestions::setupRecommendations() -> std::unique_ptr<ObjectList> {
 		_persist = true;
 	}, list->lifetime());
 
-	_key.value() | rpl::filter(
-		rpl::mappers::_1 == Key{ Tab::Channels }
-	) | rpl::on_next([=] {
+	rpl::combine(
+		_key.value(),
+		Core::App().settings().recommendationSettingsValue()
+			| rpl::map([](Core::RecommendationSettings value) {
+				return value.channels;
+			}) | rpl::distinct_until_changed()
+	) | rpl::filter([](const Key &key, bool shown) {
+		return shown && key == Key{ Tab::Channels };
+	}) | rpl::on_next([=] {
 		controller->load();
 	}, list->lifetime());
 

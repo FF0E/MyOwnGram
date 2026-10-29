@@ -142,6 +142,9 @@ public:
 		not_null<ChannelData*> channel,
 		not_null<PeerData*> participant);
 
+	[[nodiscard]] bool similarShown(not_null<PeerData*> peer) const;
+	[[nodiscard]] rpl::producer<bool> similarShownValue(
+		not_null<PeerData*> peer) const;
 	void loadSimilarPeers(not_null<PeerData*> peer);
 
 	struct Peers {
@@ -161,6 +164,8 @@ public:
 	[[nodiscard]] rpl::producer<> recommendationsLoaded() const;
 
 private:
+	void refreshRecommendationSettings();
+
 	struct SimilarPeers {
 		Peers peers;
 		mtpRequestId requestId = 0;
@@ -206,6 +211,7 @@ private:
 
 	SimilarPeers _recommendations;
 	rpl::variable<bool> _recommendationsLoaded = false;
+	rpl::lifetime _lifetime;
 
 };
 

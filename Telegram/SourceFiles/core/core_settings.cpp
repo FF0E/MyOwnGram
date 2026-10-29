@@ -58,6 +58,13 @@ constexpr auto kHideQuickForwardKey
 constexpr auto kOnlyAddedPacksKey
 	= std::string_view("myowngram-only-added-packs");
 
+constexpr auto kRecommendationPreferences = std::array{
+	std::pair{
+		&RecommendationSettings::channels,
+		std::string_view("myowngram-show-channel-recommendations"),
+	},
+};
+
 constexpr auto kReactionPreferences = std::array{
 	std::pair{
 		&ReactionSettings::personal,
@@ -1439,6 +1446,11 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 		activity.*flag = readPref<bool>(key, true);
 	}
 	_activitySettings = activity;
+	auto recommendations = RecommendationSettings();
+	for (const auto &[flag, key] : kRecommendationPreferences) {
+		recommendations.*flag = readPref<bool>(key, true);
+	}
+	_recommendationSettings = recommendations;
 	auto reactions = ReactionSettings();
 	for (const auto &[flag, key] : kReactionPreferences) {
 		reactions.*flag = readPref<bool>(key, true);
@@ -1613,6 +1625,19 @@ void Settings::setReceiveDrafts(bool enabled) {
 	}
 	writePref<bool>(kReceiveDraftsKey, enabled);
 	_receiveDrafts = enabled;
+}
+
+void Settings::setRecommendationSettings(RecommendationSettings value) {
+	const auto current = _recommendationSettings.current();
+	if (current == value) {
+		return;
+	}
+	for (const auto &[flag, key] : kRecommendationPreferences) {
+		if (current.*flag != value.*flag) {
+			writePref<bool>(key, value.*flag);
+		}
+	}
+	_recommendationSettings = value;
 }
 
 void Settings::setReactionSettings(ReactionSettings value) {
@@ -2103,6 +2128,9 @@ void Settings::resetOnLastLogout() {
 	writePref<bool>(kReceiveDraftsKey, receiveDrafts());
 	for (const auto &[flag, key] : kActivityPreferences) {
 		writePref<bool>(key, activitySettings().*flag);
+	}
+	for (const auto &[flag, key] : kRecommendationPreferences) {
+		writePref<bool>(key, recommendationSettings().*flag);
 	}
 	for (const auto &[flag, key] : kReactionPreferences) {
 		writePref<bool>(key, reactionSettings().*flag);

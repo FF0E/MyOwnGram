@@ -642,15 +642,21 @@ rpl::producer<int> CommonGroupsCountValue(not_null<UserData*> user) {
 rpl::producer<int> SimilarPeersCountValue(
 		not_null<PeerData*> peer) {
 	const auto participants = &peer->session().api().chatParticipants();
-	participants->loadSimilarPeers(peer);
-	return rpl::single(peer) | rpl::then(
-		participants->similarLoaded()
-	) | rpl::filter(
-		rpl::mappers::_1 == peer
-	) | rpl::map([=] {
-		const auto &similar = participants->similar(peer);
-		return int(similar.list.size()) + similar.more;
-	});
+	return participants->similarShownValue(peer) | rpl::map([=](bool shown)
+	-> rpl::producer<int> {
+		if (!shown) {
+			return rpl::single(0);
+		}
+		participants->loadSimilarPeers(peer);
+		return rpl::single(peer) | rpl::then(
+			participants->similarLoaded()
+		) | rpl::filter(
+			rpl::mappers::_1 == peer
+		) | rpl::map([=] {
+			const auto &similar = participants->similar(peer);
+			return int(similar.list.size()) + similar.more;
+		});
+	}) | rpl::flatten_latest();
 }
 
 rpl::producer<int> SavedSublistCountValue(
