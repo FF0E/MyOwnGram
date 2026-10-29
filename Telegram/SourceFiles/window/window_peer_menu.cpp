@@ -33,6 +33,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/unique_qptr.h"
 #include "base/qt/qt_key_modifiers.h"
 #include "boxes/delete_messages_box.h"
+#include "boxes/delete_own_messages_box.h"
 #include "boxes/max_invite_box.h"
 #include "boxes/moderate_messages_box.h"
 #include "boxes/select_future_owner_box.h"
@@ -313,6 +314,7 @@ private:
 	void addToggleUnreadMark();
 	void addToggleArchive();
 	void addClearHistory();
+	void addDeleteOwnMessages();
 	void addDeleteChat();
 	void addLeaveChat();
 	void addJoinChat();
@@ -1072,6 +1074,37 @@ void Filler::addDirectMessages() {
 			monoforum,
 			Window::SectionShow::Way::Forward);
 	}, &st::menuIconChatDiscuss);
+}
+
+void Filler::addDeleteOwnMessages() {
+	if (!_peer
+		|| _topic
+		|| _peer->isMonoforum()
+		|| (!_peer->isChat() && !_peer->isMegagroup())) {
+		return;
+	}
+	const auto replies = (_request.section
+		== Dialogs::EntryState::Section::Replies);
+	const auto rootId = replies
+		? _request.currentReplyTo.topicRootId
+		: MsgId();
+	if (replies && (!rootId || _peer->isForum())) {
+		return;
+	}
+	const auto peer = _peer;
+	const auto controller = _controller;
+	_addAction({
+		.text = rootId
+			? tr::lng_myowngram_delete_own_replies(tr::now)
+			: tr::lng_myowngram_delete_own_messages(tr::now),
+		.handler = [=] {
+			if (!controller->showFrozenError()) {
+				controller->show(Box(DeleteOwnMessagesBox, peer, rootId));
+			}
+		},
+		.icon = &st::menuIconDeleteAttention,
+		.isAttention = true,
+	});
 }
 
 void Filler::addExportChat() {
@@ -1936,6 +1969,7 @@ void Filler::fillContextMenuActions() {
 		}
 	}
 	addBanFromChannel();
+	addDeleteOwnMessages();
 	addClearHistory();
 	addDeleteChat();
 	addLeaveChat();
@@ -1961,6 +1995,7 @@ void Filler::fillHistoryActions() {
 	addExportChat();
 	addTranslate();
 	addReport();
+	addDeleteOwnMessages();
 	addClearHistory();
 	addDeleteChat();
 	addLeaveChat();
@@ -2004,6 +2039,7 @@ void Filler::fillRepliesActions() {
 	addBoostChat();
 	addCreatePoll();
 	addCreateTodoList();
+	addDeleteOwnMessages();
 	addToggleTopicClosed();
 	addDeleteTopic();
 }

@@ -321,6 +321,8 @@ PRIVATE
     boxes/create_poll_box.h
     boxes/delete_messages_box.cpp
     boxes/delete_messages_box.h
+    boxes/delete_own_messages_box.cpp
+    boxes/delete_own_messages_box.h
     boxes/dictionaries_manager.cpp
     boxes/dictionaries_manager.h
     boxes/download_path_box.cpp

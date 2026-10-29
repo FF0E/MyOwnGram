@@ -8873,4 +8873,30 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_dc_amsterdam" = "Amsterdam, NL";
 "lng_myowngram_dc_singapore" = "Singapore, SG";
 
+"lng_myowngram_delete_own_messages" = "Delete my messages in this group";
+"lng_myowngram_delete_own_replies" = "Delete my replies to this post";
+"lng_myowngram_delete_own_messages_about" = "Delete messages you sent as your personal account throughout {group}, including comments under linked channel posts.";
+"lng_myowngram_delete_own_replies_about" = "Delete only replies you sent as your personal account under this post in {group}, including your replies to other comments.";
+"lng_myowngram_delete_own_dates" = "Date range";
+"lng_myowngram_delete_own_from" = "From: {date}";
+"lng_myowngram_delete_own_till" = "Through: {date}";
+"lng_myowngram_delete_own_types" = "Message types";
+"lng_myowngram_delete_own_all_types" = "All message types";
+"lng_myowngram_delete_own_text" = "Text and links";
+"lng_myowngram_delete_own_other" = "Other messages";
+"lng_myowngram_delete_own_types_about" = "Captions belong to their photo, video or file. Other messages include contacts, locations and shared stories. Service messages are not included.";
+"lng_myowngram_delete_own_messages_confirm" = "Delete your messages matching the selected dates and types throughout {group}?\n\nMessages are deleted for everyone. This cannot be undone. Messages that can only be deleted for you will be skipped.";
+"lng_myowngram_delete_own_replies_confirm" = "Delete your replies matching the selected dates and types under this post in {group}?\n\nMessages are deleted for everyone. This cannot be undone. Your messages under other posts will not be deleted.";
+"lng_myowngram_delete_own_progress_about" = "Stop or close this dialog to prevent further batches. A batch already sent can still finish. Skipped messages were unavailable or could not be deleted for everyone.";
+"lng_myowngram_delete_own_searching" = "Searching your messages…";
+"lng_myowngram_delete_own_found#one" = "{count} matching message found";
+"lng_myowngram_delete_own_found#other" = "{count} matching messages found";
+"lng_myowngram_delete_own_deleting" = "Deleting your messages…";
+"lng_myowngram_delete_own_counts" = "Selected: {total}\nDeleted: {count}\nSkipped: {skip}";
+"lng_myowngram_delete_own_stopping" = "Stopping after the current batch…";
+"lng_myowngram_delete_own_stopped" = "Deletion stopped.";
+"lng_myowngram_delete_own_finished" = "Deletion finished.";
+"lng_myowngram_delete_own_failed" = "Deletion could not finish.";
+"lng_myowngram_delete_own_search_failed" = "Search could not finish. No messages were deleted.";
+
 // Keys finished
