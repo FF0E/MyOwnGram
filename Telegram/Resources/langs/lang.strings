@@ -8896,7 +8896,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_delete_own_found#one" = "{count} matching message found";
 "lng_myowngram_delete_own_found#other" = "{count} matching messages found";
 "lng_myowngram_delete_own_deleting" = "Deleting your messages…";
-"lng_myowngram_delete_own_counts" = "Selected: {total}\nDeleted: {count}\nSkipped: {skip}";
+"lng_myowngram_delete_own_counts" = "Selected: {total}\nDeleted: {deleted}\nSkipped: {skip}";
 "lng_myowngram_delete_own_stopping" = "Stopping after the current batch…";
 "lng_myowngram_delete_own_stopped" = "Deletion stopped.";
 "lng_myowngram_delete_own_finished" = "Deletion finished.";

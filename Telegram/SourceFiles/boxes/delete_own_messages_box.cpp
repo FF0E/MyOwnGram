@@ -602,7 +602,7 @@ void DeleteOwnMessages::updateCounts() {
 		: tr::lng_myowngram_delete_own_counts(
 			lt_total,
 			rpl::single(QString::number(_ids.size())),
-			lt_count,
+			lt_deleted,
 			rpl::single(QString::number(_deleted)),
 			lt_skip,
 			rpl::single(QString::number(_skipped)));
