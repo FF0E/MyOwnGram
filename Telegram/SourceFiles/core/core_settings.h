@@ -49,6 +49,7 @@ enum class PeerIdDisplay {
 
 struct RecommendationSettings {
 	bool channels = true;
+	bool bots = true;
 
 	friend constexpr bool operator==(
 		RecommendationSettings,

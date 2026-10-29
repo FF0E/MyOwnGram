@@ -63,6 +63,10 @@ constexpr auto kRecommendationPreferences = std::array{
 		&RecommendationSettings::channels,
 		std::string_view("myowngram-show-channel-recommendations"),
 	},
+	std::pair{
+		&RecommendationSettings::bots,
+		std::string_view("myowngram-show-bot-recommendations"),
+	},
 };
 
 constexpr auto kReactionPreferences = std::array{

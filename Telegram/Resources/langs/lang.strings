@@ -8850,6 +8850,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 "lng_myowngram_recommendations_title" = "Recommendations";
 "lng_myowngram_show_channel_recommendations" = "Show channel recommendations";
+"lng_myowngram_show_bot_recommendations" = "Show bot recommendations";
 
 "lng_myowngram_show_personal_reactions" = "Show reactions in personal chats";
 "lng_myowngram_show_group_reactions" = "Show reactions in groups";

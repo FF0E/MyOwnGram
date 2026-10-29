@@ -867,7 +867,7 @@ void ChatParticipants::applyKicked(
 bool ChatParticipants::similarShown(not_null<PeerData*> peer) const {
 	const auto settings = Core::App().settings().recommendationSettings();
 	return (peer->isBroadcast() && settings.channels)
-		|| peer->isBot();
+		|| (peer->isBot() && settings.bots);
 }
 
 rpl::producer<bool> ChatParticipants::similarShownValue(

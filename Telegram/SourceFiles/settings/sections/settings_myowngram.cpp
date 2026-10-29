@@ -239,6 +239,11 @@ void AddRecommendationToggles(SectionBuilder &builder) {
 			&tr::lng_myowngram_show_channel_recommendations,
 			u"channels"_q,
 		},
+		Row{
+			&Core::RecommendationSettings::bots,
+			&tr::lng_myowngram_show_bot_recommendations,
+			u"bots"_q,
+		},
 	};
 	const auto settings = &Core::App().settings();
 	for (const auto &row : rows) {
