@@ -2058,6 +2058,15 @@ base::unique_qptr<Ui::PopupMenu> ParticipantsBoxController::rowContextMenu(
 			(participant->isUser()
 				? &st::menuIconProfile
 				: &st::menuIconInfo));
+		if (_peer->isChat() || _peer->isMegagroup()) {
+			const auto controller = _navigation->parentController();
+			const auto history = _peer->owner().history(_peer);
+			result->addAction(tr::lng_context_search_from(tr::now), [=] {
+				controller->hideLayer();
+				controller->hideSpecialLayer();
+				controller->searchInChat(history, participant);
+			}, &st::menuIconSearch);
+		}
 	}
 	if (user && SupportsMemberTags(_peer)) {
 		const auto isSelf = user->isSelf();
