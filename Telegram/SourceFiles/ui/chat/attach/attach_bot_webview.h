@@ -37,6 +37,7 @@ namespace Webview {
 struct Available;
 struct PopupArgs;
 struct PopupResult;
+enum class PermissionType;
 } // namespace Webview
 
 namespace Ui::Text {
@@ -162,6 +163,8 @@ public:
 
 	void requestActivate();
 	void toggleProgress(bool shown);
+	void requestWindowClose();
+	[[nodiscard]] bool isActiveWindow() const;
 
 	void showBox(object_ptr<BoxContent> box);
 	void showBox(
@@ -207,7 +210,6 @@ private:
 		std::optional<QColor> bottom;
 	};
 	struct ExternalShellAnchor {
-		std::optional<QRect> anchorGeometry;
 		std::optional<QSize> outerSize;
 		Platform::ForeignParent transientParent;
 	};
@@ -239,8 +241,8 @@ private:
 	void requestExternalShellButtonEmoji(const QString &name);
 	void applyExternalShellFullscreen(bool fullscreen);
 	void sendExternalShellChrome();
-	void setExternalShellBlocked(bool blocked);
-	void closeExternalShellLayer();
+	void setWebviewBlocked(bool blocked);
+	void closeExternalShellPopup();
 	[[nodiscard]] ExternalShellAnchor externalShellAnchor() const;
 	void showPopup(
 		Webview::PopupArgs &&args,
@@ -288,6 +290,7 @@ private:
 	void replyRequestWriteAccess(bool allowed);
 	void requestPhone();
 	void replyRequestPhone(bool shared);
+	void requestPermission(Webview::PermissionType type, Fn<void(bool)> done);
 	void invokeCustomMethod(const QJsonObject &args);
 	void replyCustomMethod(QJsonValue requestId, QJsonObject response);
 	void requestClipboardText(const QJsonObject &args);
@@ -302,6 +305,10 @@ private:
 	void createButton(std::unique_ptr<Button> &button);
 	void scheduleCloseWithConfirmation();
 	void closeWithConfirmation();
+	void toggleApplicationEventFilter(bool install);
+	bool filterApplicationEvent(
+		not_null<QObject*> object,
+		not_null<QEvent*> e);
 	void sendViewport();
 	void sendSafeArea();
 	void sendContentSafeArea();
@@ -325,7 +332,7 @@ private:
 	const not_null<Delegate*> _delegate;
 	QString _externalUrl;
 	QString _externalTitle;
-	int _externalBlockCount = 0;
+	int _webviewBlockCount = 0;
 	bool _closeNeedConfirmation = false;
 	bool _hasSettingsButton = false;
 	bool _externalTitleBadgeVisible = false;
@@ -334,7 +341,6 @@ private:
 	bool _externalWindowCloseRequested = false;
 	QString _externalShellToken;
 	QString _initialOrigin;
-	QString _currentOrigin;
 	uint64 _externalShellGeneration = 0;
 	bool _externalBackVisible = false;
 	ExternalShellColorState _externalShellColorState;
@@ -343,8 +349,10 @@ private:
 	ExternalButtonState _externalSecondaryButton;
 	std::unique_ptr<RpWidget> _externalPanelParent;
 	std::unique_ptr<SeparatePanel> _widget;
+	std::unique_ptr<QObject> _applicationEventFilter;
 	std::unique_ptr<WebviewWithLifetime> _webview;
 	std::unique_ptr<StandaloneLayerStack> _externalLayer;
+	Fn<void()> _closeExternalShellPopup;
 	std::unique_ptr<RpWidget> _externalWebviewParent;
 	std::unique_ptr<RpWidget> _webviewBottom;
 	QPointer<FlatLabel> _webviewBottomLabel;

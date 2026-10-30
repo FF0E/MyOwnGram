@@ -2235,6 +2235,10 @@ void Widget::updateSuggestions(anim::type animated) {
 			closeSuggestions();
 		}, _suggestions->lifetime());
 
+		_suggestions->persistReleased() | rpl::on_next([=] {
+			processSearchFocusChange();
+		}, _suggestions->lifetime());
+
 		updateControlsGeometry();
 
 		_suggestions->show(animated, [=] {
@@ -4481,6 +4485,7 @@ void Widget::updateLockUnlockVisibility(anim::type animated) {
 	const auto widthAnimation = !_widthAnimationCache.isNull();
 	const auto suggestionsAnimation = widthAnimation
 		&& (!_suggestions || !_hidingSuggestions.empty());
+	// Show verified locking; the layout path only reads the cache.
 	const auto hiddenInstant = _showAnimation
 		|| _openedForum
 		|| (widthAnimation && !suggestionsAnimation)
@@ -4876,6 +4881,7 @@ bool Widget::redirectKeyToSearch(QKeyEvent *e) const {
 	}
 	const auto character = !(e->modifiers() & ~Qt::ShiftModifier)
 		&& (e->key() != Qt::Key_Shift)
+		&& (e->text() != u"?"_q)
 		&& RedirectTextToSearch(e->text());
 	if (character) {
 		return true;

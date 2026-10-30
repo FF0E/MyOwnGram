@@ -518,7 +518,8 @@ void BottomInfo::layoutDateText() {
 		: locale.toString(timeValue, QLocale::ShortFormat);
 	const auto date = editedPrimary
 		? FormatEditedDate(_data.date, _data.editedDate, time)
-		: edited + ((_data.flags & Data::Flag::ForwardedDate)
+		: edited + ((_data.flags
+			& (Data::Flag::ForwardedDate | Data::Flag::FullDate))
 		? Ui::FormatDateTimeSavedFrom(_data.date, time)
 		: time);
 	const auto afterAuthor = prefix + date;
@@ -694,6 +695,8 @@ BottomInfo::Data BottomInfoDataFromMessage(not_null<Message*> message) {
 	}
 	if (message->context() == Context::ShortcutMessages) {
 		result.flags |= Flag::Shortcut;
+	} else if (message->context() == Context::MediaEditor) {
+		result.flags |= Flag::FullDate;
 	}
 	if (!item->isPost()
 		|| !item->hasRealFromId()

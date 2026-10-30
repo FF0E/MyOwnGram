@@ -152,6 +152,8 @@ public:
 	[[nodiscard]] rpl::producer<PhotoChosen> photoChosen() const;
 	[[nodiscard]] rpl::producer<InlineChosen> inlineResultChosen() const;
 	[[nodiscard]] rpl::producer<> photoRequests() const;
+	[[nodiscard]] rpl::producer<> audioRequests() const;
+	[[nodiscard]] rpl::producer<> linkRequests() const;
 
 	[[nodiscard]] rpl::producer<> cancelled() const;
 	[[nodiscard]] rpl::producer<> checkForHide() const;
@@ -166,7 +168,10 @@ public:
 	void provideRecentEmoji(
 		const std::vector<EmojiStatusId> &customRecentList);
 	void setMarkedCustomIds(const base::flat_set<DocumentId> &ids);
+	void setMarkedCustomPainter(
+		Fn<void(QPainter&, QRect, DocumentId)> painter);
 	void setSearchRightReserved(int value);
+	void refreshSearchColors();
 
 	void hideFinished();
 	void showStarted();
@@ -261,6 +266,7 @@ private:
 	bool hasMasksTab() const;
 	Tab createTab(SelectorTab type, int index);
 
+	void refreshRounding();
 	void paintSlideFrame(QPainter &p);
 	void paintBgRoundedPart(QPainter &p);
 	void paintContent(QPainter &p);

@@ -513,6 +513,12 @@ const style::icon *RichButtonIcon(ButtonType type) {
 	Unexpected("TypeIcon in Iv::Markdown::RichButtonIcon.");
 }
 
+QString RichButtonUrl(ButtonType type, const QByteArray &data) {
+	return (type == ButtonType::Url || type == ButtonType::Auth)
+		? QString::fromUtf8(data)
+		: QString();
+}
+
 int ButtonRowMinWidth(int count, const style::MarkdownButtonRow &st) {
 	return (count > 0)
 		? (count * st.height + (count - 1) * st.spacing)
