@@ -5808,8 +5808,12 @@ void ComposeControls::toggleTabbedSelectorMode() {
 		return;
 	}
 	if (_tabbedPanel) {
-		if (_regularWindow->canShowThirdSection()
-				&& !_regularWindow->adaptive().isOneColumn()) {
+		const auto inSidebar = Core::App().settings().readPref<bool>(
+			"myowngram-emoji-panel-in-sidebar",
+			true);
+		if (inSidebar
+			&& _regularWindow->canShowThirdSection()
+			&& !_regularWindow->adaptive().isOneColumn()) {
 			Core::App().settings().setTabbedSelectorSectionEnabled(true);
 			Core::App().saveSettingsDelayed();
 			const auto thread = _history->threadFor(

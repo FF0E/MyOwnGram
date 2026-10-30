@@ -549,6 +549,31 @@ const auto kChatsAndProfiles = BuildHelper({
 			settings->setShowMessageIdInTooltip(enabled);
 		}, messageId->lifetime());
 	}
+	const auto emojiPanel = builder.addButton({
+		.id = u"myowngram/emoji-panel-in-sidebar"_q,
+		.title = tr::lng_myowngram_emoji_panel_in_sidebar(),
+		.description = tr::lng_myowngram_emoji_panel_in_sidebar_about(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = rpl::single(settings->readPref<bool>(
+			"myowngram-emoji-panel-in-sidebar",
+			true)),
+		.keywords = { u"emoji"_q, u"stickers"_q, u"gifs"_q, u"sidebar"_q },
+	});
+	if (emojiPanel) {
+		const auto controller = builder.controller();
+		emojiPanel->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->writePref<bool>(
+				"myowngram-emoji-panel-in-sidebar",
+				enabled);
+			if (!enabled) {
+				settings->setThirdSectionInfoEnabled(
+					settings->thirdSectionInfoEnabled()
+					|| settings->tabbedReplacedWithInfo());
+				settings->setTabbedSelectorSectionEnabled(false);
+				controller->updateColumnLayout();
+			}
+		}, emojiPanel->lifetime());
+	}
 	const auto stickers = builder.addButton({
 		.id = u"myowngram/click-twice-stickers"_q,
 		.title = tr::lng_myowngram_click_twice_stickers(),

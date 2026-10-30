@@ -9384,6 +9384,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_show_message_id_in_tooltip" = "Show message IDs";
 "lng_myowngram_message_id_tooltip_about" = "Show the message's ID when hovering over the timestamp.";
 "lng_myowngram_show_message_seconds" = "Show seconds";
+"lng_myowngram_emoji_panel_in_sidebar" = "Open emoji panel in sidebar";
+"lng_myowngram_emoji_panel_in_sidebar_about" = "Turn off to use emoji, stickers and GIFs in a pop-up without replacing the right-hand panel.";
 "lng_myowngram_click_twice_stickers" = "Click twice to send stickers";
 "lng_myowngram_click_twice_gifs" = "Click twice to send GIFs";
 "lng_myowngram_preview_voice_messages" = "Preview voice messages before sending";

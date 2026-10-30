@@ -7327,7 +7327,11 @@ void HistoryWidget::toggleTabbedSelectorMode() {
 		return;
 	}
 	if (_tabbedPanel) {
-		if (controller()->canShowThirdSection()
+		const auto inSidebar = Core::App().settings().readPref<bool>(
+			"myowngram-emoji-panel-in-sidebar",
+			true);
+		if (inSidebar
+			&& controller()->canShowThirdSection()
 			&& !controller()->adaptive().isOneColumn()) {
 			Core::App().settings().setTabbedSelectorSectionEnabled(true);
 			Core::App().saveSettingsDelayed();
