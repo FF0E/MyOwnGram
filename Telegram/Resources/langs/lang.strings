@@ -9327,6 +9327,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_title" = "MyOwnGram";
 "lng_myowngram_new_chat_view_required" = "Required by MyOwnGram. This setting is always enabled.";
 "lng_myowngram_chats_profiles_title" = "Chats and profiles";
+"lng_myowngram_message_display" = "Message display";
+"lng_myowngram_sending_messages" = "Sending messages";
 "lng_myowngram_profiles_title" = "Profiles";
 "lng_myowngram_ads_title" = "Ads";
 "lng_myowngram_ads_show" = "Disable ads";
@@ -9352,13 +9354,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_premium_promo_analytics" = "Disable Premium offer statistics";
 "lng_myowngram_premium_promo_analytics_about" = "Stop notifying Telegram when you view Premium offers or click certain subscription buttons.";
 
-"lng_myowngram_drafts_title" = "Draft sync";
+"lng_myowngram_drafts_title" = "Drafts";
 "lng_myowngram_send_drafts" = "Disable saving drafts to Telegram";
 "lng_myowngram_receive_drafts" = "Ignore drafts from Telegram";
-"lng_myowngram_clear_cloud_drafts" = "Clear cloud drafts";
+"lng_myowngram_clear_cloud_drafts" = "Clear drafts on Telegram";
 "lng_myowngram_clear_cloud_drafts_sure" = "Clear all drafts saved to Telegram for this account? This can't be undone.";
 "lng_myowngram_cloud_drafts_cleared" = "Cloud drafts cleared.";
-"lng_myowngram_clear_local_drafts" = "Clear local drafts";
+"lng_myowngram_clear_local_drafts" = "Clear saved drafts on this device";
 "lng_myowngram_clear_local_drafts_sure" = "Clear saved local drafts for this account? This can't be undone.";
 "lng_myowngram_local_drafts_cleared" = "Local drafts cleared.";
 
@@ -9384,8 +9386,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_show_message_id_in_tooltip" = "Show message IDs";
 "lng_myowngram_message_id_tooltip_about" = "Show the message's ID when hovering over the timestamp.";
 "lng_myowngram_show_message_seconds" = "Show seconds";
-"lng_myowngram_emoji_panel_in_sidebar" = "Open emoji panel in sidebar";
-"lng_myowngram_emoji_panel_in_sidebar_about" = "Turn off to use emoji, stickers and GIFs in a pop-up without replacing the right-hand panel.";
+"lng_myowngram_emoji_panel_in_sidebar" = "Keep emoji panel in a pop-up";
+"lng_myowngram_emoji_panel_in_sidebar_about" = "Open emoji, stickers and GIFs without replacing the right-hand panel.";
 "lng_myowngram_click_twice_stickers" = "Click twice to send stickers";
 "lng_myowngram_click_twice_gifs" = "Click twice to send GIFs";
 "lng_myowngram_preview_voice_messages" = "Preview voice messages before sending";
@@ -9397,18 +9399,18 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_click_again_gif" = "Click again to send this GIF.";
 
 "lng_myowngram_recommendations_title" = "Recommendations";
-"lng_myowngram_show_channel_recommendations" = "Show channel recommendations";
-"lng_myowngram_show_bot_recommendations" = "Show bot recommendations";
+"lng_myowngram_show_channel_recommendations" = "Hide channel recommendations";
+"lng_myowngram_show_bot_recommendations" = "Hide bot recommendations";
 
-"lng_myowngram_show_personal_reactions" = "Show reactions in personal chats";
-"lng_myowngram_show_group_reactions" = "Show reactions in groups";
-"lng_myowngram_show_channel_reactions" = "Show reactions in channels";
+"lng_myowngram_show_personal_reactions" = "Hide reactions in private chats";
+"lng_myowngram_show_group_reactions" = "Hide reactions in groups";
+"lng_myowngram_show_channel_reactions" = "Hide reactions in channels";
 
-"lng_myowngram_show_personal_stories" = "Show personal stories";
-"lng_myowngram_show_channel_stories" = "Show channel/group stories";
-"lng_myowngram_show_story_strip" = "Show story strip";
-"lng_myowngram_auto_load_story_feed" = "Automatically load the story feed";
-"lng_myowngram_auto_load_story_feed_about" = "Fetch the story feed and preload its media automatically. Turning this off keeps loaded stories; incoming updates and stories you open can still refresh them.";
+"lng_myowngram_show_personal_stories" = "Hide stories from people";
+"lng_myowngram_show_channel_stories" = "Hide channel and group stories";
+"lng_myowngram_show_story_strip" = "Hide stories above the chat list";
+"lng_myowngram_auto_load_story_feed" = "Stop loading the story feed automatically";
+"lng_myowngram_auto_load_story_feed_about" = "Stop fetching the story feed and preloading its media automatically. Loaded stories remain available; incoming updates and stories you open can still refresh them.";
 
 "lng_myowngram_mutual_contact_about" = "You've added each other as contacts.";
 

@@ -53,6 +53,24 @@ public:
 
 };
 
+class StickersAndEmoji final : public Section<StickersAndEmoji> {
+public:
+	StickersAndEmoji(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+};
+
+class Stories final : public Section<Stories> {
+public:
+	Stories(QWidget *parent, not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+};
+
 class Privacy final : public Section<Privacy> {
 public:
 	Privacy(QWidget *parent, not_null<Window::SessionController*> controller);
@@ -254,14 +272,14 @@ void AddRecommendationToggles(SectionBuilder &builder) {
 			.st = &st::settingsButtonNoIcon,
 			.toggled = settings->recommendationSettingsValue()
 				| rpl::map([=](Core::RecommendationSettings value) {
-					return value.*flag;
+					return !(value.*flag);
 				}) | rpl::distinct_until_changed(),
 			.keywords = { u"recommendations"_q, u"similar"_q },
 		});
 		if (button) {
 			button->toggledValue() | rpl::on_next([=](bool enabled) {
 				auto value = settings->recommendationSettings();
-				value.*flag = enabled;
+				value.*flag = !enabled;
 				settings->setRecommendationSettings(value);
 			}, button->lifetime());
 		}
@@ -300,14 +318,14 @@ void AddReactionToggles(SectionBuilder &builder) {
 			.st = &st::settingsButtonNoIcon,
 			.toggled = settings->reactionSettingsValue()
 				| rpl::map([=](Core::ReactionSettings value) {
-					return value.*flag;
+					return !(value.*flag);
 				}) | rpl::distinct_until_changed(),
 			.keywords = { u"reactions"_q, u"emoji"_q, u"counts"_q },
 		});
 		if (button) {
 			button->toggledValue() | rpl::on_next([=](bool enabled) {
 				auto value = settings->reactionSettings();
-				value.*flag = enabled;
+				value.*flag = !enabled;
 				settings->setReactionSettings(value);
 			}, button->lifetime());
 		}
@@ -354,14 +372,14 @@ void AddStoryToggles(SectionBuilder &builder) {
 			.st = &st::settingsButtonNoIcon,
 			.toggled = settings->storySettingsValue()
 				| rpl::map([=](Core::StorySettings value) {
-					return value.*flag;
+					return !(value.*flag);
 				}) | rpl::distinct_until_changed(),
 			.keywords = { u"stories"_q, u"feed"_q, u"live"_q },
 		});
 		if (button) {
 			button->toggledValue() | rpl::on_next([=](bool enabled) {
 				auto value = settings->storySettings();
-				value.*flag = enabled;
+				value.*flag = !enabled;
 				settings->setStorySettings(value);
 			}, button->lifetime());
 		}
@@ -504,6 +522,16 @@ const auto kMain = BuildHelper({
 		.icon = { &st::menuIconChatBubble },
 	});
 	builder.addSectionButton({
+		.title = tr::lng_settings_stickers_emoji(),
+		.targetSection = StickersAndEmoji::Id(),
+		.icon = { &st::menuIconStickers },
+	});
+	builder.addSectionButton({
+		.title = tr::lng_media_type_stories(),
+		.targetSection = Stories::Id(),
+		.icon = { &st::menuIconStoriesSavedSection },
+	});
+	builder.addSectionButton({
 		.title = tr::lng_myowngram_privacy_title(),
 		.targetSection = Privacy::Id(),
 		.icon = { &st::menuIconLock },
@@ -523,7 +551,7 @@ const auto kChatsAndProfiles = BuildHelper({
 }, [](SectionBuilder &builder) {
 	const auto settings = &Core::App().settings();
 	builder.addSkip();
-	builder.addSubsectionTitle(tr::lng_settings_messages());
+	builder.addSubsectionTitle(tr::lng_myowngram_message_display());
 	const auto seconds = builder.addButton({
 		.id = u"myowngram/message-seconds"_q,
 		.title = tr::lng_myowngram_show_message_seconds(),
@@ -549,55 +577,22 @@ const auto kChatsAndProfiles = BuildHelper({
 			settings->setShowMessageIdInTooltip(enabled);
 		}, messageId->lifetime());
 	}
-	const auto emojiPanel = builder.addButton({
-		.id = u"myowngram/emoji-panel-in-sidebar"_q,
-		.title = tr::lng_myowngram_emoji_panel_in_sidebar(),
-		.description = tr::lng_myowngram_emoji_panel_in_sidebar_about(),
+	const auto quickForward = builder.addButton({
+		.id = u"myowngram/hide-quick-forward"_q,
+		.title = tr::lng_myowngram_hide_quick_forward(),
 		.st = &st::settingsButtonNoIcon,
-		.toggled = rpl::single(settings->readPref<bool>(
-			"myowngram-emoji-panel-in-sidebar",
-			true)),
-		.keywords = { u"emoji"_q, u"stickers"_q, u"gifs"_q, u"sidebar"_q },
+		.toggled = settings->hideQuickForwardValue(),
+		.keywords = { u"forward"_q, u"share"_q, u"arrow"_q, u"button"_q },
 	});
-	if (emojiPanel) {
-		const auto controller = builder.controller();
-		emojiPanel->toggledValue() | rpl::on_next([=](bool enabled) {
-			settings->writePref<bool>(
-				"myowngram-emoji-panel-in-sidebar",
-				enabled);
-			if (!enabled) {
-				settings->setThirdSectionInfoEnabled(
-					settings->thirdSectionInfoEnabled()
-					|| settings->tabbedReplacedWithInfo());
-				settings->setTabbedSelectorSectionEnabled(false);
-				controller->updateColumnLayout();
-			}
-		}, emojiPanel->lifetime());
+	if (quickForward) {
+		quickForward->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setHideQuickForward(enabled);
+		}, quickForward->lifetime());
 	}
-	const auto stickers = builder.addButton({
-		.id = u"myowngram/click-twice-stickers"_q,
-		.title = tr::lng_myowngram_click_twice_stickers(),
-		.st = &st::settingsButtonNoIcon,
-		.toggled = settings->clickTwiceToSendStickersValue(),
-		.keywords = { u"stickers"_q, u"send"_q, u"confirm"_q, u"click"_q },
-	});
-	if (stickers) {
-		stickers->toggledValue() | rpl::on_next([=](bool enabled) {
-			settings->setClickTwiceToSendStickers(enabled);
-		}, stickers->lifetime());
-	}
-	const auto gifs = builder.addButton({
-		.id = u"myowngram/click-twice-gifs"_q,
-		.title = tr::lng_myowngram_click_twice_gifs(),
-		.st = &st::settingsButtonNoIcon,
-		.toggled = settings->clickTwiceToSendGifsValue(),
-		.keywords = { u"gifs"_q, u"send"_q, u"confirm"_q, u"click"_q },
-	});
-	if (gifs) {
-		gifs->toggledValue() | rpl::on_next([=](bool enabled) {
-			settings->setClickTwiceToSendGifs(enabled);
-		}, gifs->lifetime());
-	}
+	builder.addSkip();
+	builder.addDivider();
+	builder.addSkip();
+	builder.addSubsectionTitle(tr::lng_myowngram_sending_messages());
 	const auto voicePreview = builder.addButton({
 		.id = u"myowngram/preview-voice-messages"_q,
 		.title = tr::lng_myowngram_preview_voice_messages(),
@@ -622,42 +617,6 @@ const auto kChatsAndProfiles = BuildHelper({
 			settings->setPreviewVideoMessages(enabled);
 		}, videoPreview->lifetime());
 	}
-	const auto greetingStickers = builder.addButton({
-		.id = u"myowngram/hide-greeting-stickers"_q,
-		.title = tr::lng_myowngram_hide_greeting_stickers(),
-		.st = &st::settingsButtonNoIcon,
-		.toggled = settings->hideGreetingStickersValue(),
-		.keywords = { u"greeting"_q, u"stickers"_q, u"empty chat"_q },
-	});
-	if (greetingStickers) {
-		greetingStickers->toggledValue() | rpl::on_next([=](bool enabled) {
-			settings->setHideGreetingStickers(enabled);
-		}, greetingStickers->lifetime());
-	}
-	const auto quickForward = builder.addButton({
-		.id = u"myowngram/hide-quick-forward"_q,
-		.title = tr::lng_myowngram_hide_quick_forward(),
-		.st = &st::settingsButtonNoIcon,
-		.toggled = settings->hideQuickForwardValue(),
-		.keywords = { u"forward"_q, u"share"_q, u"arrow"_q, u"button"_q },
-	});
-	if (quickForward) {
-		quickForward->toggledValue() | rpl::on_next([=](bool enabled) {
-			settings->setHideQuickForward(enabled);
-		}, quickForward->lifetime());
-	}
-	const auto addedPacks = builder.addButton({
-		.id = u"myowngram/only-added-packs"_q,
-		.title = tr::lng_myowngram_only_added_packs(),
-		.st = &st::settingsButtonNoIcon,
-		.toggled = settings->onlyAddedPacksValue(),
-		.keywords = { u"stickers"_q, u"emoji"_q, u"packs"_q, u"suggestions"_q },
-	});
-	if (addedPacks) {
-		addedPacks->toggledValue() | rpl::on_next([=](bool enabled) {
-			settings->setOnlyAddedPacks(enabled);
-		}, addedPacks->lifetime());
-	}
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();
@@ -673,11 +632,6 @@ const auto kChatsAndProfiles = BuildHelper({
 	builder.addSkip();
 	builder.addSubsectionTitle(tr::lng_myowngram_recommendations_title());
 	AddRecommendationToggles(builder);
-	builder.addSkip();
-	builder.addDivider();
-	builder.addSkip();
-	builder.addSubsectionTitle(tr::lng_media_type_stories());
-	AddStoryToggles(builder);
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();
@@ -726,6 +680,99 @@ const auto kChatsAndProfiles = BuildHelper({
 		},
 		.keywords = { u"drafts"_q, u"clear"_q, u"local"_q },
 	});
+});
+
+const auto kStickersAndEmoji = BuildHelper({
+	.id = StickersAndEmoji::Id(),
+	.parentId = MyOwnGram::Id(),
+	.title = &tr::lng_settings_stickers_emoji,
+	.icon = &st::menuIconStickers,
+}, [](SectionBuilder &builder) {
+	const auto settings = &Core::App().settings();
+	builder.addSkip();
+	const auto emojiPanel = builder.addButton({
+		.id = u"myowngram/emoji-panel-in-sidebar"_q,
+		.title = tr::lng_myowngram_emoji_panel_in_sidebar(),
+		.description = tr::lng_myowngram_emoji_panel_in_sidebar_about(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = rpl::single(!settings->readPref<bool>(
+			"myowngram-emoji-panel-in-sidebar",
+			true)),
+		.keywords = { u"emoji"_q, u"stickers"_q, u"gifs"_q, u"sidebar"_q },
+	});
+	if (emojiPanel) {
+		const auto controller = builder.controller();
+		emojiPanel->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->writePref<bool>(
+				"myowngram-emoji-panel-in-sidebar",
+				!enabled);
+			if (enabled) {
+				settings->setThirdSectionInfoEnabled(
+					settings->thirdSectionInfoEnabled()
+					|| settings->tabbedReplacedWithInfo());
+				settings->setTabbedSelectorSectionEnabled(false);
+				controller->updateColumnLayout();
+			}
+		}, emojiPanel->lifetime());
+	}
+	const auto addedPacks = builder.addButton({
+		.id = u"myowngram/only-added-packs"_q,
+		.title = tr::lng_myowngram_only_added_packs(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->onlyAddedPacksValue(),
+		.keywords = { u"stickers"_q, u"emoji"_q, u"packs"_q, u"suggestions"_q },
+	});
+	if (addedPacks) {
+		addedPacks->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setOnlyAddedPacks(enabled);
+		}, addedPacks->lifetime());
+	}
+	const auto greetingStickers = builder.addButton({
+		.id = u"myowngram/hide-greeting-stickers"_q,
+		.title = tr::lng_myowngram_hide_greeting_stickers(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->hideGreetingStickersValue(),
+		.keywords = { u"greeting"_q, u"stickers"_q, u"empty chat"_q },
+	});
+	if (greetingStickers) {
+		greetingStickers->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setHideGreetingStickers(enabled);
+		}, greetingStickers->lifetime());
+	}
+	const auto stickers = builder.addButton({
+		.id = u"myowngram/click-twice-stickers"_q,
+		.title = tr::lng_myowngram_click_twice_stickers(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->clickTwiceToSendStickersValue(),
+		.keywords = { u"stickers"_q, u"send"_q, u"confirm"_q, u"click"_q },
+	});
+	if (stickers) {
+		stickers->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setClickTwiceToSendStickers(enabled);
+		}, stickers->lifetime());
+	}
+	const auto gifs = builder.addButton({
+		.id = u"myowngram/click-twice-gifs"_q,
+		.title = tr::lng_myowngram_click_twice_gifs(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->clickTwiceToSendGifsValue(),
+		.keywords = { u"gifs"_q, u"send"_q, u"confirm"_q, u"click"_q },
+	});
+	if (gifs) {
+		gifs->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setClickTwiceToSendGifs(enabled);
+		}, gifs->lifetime());
+	}
+});
+
+const auto kStories = BuildHelper({
+	.id = Stories::Id(),
+	.parentId = MyOwnGram::Id(),
+	.title = &tr::lng_media_type_stories,
+	.icon = &st::menuIconStoriesSavedSection,
+}, [](SectionBuilder &builder) {
+	builder.addSkip();
+	AddStoryToggles(builder);
 });
 
 const auto kPrivacy = BuildHelper({
@@ -861,6 +908,32 @@ ChatsAndProfiles::ChatsAndProfiles(
 
 rpl::producer<QString> ChatsAndProfiles::title() {
 	return tr::lng_myowngram_chats_profiles_title();
+}
+
+StickersAndEmoji::StickersAndEmoji(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	build(content, kStickersAndEmoji.build);
+	Ui::ResizeFitChild(this, content);
+}
+
+rpl::producer<QString> StickersAndEmoji::title() {
+	return tr::lng_settings_stickers_emoji();
+}
+
+Stories::Stories(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	build(content, kStories.build);
+	Ui::ResizeFitChild(this, content);
+}
+
+rpl::producer<QString> Stories::title() {
+	return tr::lng_media_type_stories();
 }
 
 Privacy::Privacy(
