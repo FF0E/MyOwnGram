@@ -9398,6 +9398,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_click_again_sticker" = "Click again to send this sticker.";
 "lng_myowngram_click_again_gif" = "Click again to send this GIF.";
 
+"lng_myowngram_banners_title" = "Chat-list banners";
+"lng_myowngram_banners_promotions" = "Hide promotional banners";
+"lng_myowngram_banners_profile_setup" = "Hide profile setup reminders";
+"lng_myowngram_banners_birthdays" = "Hide contact birthday reminders";
+"lng_myowngram_banners_subscriptions" = "Hide subscription reminders";
+"lng_myowngram_banners_auctions" = "Hide auction updates";
+
 "lng_myowngram_recommendations_title" = "Recommendations";
 "lng_myowngram_show_channel_recommendations" = "Hide channel recommendations";
 "lng_myowngram_show_bot_recommendations" = "Hide bot recommendations";

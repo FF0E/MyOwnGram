@@ -58,6 +58,29 @@ constexpr auto kHideQuickForwardKey
 constexpr auto kOnlyAddedPacksKey
 	= std::string_view("myowngram-only-added-packs");
 
+constexpr auto kChatListBannerPreferences = std::array{
+	std::pair{
+		&ChatListBannerSettings::promotions,
+		std::string_view("myowngram-show-chat-list-promotions"),
+	},
+	std::pair{
+		&ChatListBannerSettings::profileSetup,
+		std::string_view("myowngram-show-chat-list-profile-setup"),
+	},
+	std::pair{
+		&ChatListBannerSettings::birthdays,
+		std::string_view("myowngram-show-chat-list-birthdays"),
+	},
+	std::pair{
+		&ChatListBannerSettings::subscriptions,
+		std::string_view("myowngram-show-chat-list-subscriptions"),
+	},
+	std::pair{
+		&ChatListBannerSettings::auctions,
+		std::string_view("myowngram-show-chat-list-auctions"),
+	},
+};
+
 constexpr auto kRecommendationPreferences = std::array{
 	std::pair{
 		&RecommendationSettings::channels,
@@ -1465,6 +1488,11 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 		activity.*flag = readPref<bool>(key, true);
 	}
 	_activitySettings = activity;
+	auto banners = ChatListBannerSettings();
+	for (const auto &[flag, key] : kChatListBannerPreferences) {
+		banners.*flag = readPref<bool>(key, true);
+	}
+	_chatListBannerSettings = banners;
 	auto recommendations = RecommendationSettings();
 	for (const auto &[flag, key] : kRecommendationPreferences) {
 		recommendations.*flag = readPref<bool>(key, true);
@@ -1644,6 +1672,19 @@ void Settings::setReceiveDrafts(bool enabled) {
 	}
 	writePref<bool>(kReceiveDraftsKey, enabled);
 	_receiveDrafts = enabled;
+}
+
+void Settings::setChatListBannerSettings(ChatListBannerSettings value) {
+	const auto current = _chatListBannerSettings.current();
+	if (current == value) {
+		return;
+	}
+	for (const auto &[flag, key] : kChatListBannerPreferences) {
+		if (current.*flag != value.*flag) {
+			writePref<bool>(key, value.*flag);
+		}
+	}
+	_chatListBannerSettings = value;
 }
 
 void Settings::setRecommendationSettings(RecommendationSettings value) {
@@ -2147,6 +2188,9 @@ void Settings::resetOnLastLogout() {
 	writePref<bool>(kReceiveDraftsKey, receiveDrafts());
 	for (const auto &[flag, key] : kActivityPreferences) {
 		writePref<bool>(key, activitySettings().*flag);
+	}
+	for (const auto &[flag, key] : kChatListBannerPreferences) {
+		writePref<bool>(key, chatListBannerSettings().*flag);
 	}
 	for (const auto &[flag, key] : kRecommendationPreferences) {
 		writePref<bool>(key, recommendationSettings().*flag);

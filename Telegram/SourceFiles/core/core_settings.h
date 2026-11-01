@@ -47,6 +47,18 @@ enum class PeerIdDisplay {
 	BotApi,
 };
 
+struct ChatListBannerSettings {
+	bool promotions = true;
+	bool profileSetup = true;
+	bool birthdays = true;
+	bool subscriptions = true;
+	bool auctions = true;
+
+	friend constexpr bool operator==(
+		ChatListBannerSettings,
+		ChatListBannerSettings) = default;
+};
+
 struct RecommendationSettings {
 	bool channels = true;
 	bool bots = true;
@@ -1154,6 +1166,15 @@ public:
 	}
 	void setReceiveDrafts(bool enabled);
 
+	[[nodiscard]] ChatListBannerSettings chatListBannerSettings() const {
+		return _chatListBannerSettings.current();
+	}
+	[[nodiscard]] auto chatListBannerSettingsValue() const
+	-> rpl::producer<ChatListBannerSettings> {
+		return _chatListBannerSettings.value();
+	}
+	void setChatListBannerSettings(ChatListBannerSettings value);
+
 	[[nodiscard]] RecommendationSettings recommendationSettings() const {
 		return _recommendationSettings.current();
 	}
@@ -1433,6 +1454,7 @@ private:
 	rpl::variable<bool> _sendDrafts = true;
 	rpl::variable<bool> _receiveDrafts = true;
 	rpl::variable<ActivitySettings> _activitySettings;
+	rpl::variable<ChatListBannerSettings> _chatListBannerSettings;
 	rpl::variable<RecommendationSettings> _recommendationSettings;
 	rpl::variable<ReactionSettings> _reactionSettings;
 	rpl::variable<StorySettings> _storySettings;

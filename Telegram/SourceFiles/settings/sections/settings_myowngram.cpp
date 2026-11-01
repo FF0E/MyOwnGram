@@ -53,6 +53,16 @@ public:
 
 };
 
+class ChatListBanners final : public Section<ChatListBanners> {
+public:
+	ChatListBanners(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+};
+
 class StickersAndEmoji final : public Section<StickersAndEmoji> {
 public:
 	StickersAndEmoji(
@@ -240,6 +250,62 @@ void AddActivityToggles(SectionBuilder &builder) {
 				auto value = settings->activitySettings();
 				value.*flag = !enabled;
 				settings->setActivitySettings(value);
+			}, button->lifetime());
+		}
+	}
+}
+
+void AddChatListBannerToggles(SectionBuilder &builder) {
+	struct Row {
+		bool Core::ChatListBannerSettings::*flag = nullptr;
+		const tr::phrase<> *title = nullptr;
+		QString id;
+	};
+	const auto rows = std::array{
+		Row{
+			&Core::ChatListBannerSettings::promotions,
+			&tr::lng_myowngram_banners_promotions,
+			u"promotions"_q,
+		},
+		Row{
+			&Core::ChatListBannerSettings::profileSetup,
+			&tr::lng_myowngram_banners_profile_setup,
+			u"profile-setup"_q,
+		},
+		Row{
+			&Core::ChatListBannerSettings::birthdays,
+			&tr::lng_myowngram_banners_birthdays,
+			u"birthdays"_q,
+		},
+		Row{
+			&Core::ChatListBannerSettings::subscriptions,
+			&tr::lng_myowngram_banners_subscriptions,
+			u"subscriptions"_q,
+		},
+		Row{
+			&Core::ChatListBannerSettings::auctions,
+			&tr::lng_myowngram_banners_auctions,
+			u"auctions"_q,
+		},
+	};
+	const auto settings = &Core::App().settings();
+	for (const auto &row : rows) {
+		const auto flag = row.flag;
+		const auto button = builder.addButton({
+			.id = u"myowngram/banners/"_q + row.id,
+			.title = (*row.title)(),
+			.st = &st::settingsButtonNoIcon,
+			.toggled = settings->chatListBannerSettingsValue()
+				| rpl::map([=](Core::ChatListBannerSettings value) {
+					return !(value.*flag);
+				}) | rpl::distinct_until_changed(),
+			.keywords = { u"banners"_q, u"suggestions"_q },
+		});
+		if (button) {
+			button->toggledValue() | rpl::on_next([=](bool enabled) {
+				auto value = settings->chatListBannerSettings();
+				value.*flag = !enabled;
+				settings->setChatListBannerSettings(value);
 			}, button->lifetime());
 		}
 	}
@@ -551,6 +617,14 @@ const auto kChatsAndProfiles = BuildHelper({
 }, [](SectionBuilder &builder) {
 	const auto settings = &Core::App().settings();
 	builder.addSkip();
+	builder.addSectionButton({
+		.title = tr::lng_myowngram_banners_title(),
+		.targetSection = ChatListBanners::Id(),
+		.icon = { &st::menuIconChatBubble },
+	});
+	builder.addSkip();
+	builder.addDivider();
+	builder.addSkip();
 	builder.addSubsectionTitle(tr::lng_myowngram_message_display());
 	const auto seconds = builder.addButton({
 		.id = u"myowngram/message-seconds"_q,
@@ -680,6 +754,16 @@ const auto kChatsAndProfiles = BuildHelper({
 		},
 		.keywords = { u"drafts"_q, u"clear"_q, u"local"_q },
 	});
+});
+
+const auto kChatListBanners = BuildHelper({
+	.id = ChatListBanners::Id(),
+	.parentId = ChatsAndProfiles::Id(),
+	.title = &tr::lng_myowngram_banners_title,
+	.icon = &st::menuIconChatBubble,
+}, [](SectionBuilder &builder) {
+	builder.addSkip();
+	AddChatListBannerToggles(builder);
 });
 
 const auto kStickersAndEmoji = BuildHelper({
@@ -908,6 +992,19 @@ ChatsAndProfiles::ChatsAndProfiles(
 
 rpl::producer<QString> ChatsAndProfiles::title() {
 	return tr::lng_myowngram_chats_profiles_title();
+}
+
+ChatListBanners::ChatListBanners(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	build(content, kChatListBanners.build);
+	Ui::ResizeFitChild(this, content);
+}
+
+rpl::producer<QString> ChatListBanners::title() {
+	return tr::lng_myowngram_banners_title();
 }
 
 StickersAndEmoji::StickersAndEmoji(

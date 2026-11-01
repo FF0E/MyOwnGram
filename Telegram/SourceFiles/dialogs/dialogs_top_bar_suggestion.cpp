@@ -36,6 +36,30 @@ namespace {
 	return window->sessionController();
 }
 
+[[nodiscard]] bool SuggestionEnabled(
+		TopBarSuggestions::Priority priority,
+		const Core::ChatListBannerSettings &settings) {
+	using Priority = TopBarSuggestions::Priority;
+	switch (priority) {
+	case Priority::PremiumOffer:
+	case Priority::CustomPromo:
+		return settings.promotions;
+	case Priority::UserpicSetup:
+	case Priority::BirthdaySetup:
+		return settings.profileSetup;
+	case Priority::BirthdayContacts:
+		return settings.birthdays;
+	case Priority::LowCreditsSubs:
+	case Priority::PremiumGrace:
+		return settings.subscriptions;
+	case Priority::GiftAuctions:
+		return settings.auctions;
+	case Priority::UnreviewedAuth:
+		return true;
+	}
+	Unexpected("Top bar suggestion priority.");
+}
+
 } // namespace
 
 Fn<void()> ExpandChatsListCallback(not_null<Ui::RpWidget*> widget) {
@@ -77,6 +101,7 @@ rpl::producer<Ui::SlideWrap<Ui::RpWidget>*> TopBarSuggestionValue(
 			rpl::variable<bool> outerWrapToggle;
 			rpl::lifetime activeLifetime;
 			std::optional<TopBarSuggestions::Priority> activeSpec;
+			std::optional<TopBarSuggestions::Priority> displayedSpec;
 			std::optional<int> activeSpecDay;
 			Fn<void()> prepareSnapshot;
 			int wrapGeneration = 0;
@@ -131,10 +156,17 @@ rpl::producer<Ui::SlideWrap<Ui::RpWidget>*> TopBarSuggestionValue(
 			&TopBarSuggestions::Spec::priority);
 
 		const auto processCurrentSuggestion = [=](auto repeat) -> void {
+			const auto settings = Core::App().settings().chatListBannerSettings();
+			if (state->displayedSpec
+				&& !SuggestionEnabled(*state->displayedSpec, settings)) {
+				state->desiredWrapToggle.force_assign(
+					Toggle{ false, anim::type::instant });
+			}
 			auto winner = (const TopBarSuggestions::Spec*)(nullptr);
 			for (auto i = 0; i < int(specs->size()); ++i) {
 				const auto &spec = (*specs)[i];
-				if (spec.available(context)) {
+				if (SuggestionEnabled(spec.priority, settings)
+					&& spec.available(context)) {
 					winner = &spec;
 					break;
 				}
@@ -192,6 +224,7 @@ rpl::producer<Ui::SlideWrap<Ui::RpWidget>*> TopBarSuggestionValue(
 							state->prepareSnapshot = std::move(
 								prepareSnapshot);
 						}
+						state->displayedSpec = winnerPriority;
 						state->desiredWrapToggle.force_assign(
 							Toggle{ true, anim::type::normal });
 
@@ -219,6 +252,7 @@ rpl::producer<Ui::SlideWrap<Ui::RpWidget>*> TopBarSuggestionValue(
 				}
 				state->content = nullptr;
 				state->wrap = nullptr;
+				state->displayedSpec = std::nullopt;
 				++state->wrapGeneration;
 				state->prepareSnapshot = nullptr;
 				deliver();
@@ -250,7 +284,9 @@ rpl::producer<Ui::SlideWrap<Ui::RpWidget>*> TopBarSuggestionValue(
 			session->promoSuggestions().value(),
 			session->api().authorizations().unreviewedChanges(),
 			Data::AmPremiumValue(session) | rpl::skip(1) | rpl::to_empty,
-			session->giftAuctions().hasActiveChanges() | rpl::to_empty
+			session->giftAuctions().hasActiveChanges() | rpl::to_empty,
+			Core::App().settings().chatListBannerSettingsValue()
+				| rpl::skip(1) | rpl::to_empty
 		) | rpl::on_next([=] {
 			processCurrentSuggestion(processCurrentSuggestion);
 		}, lifetime);
