@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_updates.h"
 
 #include "api/api_authorizations.h"
+#include "api/api_blocked_peers.h"
 #include "api/api_user_names.h"
 #include "api/api_chat_participants.h"
 #include "api/api_global_privacy.h"
@@ -2260,10 +2261,7 @@ void Updates::feedUpdate(const MTPUpdate &update) {
 	} break;
 
 	case mtpc_updatePeerBlocked: {
-		const auto &d = update.c_updatePeerBlocked();
-		if (const auto peer = session().data().peerLoaded(peerFromMTP(d.vpeer_id()))) {
-			peer->setIsBlocked(d.is_blocked());
-		}
+		session().api().blockedPeers().apply(update.c_updatePeerBlocked());
 	} break;
 
 	case mtpc_updatePeerWallpaper: {

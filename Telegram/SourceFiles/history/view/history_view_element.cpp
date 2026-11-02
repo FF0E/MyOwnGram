@@ -84,6 +84,22 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 namespace HistoryView {
 namespace {
 
+void SpoilerRichBlocks(std::vector<Iv::Markdown::PreparedBlock> &blocks) {
+	for (auto &block : blocks) {
+		block.text = Ui::Text::Wrapped(
+			std::move(block.text),
+			EntityType::Spoiler);
+		for (auto &row : block.tableRows) {
+			for (auto &cell : row.cells) {
+				cell.text = Ui::Text::Wrapped(
+					std::move(cell.text),
+					EntityType::Spoiler);
+			}
+		}
+		SpoilerRichBlocks(block.children);
+	}
+}
+
 [[nodiscard]] auto FlatSelectionEndpointFromState(const TextState &state)
 -> MessageSelectionFlatEndpoint {
 	if (state.selectionCursor.isFlat()) {
@@ -1387,6 +1403,9 @@ void Element::checkSpecialOnlyEmoji() {
 }
 
 void Element::hideSpoilers() {
+	if (const auto reply = Get<Reply>()) {
+		reply->hideSpoilers();
+	}
 	if (_text.hasSpoilers()) {
 		_text.setSpoilerRevealed(false, anim::type::instant);
 	}
@@ -2182,6 +2201,9 @@ void Element::validateText() {
 			}
 			return;
 		}
+		if (_textItem->shouldSpoilerContent()) {
+			SpoilerRichBlocks(prepared.content.blocks.blocks);
+		}
 		ClickHandler::clearActive(this);
 		runtime->article.setContent(std::move(prepared.content));
 		runtime->hasUnsupportedBlocks
@@ -2316,7 +2338,13 @@ void Element::setTextWithLinks(
 		const auto item = data();
 		const auto &options = Ui::ItemTextOptions(item);
 		clearSpecialOnlyEmoji();
-		_text.setMarkedText(st::messageTextStyle, text, options, context);
+		_text.setMarkedText(
+			st::messageTextStyle,
+			(_textItem ? _textItem : item.get())->shouldSpoilerContent()
+				? Ui::Text::Wrapped(text, EntityType::Spoiler)
+				: text,
+			options,
+			context);
 		if (!item->_text.empty() && _text.isEmpty()){
 			// If server has allowed some text that we've trim-ed entirely,
 			// just replace it with something so that UI won't look buggy.

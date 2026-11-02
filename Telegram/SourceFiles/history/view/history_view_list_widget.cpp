@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/history_view_list_widget.h"
 
+#include "api/api_blocked_peers.h"
 #include "history/view/history_view_about_view.h"
 #include "base/unixtime.h"
 #include "base/qt/qt_key_modifiers.h"
@@ -88,6 +89,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/send_gif_with_caption_box.h"
 #include "data/components/sponsored_messages.h"
 #include "data/data_session.h"
+#include "data/data_story.h"
 #include "data/data_changes.h"
 #include "data/data_folder.h"
 #include "data/data_media_types.h"
@@ -639,7 +641,10 @@ ListWidget::ListWidget(
 	_session->data().itemViewRefreshRequest(
 	) | rpl::on_next([this](auto item) {
 		if (const auto view = viewForItem(item)) {
-			refreshItem(view);
+			const auto i = ranges::find(_items, view);
+			if (i != end(_items)) {
+				refreshItem(int(i - begin(_items)));
+			}
 		}
 	}, lifetime());
 	_session->data().itemShowHighlightRequest(
@@ -660,6 +665,64 @@ ListWidget::ListWidget(
 		if (const auto view = viewForItem(item)) {
 			view->itemDataChanged();
 		}
+	}, lifetime());
+
+	struct SpoilerRefresh {
+		base::flat_set<PeerId> peers;
+		bool all = false;
+		bool queued = false;
+	};
+	const auto spoilers = lifetime().make_state<SpoilerRefresh>();
+	rpl::merge(
+		Core::App().settings().spoilerBlockedUsersValue()
+			| rpl::skip(1)
+			| rpl::map([] { return PeerId(); }),
+		_session->api().blockedPeers().spoilerChanges(
+		) | rpl::filter([] {
+			return Core::App().settings().spoilerBlockedUsers();
+		})
+	) | rpl::on_next([=](PeerId peer) {
+		if (peer) {
+			spoilers->peers.emplace(peer);
+		} else {
+			spoilers->all = true;
+		}
+		if (spoilers->queued) {
+			return;
+		}
+		spoilers->queued = true;
+		crl::on_main(this, [=] {
+			spoilers->queued = false;
+			const auto all = base::take(spoilers->all);
+			const auto peers = base::take(spoilers->peers);
+			const auto matches = [&](not_null<HistoryItem*> item) {
+				const auto original = item->originalSender();
+				const auto media = item->media();
+				return peers.contains(item->from()->id)
+					|| (original && peers.contains(original->id))
+					|| (media && peers.contains(media->storyId().peer));
+			};
+			auto changed = false;
+			for (auto index = 0; index != int(_items.size()); ++index) {
+				const auto item = _items[index]->data();
+				const auto reply = item->Get<HistoryMessageReply>();
+				const auto referenced = reply
+					&& ((reply->resolvedMessage
+							&& matches(reply->resolvedMessage))
+						|| (reply->resolvedStory
+							&& peers.contains(reply->resolvedStory->peer()->id))
+						|| peers.contains(reply->fields().externalSenderId));
+				if (all || matches(item) || referenced) {
+					refreshItem(index, false);
+					changed = true;
+				}
+			}
+			if (changed) {
+				updateItemsGeometry();
+				markReadMetricsStale();
+				mouseActionUpdate();
+			}
+		});
 	}, lifetime());
 
 	Core::App().settings().reactionSettingsValue(
@@ -5752,27 +5815,16 @@ void ListWidget::viewHeightAdjusted(not_null<Element*> view) {
 	update();
 }
 
-void ListWidget::refreshItem(not_null<const Element*> view) {
-	const auto i = ranges::find(_items, view);
-	const auto index = i - begin(_items);
-	if (index < int(_items.size())) {
-		const auto item = view->data();
-		const auto was = [&]() -> std::unique_ptr<Element> {
-			if (const auto i = _views.find(item); i != end(_views)) {
-				auto result = std::move(i->second);
-				_views.erase(i);
-				return result;
-			}
-			return nullptr;
-		}();
-		const auto &[i, ok] = _views.emplace(
-			item,
-			item->createView(this, was.get()));
-		const auto now = i->second.get();
-		_items[index] = now;
+void ListWidget::refreshItem(int index, bool refreshAttachments) {
+	const auto item = _items[index]->data();
+	auto &entry = _views.find(item)->second;
+	const auto was = base::take(entry);
+	entry = item->createView(this, was.get());
+	_items[index] = entry.get();
 
-		viewReplaced(view, i->second.get());
+	viewReplaced(was.get(), entry.get());
 
+	if (refreshAttachments) {
 		refreshAttachmentsAtIndex(index);
 	}
 }

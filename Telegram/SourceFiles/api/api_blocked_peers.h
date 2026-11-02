@@ -7,7 +7,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include "data/data_peer_id.h"
 #include "mtproto/sender.h"
+
+#include <unordered_set>
 
 class ApiWrap;
 
@@ -40,6 +43,12 @@ public:
 	void reload();
 	rpl::producer<Slice> slice();
 	void request(int offset, Fn<void(Slice)> done);
+	void apply(const MTPDupdatePeerBlocked &update);
+
+	void resyncForSpoilers();
+	[[nodiscard]] bool isBlockedForSpoilers(PeerId id) const;
+	[[nodiscard]] rpl::producer<PeerId> spoilerChanges() const;
+	[[nodiscard]] rpl::producer<bool> spoilerLoadingValue() const;
 
 	void block(not_null<PeerData*> peer);
 	void unblock(
@@ -54,6 +63,19 @@ private:
 		bool blocking = false;
 	};
 
+	void readSpoilerCache();
+	void writeSpoilerCache();
+	void updateSpoilerCache(PeerId id, bool blocked);
+	void loadForSpoilers(
+		int offset = 0,
+		bool full = false,
+		int count = 0);
+	void applySpoilerSlice(
+		const Slice &slice,
+		int offset,
+		bool full,
+		int count);
+
 	[[nodiscard]] bool blockAlreadySent(
 		not_null<PeerData*> peer,
 		bool blocking,
@@ -67,7 +89,15 @@ private:
 	mtpRequestId _requestId = 0;
 	std::optional<Slice> _slice;
 	rpl::event_stream<Slice> _changes;
-
+	mtpRequestId _spoilerRequestId = 0;
+	std::unordered_set<PeerId> _spoilerIds;
+	std::unordered_set<PeerId> _spoilerUnseen;
+	rpl::event_stream<PeerId> _spoilerChanges;
+	TimeId _spoilerLastSync = 0;
+	rpl::variable<bool> _spoilerLoading = false;
+	bool _spoilerListLoaded = false;
+	rpl::lifetime _spoilerLifetime;
+	rpl::lifetime _lifetime;
 
 };
 

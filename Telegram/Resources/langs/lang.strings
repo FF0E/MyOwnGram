@@ -9395,6 +9395,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_hide_greeting_stickers" = "Hide greeting stickers";
 "lng_myowngram_hide_quick_forward" = "Hide quick-forward arrows";
 "lng_myowngram_only_added_packs" = "Show only added sticker and emoji packs";
+"lng_myowngram_spoiler_blocked_users" = "Spoiler content from blocked users";
+"lng_myowngram_resync_blocked_users" = "Resync blocked users";
+"lng_myowngram_resync_blocked_users_about" = "Reload this account's complete blocked list, including unblocks made on other devices.";
 "lng_myowngram_click_again_sticker" = "Click again to send this sticker.";
 "lng_myowngram_click_again_gif" = "Click again to send this GIF.";
 

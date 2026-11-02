@@ -2101,6 +2101,9 @@ std::unique_ptr<HistoryView::Media> MediaWebPage::createView(
 		realParent->setHasHiddenLinks(true);
 		return nullptr;
 	}
+	if (realParent->shouldSpoilerContent()) {
+		return nullptr;
+	}
 	return std::make_unique<HistoryView::WebPage>(message, _page, _flags);
 }
 

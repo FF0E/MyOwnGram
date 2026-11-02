@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/history_item.h"
 
+#include "api/api_blocked_peers.h"
 #include "api/api_premium.h"
 #include "api/api_sensitive_content.h"
 #include "api/api_transcribes.h"
@@ -39,6 +40,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "apiwrap.h"
 #include "media/audio/media_audio.h"
 #include "core/application.h"
+#include "core/core_settings.h"
 #include "wallet/wallet_address.h"
 #include "wallet/wallet_fiat.h"
 #include "wallet/wallet_panel.h"
@@ -4039,6 +4041,22 @@ PeerData *HistoryItem::originalSender() const {
 	}
 	const auto peer = _history->peer;
 	return peer->isBroadcast() ? peer : from();
+}
+
+bool HistoryItem::shouldSpoilerContent() const {
+	if (!isRegular() || !Core::App().settings().spoilerBlockedUsers()) {
+		return false;
+	}
+	const auto &blocked = _history->session().api().blockedPeers();
+	const auto original = originalSender();
+	if (blocked.isBlockedForSpoilers(from()->id)
+		|| (original
+			&& original != from()
+			&& blocked.isBlockedForSpoilers(original->id))) {
+		return true;
+	}
+	const auto story = _media ? _media->storyId() : FullStoryId();
+	return story && blocked.isBlockedForSpoilers(story.peer);
 }
 
 const HiddenSenderInfo *HistoryItem::originalHiddenSenderInfo() const {

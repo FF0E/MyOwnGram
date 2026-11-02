@@ -593,6 +593,7 @@ public:
 
 	[[nodiscard]] TimeId originalDate() const;
 	[[nodiscard]] PeerData *originalSender() const;
+	[[nodiscard]] bool shouldSpoilerContent() const;
 	[[nodiscard]] const HiddenSenderInfo *originalHiddenSenderInfo() const;
 	[[nodiscard]] not_null<PeerData*> fromOriginal() const;
 	[[nodiscard]] QString originalPostAuthor() const;

@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "settings/sections/settings_myowngram.h"
 
+#include "api/api_blocked_peers.h"
 #include "apiwrap.h"
 #include "core/application.h"
 #include "core/core_settings.h"
@@ -662,6 +663,39 @@ const auto kChatsAndProfiles = BuildHelper({
 		quickForward->toggledValue() | rpl::on_next([=](bool enabled) {
 			settings->setHideQuickForward(enabled);
 		}, quickForward->lifetime());
+	}
+	const auto blockedUsers = builder.addButton({
+		.id = u"myowngram/spoiler-blocked-users"_q,
+		.title = tr::lng_myowngram_spoiler_blocked_users(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->spoilerBlockedUsersValue(),
+		.keywords = { u"blocked"_q, u"spoiler"_q, u"messages"_q },
+	});
+	if (blockedUsers) {
+		blockedUsers->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setSpoilerBlockedUsers(enabled);
+		}, blockedUsers->lifetime());
+	}
+	const auto blockedPeers = &builder.session()->api().blockedPeers();
+	const auto resyncBlocked = builder.addButton({
+		.id = u"myowngram/resync-blocked-users"_q,
+		.title = tr::lng_myowngram_resync_blocked_users(),
+		.description = tr::lng_myowngram_resync_blocked_users_about(),
+		.st = &st::settingsButtonNoIcon,
+		.label = rpl::combine(
+			blockedPeers->spoilerLoadingValue(),
+			tr::lng_contacts_loading()
+		) | rpl::map([](bool loading, const QString &text) {
+			return loading ? text : QString();
+		}),
+		.onClick = [=] { blockedPeers->resyncForSpoilers(); },
+		.keywords = { u"blocked"_q, u"sync"_q, u"refresh"_q },
+		.shown = settings->spoilerBlockedUsersValue(),
+	});
+	if (resyncBlocked) {
+		blockedPeers->spoilerLoadingValue() | rpl::on_next([=](bool loading) {
+			resyncBlocked->setDisabled(loading);
+		}, resyncBlocked->lifetime());
 	}
 	builder.addSkip();
 	builder.addDivider();

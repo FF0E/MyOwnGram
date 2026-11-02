@@ -733,7 +733,7 @@ private:
 	void repaintItem(const Element *view);
 	void repaintItem(const Element *view, QRect rect);
 	void resizeItem(not_null<Element*> view);
-	void refreshItem(not_null<const Element*> view);
+	void refreshItem(int index, bool refreshAttachments = true);
 	void viewHeightAdjusted(not_null<Element*> view);
 	void showItemHighlight(not_null<HistoryItem*> item);
 	void itemRemoved(not_null<const HistoryItem*> item);

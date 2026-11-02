@@ -569,7 +569,11 @@ Ui::Text::String Media::createCaption(not_null<HistoryItem*> item) const {
 	});
 	result.setMarkedText(
 		st::messageTextStyle,
-		item->translatedTextWithLocalEntities(),
+		item->shouldSpoilerContent()
+			? Ui::Text::Wrapped(
+				item->translatedTextWithLocalEntities(),
+				EntityType::Spoiler)
+			: item->translatedTextWithLocalEntities(),
 		Ui::ItemTextOptions(item),
 		context);
 	InitElementTextPart(_parent, result);

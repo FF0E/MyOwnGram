@@ -7,6 +7,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/history_view_reply.h"
 
+#include "api/api_blocked_peers.h"
+#include "apiwrap.h"
+#include "core/application.h"
+#include "core/core_settings.h"
 #include "core/click_handler_types.h"
 #include "core/ui_integration.h"
 #include "data/stickers/data_custom_emoji.h"
@@ -389,6 +393,31 @@ void Reply::update(
 			_externalSender = view->history()->owner().peer(id);
 		}
 	}
+	const auto &blockedPeers = view->history()->session().api().blockedPeers();
+	const auto blocked = (view->context() != Context::MediaEditor)
+		&& Core::App().settings().spoilerBlockedUsers()
+		&& (item->shouldSpoilerContent()
+			|| (message && message->shouldSpoilerContent())
+			|| (story && blockedPeers.isBlockedForSpoilers(story->peer()->id))
+			|| (_externalSender
+				&& blockedPeers.isBlockedForSpoilers(_externalSender->id)));
+	if (_blocked != blocked) {
+		_blocked = blocked;
+		_blockedRevealed = false;
+	}
+	if (_blocked && !_blockedLink) {
+		const auto weak = base::make_weak(view.get());
+		_blockedLink = std::make_shared<LambdaClickHandler>([=] {
+			if (const auto view = weak.get()) {
+				if (const auto reply = view->Get<Reply>()) {
+					reply->_blockedRevealed = true;
+					reply->_text.setSpoilerRevealed(true, anim::type::instant);
+					view->history()->owner().registerShownSpoiler(view);
+					view->repaint();
+				}
+			}
+		});
+	}
 	_colorPeer = message
 		? message->contentColorsFrom()
 		: story
@@ -466,9 +495,12 @@ void Reply::update(
 		: TextWithEntities();
 	_text.setMarkedText(
 		st::defaultTextStyle,
-		text,
+		_blocked ? Ui::Text::Wrapped(text, EntityType::Spoiler) : text,
 		_multiline ? Ui::ItemTextDefaultOptions() : Ui::DialogTextOptions(),
 		helper.context());
+	if (_blocked) {
+		_text.setSpoilerRevealed(_blockedRevealed, anim::type::instant);
+	}
 	if (view->context() == Context::MediaEditor) {
 		_text.setSpoilerRevealed(true, anim::type::instant);
 	}
@@ -478,15 +510,23 @@ void Reply::update(
 	if (_displaying) {
 		setLinkFrom(view, data);
 		const auto media = message ? message->media() : nullptr;
-		if (!media
-			|| !media->hasReplyPreview()
-			|| !media->hasSpoilerForPreview()) {
+		if (!(_blocked && _hasPreview)
+			&& (!media
+				|| !media->hasReplyPreview()
+				|| !media->hasSpoilerForPreview())) {
 			_spoiler = nullptr;
 		} else if (!_spoiler) {
 			_spoiler = std::make_unique<Ui::SpoilerAnimation>(repaint);
 		}
 	} else {
 		_spoiler = nullptr;
+	}
+}
+
+void Reply::hideSpoilers() {
+	if (_blocked) {
+		_blockedRevealed = false;
+		_text.setSpoilerRevealed(false, anim::type::instant);
 	}
 }
 
@@ -949,7 +989,8 @@ void Reply::paint(
 						&& data->fields().pollOption.isEmpty())
 					? &messagePoll->attachedMedia
 					: nullptr;
-				const auto image = [&]() -> Image* {
+				const auto hidden = _blocked && !_blockedRevealed;
+				const auto image = hidden ? nullptr : [&]() -> Image* {
 					if (pollMediaPtr) {
 						if (pollMediaPtr->photo) {
 							return pollMediaPtr->photo->getReplyPreview(
@@ -974,13 +1015,18 @@ void Reply::paint(
 					}
 					return nullptr;
 				}();
-				if (image) {
-					auto to = style::rtlrect(
-						x + st::historyReplyPreviewMargin.left(),
-						y + st::historyReplyPreviewMargin.top(),
-						st::historyReplyPreview,
-						st::historyReplyPreview,
-						w + 2 * x);
+				const auto to = style::rtlrect(
+					x + st::historyReplyPreviewMargin.left(),
+					y + st::historyReplyPreviewMargin.top(),
+					st::historyReplyPreview,
+					st::historyReplyPreview,
+					w + 2 * x);
+				if (hidden) {
+					view->clearCustomEmojiRepaint();
+					p.fillRect(to, stm->msgBg);
+					Ui::FillSpoilerRect(p, to, Ui::DefaultImageSpoiler().frame(
+						_spoiler->index(context.now, pausedSpoiler)));
+				} else if (image) {
 					const auto preview = image->pixSingle(
 						image->size() / style::DevicePixelRatio(),
 						{
@@ -993,7 +1039,10 @@ void Reply::paint(
 					p.drawPixmap(to.x(), to.y(), preview);
 					const auto mediaEditor = (view->context()
 						== Context::MediaEditor);
-					if (_spoiler && !mediaEditor) {
+					if (_spoiler
+						&& !mediaEditor
+						&& media
+						&& media->hasSpoilerForPreview()) {
 						view->clearCustomEmojiRepaint();
 						FillPreviewSpoiler(
 							p,

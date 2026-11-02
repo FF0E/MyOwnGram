@@ -196,7 +196,8 @@ Gif::Gif(
 	: FullStoryId())
 , _spoiler((spoiler
 	|| IsHiddenRoundMessage(_parent)
-	|| realParent->isMediaSensitive())
+	|| realParent->isMediaSensitive()
+	|| realParent->shouldSpoilerContent())
 	? std::make_unique<MediaSpoiler>()
 	: nullptr)
 , _downloadSize(Ui::FormatSizeText(_data->size))
@@ -616,7 +617,8 @@ float64 Gif::revealedProgress() const {
 		&& item->media()->ttlSeconds()
 		&& !inTTLViewer)
 		? 0.
-		: (!isRound && _spoiler)
+		: (_spoiler && (!isRound
+			|| (!inTTLViewer && _realParent->shouldSpoilerContent())))
 		? _spoiler->revealAnimation.value(_spoiler->revealed ? 1. : 0.)
 		: 1.;
 }

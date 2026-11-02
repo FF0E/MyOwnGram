@@ -1288,6 +1288,14 @@ public:
 	}
 	void setOnlyAddedPacks(bool enabled);
 
+	[[nodiscard]] bool spoilerBlockedUsers() const {
+		return _spoilerBlockedUsers.current();
+	}
+	[[nodiscard]] rpl::producer<bool> spoilerBlockedUsersValue() const {
+		return _spoilerBlockedUsers.value();
+	}
+	void setSpoilerBlockedUsers(bool enabled);
+
 	void resetOnLastLogout();
 
 private:
@@ -1449,6 +1457,7 @@ private:
 	rpl::variable<bool> _hideGreetingStickers = false;
 	rpl::variable<bool> _hideQuickForward = false;
 	rpl::variable<bool> _onlyAddedPacks = false;
+	rpl::variable<bool> _spoilerBlockedUsers = false;
 	rpl::variable<bool> _sendPremiumPromoAnalytics = true;
 	rpl::variable<bool> _confirmBotLinks = false;
 	rpl::variable<bool> _sendDrafts = true;

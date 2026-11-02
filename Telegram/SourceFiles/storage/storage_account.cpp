@@ -818,6 +818,7 @@ void Account::writeMap() {
 
 void Account::reset() {
 	_writeSearchSuggestionsTimer.cancel();
+	clearPref("myowngram-blocked-users-cache");
 
 	auto names = collectGoodNames();
 	_draftsMap.clear();
@@ -4026,6 +4027,19 @@ std::optional<bool> Account::readPrefImpl<bool>(std::string_view key) {
 template <>
 void Account::writePrefImpl<bool>(std::string_view key, bool value) {
 	writePrefGeneric(key, value ? "\x1"_q : QByteArray());
+}
+
+template <>
+std::optional<QByteArray> Account::readPrefImpl<QByteArray>(
+		std::string_view key) {
+	return readPrefGeneric(key);
+}
+
+template <>
+void Account::writePrefImpl<QByteArray>(
+		std::string_view key,
+		QByteArray value) {
+	writePrefGeneric(key, value);
 }
 
 template <>

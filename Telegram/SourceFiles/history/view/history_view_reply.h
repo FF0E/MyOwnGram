@@ -91,6 +91,7 @@ public:
 	[[nodiscard]] QMargins margins() const;
 
 	bool expand();
+	void hideSpoilers();
 
 	void paint(
 		Painter &p,
@@ -111,7 +112,7 @@ public:
 		return _maxWidth;
 	}
 	[[nodiscard]] ClickHandlerPtr link() const {
-		return _link;
+		return (_blocked && !_blockedRevealed) ? _blockedLink : _link;
 	}
 
 	[[nodiscard]] static TextWithEntities PeerEmoji(PeerData *peer);
@@ -147,6 +148,7 @@ private:
 		bool shorten) const;
 
 	ClickHandlerPtr _link;
+	ClickHandlerPtr _blockedLink;
 	std::unique_ptr<Ui::SpoilerAnimation> _spoiler;
 	mutable QImage _spoilerCache;
 	mutable PeerData *_externalSender = nullptr;
@@ -164,6 +166,8 @@ private:
 	mutable int _height = 0;
 	mutable int _nameVersion = 0;
 	uint8 _hiddenSenderColorIndexPlusOne : 7 = 0;
+	uint8 _blocked : 1 = 0;
+	uint8 _blockedRevealed : 1 = 0;
 	uint8 _hasQuoteIcon : 1 = 0;
 	uint8 _hasBackgroundEmoji : 1 = 0;
 	uint8 _expanded : 1 = 0;

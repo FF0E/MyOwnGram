@@ -57,6 +57,8 @@ constexpr auto kHideQuickForwardKey
 	= std::string_view("myowngram-hide-quick-forward");
 constexpr auto kOnlyAddedPacksKey
 	= std::string_view("myowngram-only-added-packs");
+constexpr auto kSpoilerBlockedUsersKey
+	= std::string_view("myowngram-spoiler-blocked-users");
 
 constexpr auto kChatListBannerPreferences = std::array{
 	std::pair{
@@ -1519,6 +1521,7 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 	_hideGreetingStickers = readPref<bool>(kHideGreetingStickersKey, false);
 	_hideQuickForward = readPref<bool>(kHideQuickForwardKey, false);
 	_onlyAddedPacks = readPref<bool>(kOnlyAddedPacksKey, false);
+	_spoilerBlockedUsers = readPref<bool>(kSpoilerBlockedUsersKey, false);
 	const auto peerIds = readPrefGeneric(kPeerIdDisplayKey)
 		.value_or(QByteArray()).toInt();
 	switch (PeerIdDisplay(peerIds)) {
@@ -1632,6 +1635,14 @@ void Settings::setOnlyAddedPacks(bool enabled) {
 	}
 	writePref<bool>(kOnlyAddedPacksKey, enabled);
 	_onlyAddedPacks = enabled;
+}
+
+void Settings::setSpoilerBlockedUsers(bool enabled) {
+	if (_spoilerBlockedUsers.current() == enabled) {
+		return;
+	}
+	writePref<bool>(kSpoilerBlockedUsersKey, enabled);
+	_spoilerBlockedUsers = enabled;
 }
 
 void Settings::setSendReadMetrics(bool enabled) {
@@ -2181,6 +2192,7 @@ void Settings::resetOnLastLogout() {
 	writePref<bool>(kHideGreetingStickersKey, hideGreetingStickers());
 	writePref<bool>(kHideQuickForwardKey, hideQuickForward());
 	writePref<bool>(kOnlyAddedPacksKey, onlyAddedPacks());
+	writePref<bool>(kSpoilerBlockedUsersKey, spoilerBlockedUsers());
 	writePref<bool>(kSendReadMetricsKey, sendReadMetrics());
 	writePref<bool>(kSendPremiumPromoAnalyticsKey, sendPremiumPromoAnalytics());
 	writePref<bool>(kConfirmBotLinksKey, confirmBotLinks());
