@@ -641,7 +641,7 @@ ListWidget::ListWidget(
 	_session->data().itemViewRefreshRequest(
 	) | rpl::on_next([this](auto item) {
 		if (const auto view = viewForItem(item)) {
-			const auto i = ranges::find(_items, view);
+			const auto i = ranges::find(_items, not_null{ view });
 			if (i != end(_items)) {
 				refreshItem(int(i - begin(_items)));
 			}
@@ -708,7 +708,7 @@ ListWidget::ListWidget(
 				const auto reply = item->Get<HistoryMessageReply>();
 				const auto referenced = reply
 					&& ((reply->resolvedMessage
-							&& matches(reply->resolvedMessage))
+							&& matches(reply->resolvedMessage.get()))
 						|| (reply->resolvedStory
 							&& peers.contains(reply->resolvedStory->peer()->id))
 						|| peers.contains(reply->fields().externalSenderId));
