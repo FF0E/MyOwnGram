@@ -12,8 +12,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_user_privacy.h"
 #include "boxes/edit_privacy_box.h"
 #include "main/main_session.h"
+#include "rpl/variable.h"
 #include "settings/settings_common.h"
 #include "settings/sections/settings_privacy_security.h"
+#include "ui/effects/animations.h"
+#include "ui/painter.h"
 #include "ui/vertical_list.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/checkbox.h"
@@ -21,16 +24,24 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/wrap/slide_wrap.h"
 #include "ui/wrap/vertical_layout.h"
 #include "window/window_session_controller.h"
+
+#include <range/v3/algorithm/count_if.hpp>
+
+#include "styles/style_edit_peer_members.h"
+#include "styles/style_info.h"
 #include "styles/style_settings.h"
 
 namespace Settings::Builder {
 namespace {
 
-[[nodiscard]] QString ResolveTitle(rpl::producer<QString> title) {
-	auto result = QString();
+constexpr auto kGroupAnimationDuration = crl::time(200);
+
+template <typename Value>
+[[nodiscard]] Value ResolveValue(rpl::producer<Value> value) {
+	auto result = Value();
 	auto lifetime = rpl::lifetime();
-	std::move(title).start(
-		[&](QString value) { result = std::move(value); },
+	std::move(value).start(
+		[&](Value current) { result = std::move(current); },
 		[](auto&&) {},
 		[] {},
 		lifetime);
@@ -244,7 +255,7 @@ Ui::RpWidget *SectionBuilder::addControl(ControlArgs &&args) {
 	}, [&]() mutable {
 		return SearchEntry{
 			.id = std::move(args.id),
-			.title = ResolveTitle(std::move(args.title)),
+			.title = ResolveValue(std::move(args.title)),
 			.keywords = std::move(args.keywords),
 			.icon = std::move(args.searchIcon),
 			.checkIcon = args.searchCheckIcon,
@@ -257,7 +268,7 @@ Ui::SettingsButton *SectionBuilder::addButton(ButtonArgs &&args) {
 	auto iconForSearch = IconDescriptor{ args.icon.icon };
 	auto result = (Ui::SettingsButton*)nullptr;
 	if (args.description) {
-		args.keywords.push_back(ResolveTitle(rpl::duplicate(args.description)));
+		args.keywords.push_back(ResolveValue(rpl::duplicate(args.description)));
 	}
 	const auto factory = [&](not_null<Ui::VerticalLayout*> container)
 	-> object_ptr<Ui::RpWidget> {
@@ -426,14 +437,16 @@ Ui::Checkbox *SectionBuilder::addCheckbox(CheckboxArgs &&args) {
 	const auto factory = [&](not_null<Ui::VerticalLayout*> container) {
 		return object_ptr<Ui::Checkbox>(
 			container,
-			ResolveTitle(rpl::duplicate(args.title)),
+			ResolveValue(rpl::duplicate(args.title)),
 			args.checked,
 			st::settingsCheckbox);
 	};
 	return static_cast<Ui::Checkbox*>(addControl({
 		.factory = factory,
 		.id = std::move(args.id),
-		.title = rpl::duplicate(args.title),
+		.title = args.searchTitle
+			? std::move(args.searchTitle)
+			: rpl::duplicate(args.title),
 		.margin = st::settingsCheckboxPadding,
 		.highlight = std::move(args.highlight),
 		.shown = std::move(args.shown),
@@ -442,6 +455,147 @@ Ui::Checkbox *SectionBuilder::addCheckbox(CheckboxArgs &&args) {
 			? SearchEntryCheckIcon::Checked
 			: SearchEntryCheckIcon::Unchecked),
 	}));
+}
+
+void SectionBuilder::addCheckboxGroup(CheckboxGroupArgs &&args) {
+	struct State {
+		std::vector<not_null<Ui::Checkbox*>> checkboxes;
+		rpl::variable<int> count = 0;
+		Ui::Animations::Simple animation;
+	};
+	const auto button = addButton({
+		.id = args.id,
+		.title = rpl::duplicate(args.title),
+		.st = &st::settingsButtonNoIcon,
+	});
+	const auto state = button
+		? button->lifetime().make_state<State>()
+		: nullptr;
+	const auto updateCount = [=] {
+		state->count = int(ranges::count_if(
+			state->checkboxes,
+			[](const auto checkbox) { return checkbox->checked(); }));
+	};
+	const auto highlightId = controller()
+		? controller()->highlightControlId()
+		: QString();
+	auto expanded = (args.id == highlightId);
+	scope([&] {
+		for (auto &option : args.options) {
+			expanded = expanded || (option.id == highlightId);
+			const auto checkbox = addCheckbox({
+				.id = std::move(option.id),
+				.title = std::move(option.title),
+				.checked = ResolveValue(rpl::duplicate(option.checked)),
+				.keywords = std::move(option.keywords),
+				.searchTitle = std::move(option.searchTitle),
+			});
+			if (!checkbox) {
+				continue;
+			}
+			state->checkboxes.push_back(checkbox);
+			std::move(option.checked)
+				| rpl::distinct_until_changed()
+				| rpl::on_next([=](bool checked) {
+					checkbox->setChecked(checked);
+				}, checkbox->lifetime());
+			const auto changed = std::move(option.changed);
+			checkbox->checkedChanges() | rpl::on_next([=](bool checked) {
+				changed(checked);
+				updateCount();
+			}, checkbox->lifetime());
+		}
+	}, nullptr, [&](ToggledScopePtr wrap) {
+		wrap->toggle(expanded, anim::type::instant);
+		updateCount();
+		const auto toggle = Ui::CreateChild<Ui::SettingsButton>(
+			button->parentWidget(),
+			rpl::duplicate(args.title),
+			st::settingsButtonNoIcon);
+		toggle->setColorOverride(QColor(Qt::transparent));
+		toggle->toggleOn(
+			state->count.value() | rpl::map([](int count) { return count > 0; }),
+			true);
+		const auto separator = Ui::CreateChild<Ui::RpWidget>(
+			button->parentWidget());
+		separator->paintRequest() | rpl::on_next([=] {
+			auto p = QPainter(separator);
+			p.fillRect(separator->rect(), st::settingsButtonNoIcon.textBgOver);
+		}, separator->lifetime());
+		button->geometryValue() | rpl::on_next([=](const QRect &rect) {
+			const auto &style = st::settingsButtonNoIcon;
+			const auto height = 2 * style.toggle.border + style.toggle.diameter;
+			const auto width = st::rightsButtonToggleWidth;
+			toggle->setGeometry(
+				rect.x() + rect.width() - width,
+				rect.y(),
+				width,
+				rect.height());
+			separator->setGeometry(
+				toggle->x() - st::lineWidth,
+				rect.y() + (rect.height() - height) / 2,
+				st::lineWidth,
+				height);
+		}, toggle->lifetime());
+		separator->show();
+		toggle->show();
+		toggle->addClickHandler([=] {
+			const auto checked = !toggle->toggled();
+			for (const auto checkbox : state->checkboxes) {
+				checkbox->setChecked(checked);
+			}
+		});
+		button->addClickHandler([=] {
+			wrap->toggle(!wrap->toggled(), anim::type::normal);
+		});
+		button->setColorOverride(QColor(Qt::transparent));
+		const auto total = int(args.options.size());
+		const auto label = Ui::CreateChild<Ui::FlatLabel>(
+			button,
+			rpl::combine(
+				std::move(args.title),
+				state->count.value()
+			) | rpl::map([=](const QString &title, int count) {
+				return tr::marked(title).append(tr::bold(
+					u"  %1/%2"_q.arg(count).arg(total)));
+			}));
+		label->setAttribute(Qt::WA_TransparentForMouseEvents);
+		const auto arrow = Ui::CreateChild<Ui::RpWidget>(button);
+		arrow->setAttribute(Qt::WA_TransparentForMouseEvents);
+		arrow->resize(st::permissionsExpandIcon.size());
+		arrow->paintRequest() | rpl::on_next([=] {
+			auto p = QPainter(arrow);
+			const auto &icon = st::permissionsExpandIcon;
+			const auto center = QPointF(icon.width() / 2., icon.height() / 2.);
+			const auto progress = state->animation.value(
+				wrap->toggled() ? 1. : 0.);
+			auto hq = PainterHighQualityEnabler(p);
+			p.translate(center);
+			p.rotate(progress * 180.);
+			p.translate(-center);
+			icon.paint(p, 0, 0, arrow->width());
+		}, arrow->lifetime());
+		rpl::combine(
+			button->sizeValue(),
+			label->naturalWidthValue()
+		) | rpl::on_next([=](QSize size, int naturalWidth) {
+			const auto left = st::settingsButtonNoIcon.padding.left();
+			const auto right = size.width() - toggle->width();
+			const auto skip = st::rightsButtonArrowSkip;
+			label->resizeToWidth(right - left - arrow->width() - skip);
+			label->moveToLeft(left, (size.height() - label->height()) / 2);
+			arrow->moveToLeft(
+				std::min(left + naturalWidth + skip, right - arrow->width()),
+				(size.height() - arrow->height()) / 2);
+		}, button->lifetime());
+		wrap->toggledValue() | rpl::skip(1) | rpl::on_next([=](bool shown) {
+			state->animation.start(
+				[=] { arrow->update(); },
+				shown ? 0. : 1.,
+				shown ? 1. : 0.,
+				kGroupAnimationDuration);
+		}, button->lifetime());
+	});
 }
 
 void SectionBuilder::addSubsectionTitle(SubsectionTitleArgs &&args) {
@@ -459,7 +613,7 @@ void SectionBuilder::addSubsectionTitle(SubsectionTitleArgs &&args) {
 		if (!args.id.isEmpty()) {
 			ctx.entries->push_back({
 				.id = std::move(args.id),
-				.title = ResolveTitle(std::move(args.title)),
+				.title = ResolveValue(std::move(args.title)),
 				.keywords = std::move(args.keywords),
 				.section = ctx.sectionId,
 			});

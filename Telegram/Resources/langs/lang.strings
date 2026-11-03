@@ -9331,13 +9331,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_sending_messages" = "Sending messages";
 "lng_myowngram_profiles_title" = "Profiles";
 "lng_myowngram_ads_title" = "Ads";
-"lng_myowngram_ads_show" = "Disable ads";
+"lng_myowngram_ads_show" = "Hide ads";
 "lng_myowngram_ads_get" = "Disable ad requests";
-"lng_myowngram_ads_get_about" = "Stop the client from requesting new ads from Telegram.";
-"lng_myowngram_ads_show_channel" = "Disable channel ads";
-"lng_myowngram_ads_show_bot" = "Disable bot ads";
-"lng_myowngram_ads_show_search" = "Disable search ads";
-"lng_myowngram_ads_show_video" = "Disable ads during playback";
+"lng_myowngram_ads_playback" = "During playback";
+"lng_myowngram_ads_show_channel" = "Hide channel ads";
+"lng_myowngram_ads_show_bot" = "Hide bot ads";
+"lng_myowngram_ads_show_search" = "Hide search ads";
+"lng_myowngram_ads_show_video" = "Hide ads during playback";
 "lng_myowngram_ads_get_channel" = "Disable channel ad requests";
 "lng_myowngram_ads_get_bot" = "Disable bot ad requests";
 "lng_myowngram_ads_get_search" = "Disable search ad requests";
@@ -9345,24 +9345,22 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 "lng_myowngram_privacy_title" = "Privacy";
 "lng_myowngram_links_title" = "Links";
-"lng_myowngram_confirm_bot_links" = "Confirm bot links";
-"lng_myowngram_confirm_bot_links_about" = "Ask before opening bot links with certain parameters.";
+"lng_myowngram_confirm_bot_links" = "Confirm bot links with certain parameters";
 "lng_myowngram_usage_reports_title" = "Usage reports";
-"lng_myowngram_reading_analytics" = "Disable reading statistics";
-"lng_myowngram_reading_analytics_about" = "Stop sending Telegram statistics about how long you view messages with view counts and how much of them you see.";
+"lng_myowngram_reading_analytics" = "Disable message viewing statistics";
+"lng_myowngram_reading_analytics_about" = "Viewing time and visible area for messages with view counts.";
 
 "lng_myowngram_premium_promo_analytics" = "Disable Premium offer statistics";
-"lng_myowngram_premium_promo_analytics_about" = "Stop notifying Telegram when you view Premium offers or click certain subscription buttons.";
 
 "lng_myowngram_drafts_title" = "Drafts";
 "lng_myowngram_send_drafts" = "Disable saving drafts to Telegram";
 "lng_myowngram_receive_drafts" = "Ignore drafts from Telegram";
 "lng_myowngram_clear_cloud_drafts" = "Clear drafts on Telegram";
 "lng_myowngram_clear_cloud_drafts_sure" = "Clear all drafts saved to Telegram for this account? This can't be undone.";
-"lng_myowngram_cloud_drafts_cleared" = "Cloud drafts cleared.";
+"lng_myowngram_cloud_drafts_cleared" = "Drafts on Telegram cleared.";
 "lng_myowngram_clear_local_drafts" = "Clear saved drafts on this device";
-"lng_myowngram_clear_local_drafts_sure" = "Clear saved local drafts for this account? This can't be undone.";
-"lng_myowngram_local_drafts_cleared" = "Local drafts cleared.";
+"lng_myowngram_clear_local_drafts_sure" = "Clear saved drafts on this device for this account? This can't be undone.";
+"lng_myowngram_local_drafts_cleared" = "Saved drafts on this device cleared.";
 
 "lng_myowngram_activity_title" = "Activity sharing";
 "lng_myowngram_chat_activity" = "Chat activity";
@@ -9376,42 +9374,43 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_send_group_call_speaking_status" = "Disable speaking status sharing";
 "lng_myowngram_emoji_effects" = "Emoji effects";
 "lng_myowngram_share_emoji_effects" = "Disable emoji effect sharing";
-"lng_myowngram_share_emoji_effects_about" = "Stop the animated emoji effects from your taps from playing on the other person's screen.";
-"lng_myowngram_send_emoji_watching_status" = "Disable emoji viewing status sharing";
-"lng_myowngram_emoji_watching_about" = "Stop notifying the other person when their emoji effect is activated.";
+"lng_myowngram_send_emoji_watching_status" = "Hide when you view emoji effects";
 
 "lng_myowngram_jump_to_beginning" = "Jump to the beginning";
 "lng_myowngram_copy_message_details" = "Copy message details";
 "lng_myowngram_message_id" = "Message ID: {id}";
-"lng_myowngram_show_message_id_in_tooltip" = "Show message IDs";
-"lng_myowngram_message_id_tooltip_about" = "Show the message's ID when hovering over the timestamp.";
+"lng_myowngram_show_message_id_in_tooltip" = "Show message IDs in timestamp tooltips";
 "lng_myowngram_show_message_seconds" = "Show seconds";
-"lng_myowngram_emoji_panel_in_sidebar" = "Keep emoji panel in a pop-up";
-"lng_myowngram_emoji_panel_in_sidebar_about" = "Open emoji, stickers and GIFs without replacing the right-hand panel.";
+"lng_myowngram_emoji_panel_in_sidebar" = "Keep emoji panel in a popup";
 "lng_myowngram_click_twice_stickers" = "Click twice to send stickers";
 "lng_myowngram_click_twice_gifs" = "Click twice to send GIFs";
 "lng_myowngram_preview_voice_messages" = "Preview voice messages before sending";
 "lng_myowngram_preview_video_messages" = "Preview video messages before sending";
 "lng_myowngram_hide_greeting_stickers" = "Hide greeting stickers";
-"lng_myowngram_hide_quick_forward" = "Hide quick-forward arrows";
+"lng_myowngram_hide_quick_forward" = "Hide quick forward arrows";
 "lng_myowngram_only_added_packs" = "Show only added sticker and emoji packs";
-"lng_myowngram_spoiler_blocked_users" = "Spoiler content from blocked users";
-"lng_myowngram_resync_blocked_users" = "Resync blocked users";
-"lng_myowngram_resync_blocked_users_about" = "Reload this account's complete blocked list, including unblocks made on other devices.";
+"lng_myowngram_spoiler_blocked_users" = "Show messages from blocked users as spoilers";
+"lng_myowngram_resync_blocked_users" = "Refresh blocked list";
 "lng_myowngram_click_again_sticker" = "Click again to send this sticker.";
 "lng_myowngram_click_again_gif" = "Click again to send this GIF.";
 
-"lng_myowngram_banners_title" = "Chat-list banners";
+"lng_myowngram_banners_title" = "Hide chat list banners";
 "lng_myowngram_banners_promotions" = "Hide promotional banners";
+"lng_myowngram_banners_promotions_option" = "Promotions";
 "lng_myowngram_banners_profile_setup" = "Hide profile setup reminders";
+"lng_myowngram_banners_profile_setup_option" = "Profile setup";
 "lng_myowngram_banners_birthdays" = "Hide contact birthday reminders";
+"lng_myowngram_banners_birthdays_option" = "Contact birthdays";
 "lng_myowngram_banners_subscriptions" = "Hide subscription reminders";
+"lng_myowngram_banners_subscriptions_option" = "Subscription reminders";
 "lng_myowngram_banners_auctions" = "Hide auction updates";
+"lng_myowngram_banners_auctions_option" = "Auction updates";
 
-"lng_myowngram_recommendations_title" = "Recommendations";
+"lng_myowngram_recommendations_title" = "Hide recommendations";
 "lng_myowngram_show_channel_recommendations" = "Hide channel recommendations";
 "lng_myowngram_show_bot_recommendations" = "Hide bot recommendations";
 
+"lng_myowngram_reactions_title" = "Hide reactions";
 "lng_myowngram_show_personal_reactions" = "Hide reactions in private chats";
 "lng_myowngram_show_group_reactions" = "Hide reactions in groups";
 "lng_myowngram_show_channel_reactions" = "Hide reactions in channels";
@@ -9419,18 +9418,15 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_show_personal_stories" = "Hide stories from people";
 "lng_myowngram_show_channel_stories" = "Hide channel and group stories";
 "lng_myowngram_show_story_strip" = "Hide stories above the chat list";
-"lng_myowngram_auto_load_story_feed" = "Stop loading the story feed automatically";
-"lng_myowngram_auto_load_story_feed_about" = "Stop fetching the story feed and preloading its media automatically. Loaded stories remain available; incoming updates and stories you open can still refresh them.";
+"lng_myowngram_auto_load_story_feed" = "Disable automatic story feed loading";
 
 "lng_myowngram_mutual_contact_about" = "You've added each other as contacts.";
 
-"lng_myowngram_peer_ids" = "Profile IDs";
-"lng_myowngram_peer_ids_about" = "Choose a format to show user and chat IDs in profiles. Telegram data center details appear when available.";
+"lng_myowngram_peer_ids" = "Profile IDs and data centers";
 "lng_myowngram_peer_ids_hidden" = "Hidden";
 "lng_myowngram_peer_ids_telegram" = "Telegram API";
-"lng_myowngram_peer_ids_telegram_about" = "Positive IDs for users, groups and channels.";
 "lng_myowngram_peer_ids_bot" = "Bot API";
-"lng_myowngram_peer_ids_bot_about" = "Negative IDs for groups and channels. User IDs stay the same.";
+"lng_myowngram_peer_ids_bot_about" = "Negative IDs for groups and channels.";
 "lng_myowngram_copy_id" = "Copy ID";
 "lng_myowngram_id" = "ID";
 "lng_myowngram_dc_miami" = "Miami FL, USA";

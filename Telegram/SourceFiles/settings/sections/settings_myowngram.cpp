@@ -54,16 +54,6 @@ public:
 
 };
 
-class ChatListBanners final : public Section<ChatListBanners> {
-public:
-	ChatListBanners(
-		QWidget *parent,
-		not_null<Window::SessionController*> controller);
-
-	[[nodiscard]] rpl::producer<QString> title() override;
-
-};
-
 class StickersAndEmoji final : public Section<StickersAndEmoji> {
 public:
 	StickersAndEmoji(
@@ -108,58 +98,68 @@ public:
 
 };
 
-void AddAdToggles(
+void AddAdGroup(
 		SectionBuilder &builder,
 		bool Core::AdSettings::*flag) {
 	const auto settings = &Core::App().settings();
 	const auto rows = std::array{
 		std::tuple{
 			Core::AdPlacement::Channel,
+			&tr::lng_notification_channels,
 			&tr::lng_myowngram_ads_show_channel,
 			&tr::lng_myowngram_ads_get_channel,
 		},
 		std::tuple{
 			Core::AdPlacement::Bot,
+			&tr::lng_export_option_bot_chats,
 			&tr::lng_myowngram_ads_show_bot,
 			&tr::lng_myowngram_ads_get_bot,
 		},
 		std::tuple{
 			Core::AdPlacement::Search,
+			&tr::lng_group_call_invite_search_results,
 			&tr::lng_myowngram_ads_show_search,
 			&tr::lng_myowngram_ads_get_search,
 		},
 		std::tuple{
 			Core::AdPlacement::Video,
+			&tr::lng_myowngram_ads_playback,
 			&tr::lng_myowngram_ads_show_video,
 			&tr::lng_myowngram_ads_get_video,
 		},
 	};
 	const auto show = (flag == &Core::AdSettings::show);
 	const auto section = show ? u"show"_q : u"get"_q;
-	for (const auto &[placement, showTitle, getTitle] : rows) {
+	auto options = std::vector<SectionBuilder::CheckboxGroupOption>();
+	for (const auto &[placement, label, showTitle, getTitle] : rows) {
 		const auto title = show ? showTitle : getTitle;
-		const auto button = builder.addButton({
+		options.push_back({
 			.id = u"myowngram/ads/%1/%2"_q.arg(section).arg(int(placement)),
-			.title = (*title)(),
-			.st = &st::settingsButtonNoIcon,
-			.toggled = settings->adSettingsValue(placement)
+			.title = (*label)(),
+			.searchTitle = (*title)(),
+			.checked = settings->adSettingsValue(placement)
 				| rpl::map([=](Core::AdSettings value) {
 					return !(value.*flag);
 				}),
+			.changed = [=](bool checked) {
+				auto value = settings->adSettings(placement);
+				value.*flag = !checked;
+				settings->setAdSettings(placement, value);
+			},
 			.keywords = {
 				u"sponsored"_q,
 				u"advertising"_q,
 				show ? u"show"_q : u"get"_q,
 			},
 		});
-		if (button) {
-			button->toggledValue() | rpl::on_next([=](bool enabled) {
-				auto value = settings->adSettings(placement);
-				value.*flag = !enabled;
-				settings->setAdSettings(placement, value);
-			}, button->lifetime());
-		}
 	}
+	builder.addCheckboxGroup({
+		.id = u"myowngram/ads/"_q + section,
+		.title = show
+			? tr::lng_myowngram_ads_show()
+			: tr::lng_myowngram_ads_get(),
+		.options = std::move(options),
+	});
 }
 
 void AddActivityToggles(SectionBuilder &builder) {
@@ -167,7 +167,6 @@ void AddActivityToggles(SectionBuilder &builder) {
 		bool Core::ActivitySettings::*flag = nullptr;
 		const tr::phrase<> *title = nullptr;
 		QString id;
-		const tr::phrase<> *about = nullptr;
 		const tr::phrase<> *section = nullptr;
 	};
 	const auto rows = std::array{
@@ -175,7 +174,6 @@ void AddActivityToggles(SectionBuilder &builder) {
 			&Core::ActivitySettings::online,
 			&tr::lng_myowngram_send_online_status,
 			u"online"_q,
-			nullptr,
 			&tr::lng_myowngram_chat_activity,
 		},
 		Row{
@@ -207,21 +205,18 @@ void AddActivityToggles(SectionBuilder &builder) {
 			&Core::ActivitySettings::speaking,
 			&tr::lng_myowngram_send_group_call_speaking_status,
 			u"speaking"_q,
-			nullptr,
 			&tr::lng_myowngram_group_calls,
 		},
 		Row{
 			&Core::ActivitySettings::emojiEffects,
 			&tr::lng_myowngram_share_emoji_effects,
 			u"emoji-effects"_q,
-			&tr::lng_myowngram_share_emoji_effects_about,
 			&tr::lng_myowngram_emoji_effects,
 		},
 		Row{
 			&Core::ActivitySettings::emojiWatching,
 			&tr::lng_myowngram_send_emoji_watching_status,
 			u"emoji-watching"_q,
-			&tr::lng_myowngram_emoji_watching_about,
 		},
 	};
 	const auto settings = &Core::App().settings();
@@ -238,7 +233,6 @@ void AddActivityToggles(SectionBuilder &builder) {
 		const auto button = builder.addButton({
 			.id = u"myowngram/privacy/activity/"_q + row.id,
 			.title = (*row.title)(),
-			.description = row.about ? (*row.about)() : nullptr,
 			.st = &st::settingsButtonNoIcon,
 			.toggled = settings->activitySettingsValue()
 				| rpl::map([=](const Core::ActivitySettings &value) {
@@ -256,147 +250,172 @@ void AddActivityToggles(SectionBuilder &builder) {
 	}
 }
 
-void AddChatListBannerToggles(SectionBuilder &builder) {
+void AddChatListBannerGroup(SectionBuilder &builder) {
 	struct Row {
 		bool Core::ChatListBannerSettings::*flag = nullptr;
 		const tr::phrase<> *title = nullptr;
+		const tr::phrase<> *label = nullptr;
 		QString id;
 	};
 	const auto rows = std::array{
 		Row{
 			&Core::ChatListBannerSettings::promotions,
 			&tr::lng_myowngram_banners_promotions,
+			&tr::lng_myowngram_banners_promotions_option,
 			u"promotions"_q,
 		},
 		Row{
 			&Core::ChatListBannerSettings::profileSetup,
 			&tr::lng_myowngram_banners_profile_setup,
+			&tr::lng_myowngram_banners_profile_setup_option,
 			u"profile-setup"_q,
 		},
 		Row{
 			&Core::ChatListBannerSettings::birthdays,
 			&tr::lng_myowngram_banners_birthdays,
+			&tr::lng_myowngram_banners_birthdays_option,
 			u"birthdays"_q,
 		},
 		Row{
 			&Core::ChatListBannerSettings::subscriptions,
 			&tr::lng_myowngram_banners_subscriptions,
+			&tr::lng_myowngram_banners_subscriptions_option,
 			u"subscriptions"_q,
 		},
 		Row{
 			&Core::ChatListBannerSettings::auctions,
 			&tr::lng_myowngram_banners_auctions,
+			&tr::lng_myowngram_banners_auctions_option,
 			u"auctions"_q,
 		},
 	};
 	const auto settings = &Core::App().settings();
+	auto options = std::vector<SectionBuilder::CheckboxGroupOption>();
 	for (const auto &row : rows) {
 		const auto flag = row.flag;
-		const auto button = builder.addButton({
+		options.push_back({
 			.id = u"myowngram/banners/"_q + row.id,
-			.title = (*row.title)(),
-			.st = &st::settingsButtonNoIcon,
-			.toggled = settings->chatListBannerSettingsValue()
+			.title = (*row.label)(),
+			.searchTitle = (*row.title)(),
+			.checked = settings->chatListBannerSettingsValue()
 				| rpl::map([=](Core::ChatListBannerSettings value) {
 					return !(value.*flag);
-				}) | rpl::distinct_until_changed(),
+				}),
+			.changed = [=](bool checked) {
+				auto value = settings->chatListBannerSettings();
+				value.*flag = !checked;
+				settings->setChatListBannerSettings(value);
+			},
 			.keywords = { u"banners"_q, u"suggestions"_q },
 		});
-		if (button) {
-			button->toggledValue() | rpl::on_next([=](bool enabled) {
-				auto value = settings->chatListBannerSettings();
-				value.*flag = !enabled;
-				settings->setChatListBannerSettings(value);
-			}, button->lifetime());
-		}
 	}
+	builder.addCheckboxGroup({
+		.id = u"myowngram/banners"_q,
+		.title = tr::lng_myowngram_banners_title(),
+		.options = std::move(options),
+	});
 }
 
-void AddRecommendationToggles(SectionBuilder &builder) {
+void AddRecommendationGroup(SectionBuilder &builder) {
 	struct Row {
 		bool Core::RecommendationSettings::*flag = nullptr;
 		const tr::phrase<> *title = nullptr;
+		const tr::phrase<> *label = nullptr;
 		QString id;
 	};
 	const auto rows = std::array{
 		Row{
 			&Core::RecommendationSettings::channels,
 			&tr::lng_myowngram_show_channel_recommendations,
+			&tr::lng_notification_channels,
 			u"channels"_q,
 		},
 		Row{
 			&Core::RecommendationSettings::bots,
 			&tr::lng_myowngram_show_bot_recommendations,
+			&tr::lng_filters_include_bots,
 			u"bots"_q,
 		},
 	};
 	const auto settings = &Core::App().settings();
+	auto options = std::vector<SectionBuilder::CheckboxGroupOption>();
 	for (const auto &row : rows) {
 		const auto flag = row.flag;
-		const auto button = builder.addButton({
+		options.push_back({
 			.id = u"myowngram/recommendations/"_q + row.id,
-			.title = (*row.title)(),
-			.st = &st::settingsButtonNoIcon,
-			.toggled = settings->recommendationSettingsValue()
+			.title = (*row.label)(),
+			.searchTitle = (*row.title)(),
+			.checked = settings->recommendationSettingsValue()
 				| rpl::map([=](Core::RecommendationSettings value) {
 					return !(value.*flag);
-				}) | rpl::distinct_until_changed(),
+				}),
+			.changed = [=](bool checked) {
+				auto value = settings->recommendationSettings();
+				value.*flag = !checked;
+				settings->setRecommendationSettings(value);
+			},
 			.keywords = { u"recommendations"_q, u"similar"_q },
 		});
-		if (button) {
-			button->toggledValue() | rpl::on_next([=](bool enabled) {
-				auto value = settings->recommendationSettings();
-				value.*flag = !enabled;
-				settings->setRecommendationSettings(value);
-			}, button->lifetime());
-		}
 	}
+	builder.addCheckboxGroup({
+		.id = u"myowngram/recommendations"_q,
+		.title = tr::lng_myowngram_recommendations_title(),
+		.options = std::move(options),
+	});
 }
 
-void AddReactionToggles(SectionBuilder &builder) {
+void AddReactionGroup(SectionBuilder &builder) {
 	struct Row {
 		bool Core::ReactionSettings::*flag = nullptr;
 		const tr::phrase<> *title = nullptr;
+		const tr::phrase<> *label = nullptr;
 		QString id;
 	};
 	const auto rows = std::array{
 		Row{
 			&Core::ReactionSettings::personal,
 			&tr::lng_myowngram_show_personal_reactions,
+			&tr::lng_notification_private_chats,
 			u"personal"_q,
 		},
 		Row{
 			&Core::ReactionSettings::groups,
 			&tr::lng_myowngram_show_group_reactions,
+			&tr::lng_notification_groups,
 			u"groups"_q,
 		},
 		Row{
 			&Core::ReactionSettings::channels,
 			&tr::lng_myowngram_show_channel_reactions,
+			&tr::lng_notification_channels,
 			u"channels"_q,
 		},
 	};
 	const auto settings = &Core::App().settings();
+	auto options = std::vector<SectionBuilder::CheckboxGroupOption>();
 	for (const auto &row : rows) {
 		const auto flag = row.flag;
-		const auto button = builder.addButton({
+		options.push_back({
 			.id = u"myowngram/reactions/"_q + row.id,
-			.title = (*row.title)(),
-			.st = &st::settingsButtonNoIcon,
-			.toggled = settings->reactionSettingsValue()
+			.title = (*row.label)(),
+			.searchTitle = (*row.title)(),
+			.checked = settings->reactionSettingsValue()
 				| rpl::map([=](Core::ReactionSettings value) {
 					return !(value.*flag);
-				}) | rpl::distinct_until_changed(),
+				}),
+			.changed = [=](bool checked) {
+				auto value = settings->reactionSettings();
+				value.*flag = !checked;
+				settings->setReactionSettings(value);
+			},
 			.keywords = { u"reactions"_q, u"emoji"_q, u"counts"_q },
 		});
-		if (button) {
-			button->toggledValue() | rpl::on_next([=](bool enabled) {
-				auto value = settings->reactionSettings();
-				value.*flag = !enabled;
-				settings->setReactionSettings(value);
-			}, button->lifetime());
-		}
 	}
+	builder.addCheckboxGroup({
+		.id = u"myowngram/reactions"_q,
+		.title = tr::lng_myowngram_reactions_title(),
+		.options = std::move(options),
+	});
 }
 
 void AddStoryToggles(SectionBuilder &builder) {
@@ -404,7 +423,6 @@ void AddStoryToggles(SectionBuilder &builder) {
 		bool Core::StorySettings::*flag = nullptr;
 		const tr::phrase<> *title = nullptr;
 		QString id;
-		const tr::phrase<> *about = nullptr;
 	};
 	const auto rows = std::array{
 		Row{
@@ -426,7 +444,6 @@ void AddStoryToggles(SectionBuilder &builder) {
 			&Core::StorySettings::autoLoad,
 			&tr::lng_myowngram_auto_load_story_feed,
 			u"auto-load"_q,
-			&tr::lng_myowngram_auto_load_story_feed_about,
 		},
 	};
 	const auto settings = &Core::App().settings();
@@ -435,7 +452,6 @@ void AddStoryToggles(SectionBuilder &builder) {
 		const auto button = builder.addButton({
 			.id = u"myowngram/stories/"_q + row.id,
 			.title = (*row.title)(),
-			.description = row.about ? (*row.about)() : nullptr,
 			.st = &st::settingsButtonNoIcon,
 			.toggled = settings->storySettingsValue()
 				| rpl::map([=](Core::StorySettings value) {
@@ -494,10 +510,6 @@ void PeerIdBox(not_null<Ui::GenericBox*> box) {
 		settings->peerIdDisplay());
 	box->setTitle(tr::lng_myowngram_peer_ids());
 	box->addButton(tr::lng_close(), [=] { box->closeBox(); });
-	box->addRow(object_ptr<Ui::FlatLabel>(
-		box,
-		tr::lng_myowngram_peer_ids_about(),
-		st::boxLabel));
 	struct Choice {
 		Mode value = Mode::Hidden;
 		const tr::phrase<> *title = nullptr;
@@ -508,7 +520,6 @@ void PeerIdBox(not_null<Ui::GenericBox*> box) {
 		Choice{
 			Mode::TelegramApi,
 			&tr::lng_myowngram_peer_ids_telegram,
-			&tr::lng_myowngram_peer_ids_telegram_about,
 		},
 		Choice{
 			Mode::BotApi,
@@ -618,11 +629,7 @@ const auto kChatsAndProfiles = BuildHelper({
 }, [](SectionBuilder &builder) {
 	const auto settings = &Core::App().settings();
 	builder.addSkip();
-	builder.addSectionButton({
-		.title = tr::lng_myowngram_banners_title(),
-		.targetSection = ChatListBanners::Id(),
-		.icon = { &st::menuIconChatBubble },
-	});
+	AddChatListBannerGroup(builder);
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();
@@ -642,7 +649,6 @@ const auto kChatsAndProfiles = BuildHelper({
 	const auto messageId = builder.addButton({
 		.id = u"myowngram/message-id-tooltip"_q,
 		.title = tr::lng_myowngram_show_message_id_in_tooltip(),
-		.description = tr::lng_myowngram_message_id_tooltip_about(),
 		.st = &st::settingsButtonNoIcon,
 		.toggled = settings->showMessageIdInTooltipValue(),
 		.keywords = { u"message"_q, u"id"_q, u"date"_q, u"tooltip"_q },
@@ -680,7 +686,6 @@ const auto kChatsAndProfiles = BuildHelper({
 	const auto resyncBlocked = builder.addButton({
 		.id = u"myowngram/resync-blocked-users"_q,
 		.title = tr::lng_myowngram_resync_blocked_users(),
-		.description = tr::lng_myowngram_resync_blocked_users_about(),
 		.st = &st::settingsButtonNoIcon,
 		.label = rpl::combine(
 			blockedPeers->spoilerLoadingValue(),
@@ -728,8 +733,7 @@ const auto kChatsAndProfiles = BuildHelper({
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();
-	builder.addSubsectionTitle(tr::lng_notification_reactions());
-	AddReactionToggles(builder);
+	AddReactionGroup(builder);
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();
@@ -738,8 +742,7 @@ const auto kChatsAndProfiles = BuildHelper({
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();
-	builder.addSubsectionTitle(tr::lng_myowngram_recommendations_title());
-	AddRecommendationToggles(builder);
+	AddRecommendationGroup(builder);
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();
@@ -790,16 +793,6 @@ const auto kChatsAndProfiles = BuildHelper({
 	});
 });
 
-const auto kChatListBanners = BuildHelper({
-	.id = ChatListBanners::Id(),
-	.parentId = ChatsAndProfiles::Id(),
-	.title = &tr::lng_myowngram_banners_title,
-	.icon = &st::menuIconChatBubble,
-}, [](SectionBuilder &builder) {
-	builder.addSkip();
-	AddChatListBannerToggles(builder);
-});
-
 const auto kStickersAndEmoji = BuildHelper({
 	.id = StickersAndEmoji::Id(),
 	.parentId = MyOwnGram::Id(),
@@ -811,7 +804,6 @@ const auto kStickersAndEmoji = BuildHelper({
 	const auto emojiPanel = builder.addButton({
 		.id = u"myowngram/emoji-panel-in-sidebar"_q,
 		.title = tr::lng_myowngram_emoji_panel_in_sidebar(),
-		.description = tr::lng_myowngram_emoji_panel_in_sidebar_about(),
 		.st = &st::settingsButtonNoIcon,
 		.toggled = rpl::single(!settings->readPref<bool>(
 			"myowngram-emoji-panel-in-sidebar",
@@ -913,7 +905,6 @@ const auto kPrivacy = BuildHelper({
 	const auto botLinks = builder.addButton({
 		.id = u"myowngram/privacy/confirm-bot-links"_q,
 		.title = tr::lng_myowngram_confirm_bot_links(),
-		.description = tr::lng_myowngram_confirm_bot_links_about(),
 		.st = &st::settingsButtonNoIcon,
 		.toggled = settings->confirmBotLinksValue(),
 		.keywords = { u"links"_q, u"bots"_q, u"parameters"_q, u"referrals"_q },
@@ -949,7 +940,6 @@ const auto kPrivacy = BuildHelper({
 	const auto premium = builder.addButton({
 		.id = u"myowngram/privacy/premium-promo-analytics"_q,
 		.title = tr::lng_myowngram_premium_promo_analytics(),
-		.description = tr::lng_myowngram_premium_promo_analytics_about(),
 		.st = &st::settingsButtonNoIcon,
 		.toggled = settings->sendPremiumPromoAnalyticsValue()
 			| rpl::map(!rpl::mappers::_1),
@@ -984,22 +974,11 @@ const auto kAds = BuildHelper({
 	.icon = &st::menuIconBlock,
 }, [](SectionBuilder &builder) {
 	builder.addSkip();
-	builder.addSubsectionTitle(tr::lng_myowngram_ads_show());
-	AddAdToggles(builder, &Core::AdSettings::show);
+	AddAdGroup(builder, &Core::AdSettings::show);
 	builder.addSkip();
 	builder.addDivider();
 	builder.addSkip();
-	builder.addSubsectionTitle(tr::lng_myowngram_ads_get());
-	builder.add([](const WidgetContext &ctx) {
-		return SectionBuilder::WidgetToAdd{
-			.widget = object_ptr<Ui::FlatLabel>(
-				ctx.container,
-				tr::lng_myowngram_ads_get_about(),
-				st::settingsExperimentalAbout),
-			.margin = st::settingsExperimentalAboutPadding,
-		};
-	});
-	AddAdToggles(builder, &Core::AdSettings::get);
+	AddAdGroup(builder, &Core::AdSettings::get);
 });
 
 MyOwnGram::MyOwnGram(
@@ -1026,19 +1005,6 @@ ChatsAndProfiles::ChatsAndProfiles(
 
 rpl::producer<QString> ChatsAndProfiles::title() {
 	return tr::lng_myowngram_chats_profiles_title();
-}
-
-ChatListBanners::ChatListBanners(
-		QWidget *parent,
-		not_null<Window::SessionController*> controller)
-: Section(parent, controller) {
-	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
-	build(content, kChatListBanners.build);
-	Ui::ResizeFitChild(this, content);
-}
-
-rpl::producer<QString> ChatListBanners::title() {
-	return tr::lng_myowngram_banners_title();
 }
 
 StickersAndEmoji::StickersAndEmoji(

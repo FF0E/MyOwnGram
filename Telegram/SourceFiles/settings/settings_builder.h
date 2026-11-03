@@ -235,8 +235,24 @@ public:
 		QStringList keywords;
 		HighlightArgs highlight = { .radius = st::boxRadius };
 		rpl::producer<bool> shown;
+		rpl::producer<QString> searchTitle;
 	};
 	Ui::Checkbox *addCheckbox(CheckboxArgs &&args);
+
+	struct CheckboxGroupOption {
+		QString id;
+		rpl::producer<QString> title;
+		rpl::producer<QString> searchTitle;
+		rpl::producer<bool> checked;
+		Fn<void(bool)> changed;
+		QStringList keywords;
+	};
+	struct CheckboxGroupArgs {
+		QString id;
+		rpl::producer<QString> title;
+		std::vector<CheckboxGroupOption> options;
+	};
+	void addCheckboxGroup(CheckboxGroupArgs &&args);
 
 	struct SubsectionTitleArgs {
 		QString id;
