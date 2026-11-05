@@ -26,6 +26,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_item_helpers.h" // ShouldSendSilent
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
+#include "data/components/message_history.h"
 #include "styles/style_polls.h"
 #include "ui/toast/toast.h"
 #include "window/window_session_controller.h"
@@ -489,7 +490,8 @@ void Polls::close(not_null<HistoryItem*> item) {
 		MTP_int(0), // schedule_repeat_period
 		MTPint(), // quick_reply_shortcut_id
 		MTPInputRichMessage()
-	)).done([=](const MTPUpdates &result) {
+	)).done([=, ownChange = _session->messageHistory().localChange(itemId)](
+			const MTPUpdates &result) {
 		_pollCloseRequestIds.erase(itemId);
 		_session->updates().applyUpdates(result);
 	}).fail([=] {

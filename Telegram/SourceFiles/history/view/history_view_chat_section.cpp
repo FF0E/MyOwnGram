@@ -88,6 +88,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/click_handler_types.h"
 #include "core/mime_type.h"
 #include "main/main_session.h"
+#include "data/components/message_history.h"
 #include "main/main_session_settings.h"
 #include "media/player/media_player_instance.h"
 #include "menu/menu_timecode_action.h"
@@ -4925,12 +4926,21 @@ rpl::producer<Data::MessagesSlice> ChatWidget::listSource(
 		Data::MessagePosition aroundId,
 		int limitBefore,
 		int limitAfter) {
-	if (_replies) {
-		return repliesSource(aroundId, limitBefore, limitAfter);
-	} else if (_sublist) {
-		return sublistSource(aroundId, limitBefore, limitAfter);
-	}
-	return historySource(aroundId, limitBefore, limitAfter);
+	auto &archive = session().messageHistory();
+	aroundId = archive.originalPosition(aroundId);
+	auto source = _replies
+		? repliesSource(aroundId, limitBefore, limitAfter)
+		: _sublist
+		? sublistSource(aroundId, limitBefore, limitAfter)
+		: historySource(aroundId, limitBefore, limitAfter);
+	return archive.withDeleted({
+		.peer = _peer->id,
+		.topic = _repliesRootId,
+		.sublist = _sublist ? _sublist->sublistPeer()->id : PeerId(),
+		.around = aroundId.fullId.msg,
+		.limitBefore = limitBefore,
+		.limitAfter = limitAfter,
+	}, aroundId.fullId, std::move(source));
 }
 
 rpl::producer<Data::MessagesSlice> ChatWidget::repliesSource(
@@ -5166,8 +5176,9 @@ bool ChatWidget::listIsLessInOrder(
 		not_null<HistoryItem*> first,
 		not_null<HistoryItem*> second) {
 	return _sublist
-		? (first->id < second->id)
-		: first->position() < second->position();
+		? (Data::MessageHistory::OriginalId(first).msg
+			< Data::MessageHistory::OriginalId(second).msg)
+		: (first->position() < second->position());
 }
 
 void ChatWidget::listSelectionChanged(SelectedItems &&items) {
@@ -5194,6 +5205,9 @@ void ChatWidget::listSelectionChanged(SelectedItems &&items) {
 }
 
 void ChatWidget::listMarkReadTill(not_null<HistoryItem*> item) {
+	if (item->Has<HistoryMessageArchived>()) {
+		return;
+	}
 	if (_replies) {
 		_replies->readTill(item);
 	} else if (_sublist) {
@@ -5417,7 +5431,8 @@ bool ChatWidget::listElementShownUnread(not_null<const Element*> view) {
 
 bool ChatWidget::listIsGoodForAroundPosition(
 		not_null<const Element*> view) {
-	return view->data()->isRegular();
+	return view->data()->isRegular()
+		|| view->data()->Has<HistoryMessageArchived>();
 }
 
 void ChatWidget::listSendBotCommand(

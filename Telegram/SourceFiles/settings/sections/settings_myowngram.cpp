@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
 #include "settings/sections/settings_main.h"
+#include "settings/sections/settings_message_history.h"
 #include "settings/settings_builder.h"
 #include "settings/settings_common_session.h"
 #include "storage/storage_account.h"
@@ -634,6 +635,15 @@ const auto kChatsAndProfiles = BuildHelper({
 	builder.addDivider();
 	builder.addSkip();
 	builder.addSubsectionTitle(tr::lng_myowngram_message_display());
+	builder.addButton({
+		.id = u"myowngram/message-history"_q,
+		.title = tr::lng_myowngram_message_history_title(),
+		.st = &st::settingsButtonNoIcon,
+		.onClick = [controller = builder.controller()] {
+			controller->show(Box(MessageHistorySettingsBox, controller));
+		},
+		.keywords = { u"deleted"_q, u"edited"_q, u"history"_q },
+	});
 	const auto seconds = builder.addButton({
 		.id = u"myowngram/message-seconds"_q,
 		.title = tr::lng_myowngram_show_message_seconds(),

@@ -371,6 +371,10 @@ inline constexpr auto kTextDiffDeletedColorIndex = 11;
 	RichParseMode mode = RichParseMode::Normal);
 [[nodiscard]] std::shared_ptr<const RichPage> ParseRichPage(
 	not_null<Main::Session*> session,
+	const MTPInputRichMessage &message,
+	bool part = false);
+[[nodiscard]] std::shared_ptr<const RichPage> ParseRichPage(
+	not_null<Main::Session*> session,
 	const MTPPage &page);
 [[nodiscard]] std::shared_ptr<const RichPage> ParseRichPage(
 	not_null<Main::Session*> session,

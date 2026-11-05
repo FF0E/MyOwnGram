@@ -43,6 +43,10 @@ enum class PhotoSize : uchar {
 
 } // namespace Data
 
+namespace Serialize {
+class MessageHistory;
+} // namespace Serialize
+
 class PhotoData final {
 public:
 	PhotoData(not_null<Data::Session*> owner, PhotoId id);
@@ -174,6 +178,8 @@ public:
 	std::unique_ptr<Data::UploadState> uploadingData;
 
 private:
+	friend class Serialize::MessageHistory;
+
 	[[nodiscard]] Data::CloudFile &videoFile(Data::PhotoSize size);
 	[[nodiscard]] const Data::CloudFile &videoFile(
 		Data::PhotoSize size) const;

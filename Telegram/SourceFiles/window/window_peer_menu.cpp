@@ -82,6 +82,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_item_components.h"
 #include "history/view/controls/history_view_forward_panel.h"
 #include "history/view/history_view_context_menu.h"
+#include "history/view/history_view_message_history.h"
 #include "history/view/history_view_schedule_box.h"
 #include "iv/editor/iv_editor_session.h"
 #include "wallet/wallet_panel.h"
@@ -101,6 +102,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "info/profile/info_profile_values.h"
 #include "info/statistics/info_statistics_widget.h"
 #include "info/stories/info_stories_widget.h"
+#include "data/components/message_history.h"
 #include "data/components/scheduled_messages.h"
 #include "data/components/welcome_messages.h"
 #include "data/notify/data_notify_settings.h"
@@ -333,6 +335,7 @@ private:
 	void addDirectMessages();
 	void addToggleTopicClosed();
 	void addExportChat();
+	void addMessageHistory();
 	void addTranslate();
 	void addReport();
 	void addNewContact();
@@ -1108,6 +1111,17 @@ void Filler::addDeleteOwnMessages() {
 		.icon = &st::menuIconDeleteAttention,
 		.isAttention = true,
 	});
+}
+
+void Filler::addMessageHistory() {
+	if (!_peer->session().messageHistory().available()) {
+		return;
+	}
+	const auto controller = _controller;
+	const auto peer = _peer->id;
+	_addAction(tr::lng_myowngram_message_history_title(tr::now), [=] {
+		HistoryView::ShowMessageHistory(controller, peer);
+	}, &st::menuIconGroupLog);
 }
 
 void Filler::addExportChat() {
@@ -1986,6 +2000,7 @@ void Filler::fillContextMenuActions() {
 }
 
 void Filler::fillHistoryActions() {
+	addMessageHistory();
 	addToggleMuteSubmenu(true);
 	addCreateTopic();
 	addInfo();
@@ -2041,6 +2056,7 @@ void Filler::fillProfileActions() {
 }
 
 void Filler::fillRepliesActions() {
+	addMessageHistory();
 	if (_topic) {
 		addInfo();
 		addJumpToBeginning();

@@ -753,6 +753,17 @@ mac:
     lipo -create out.arm64/libssl.a out.x86_64/libssl.a -output libssl.a
 """)
 
+stage('sqlcipher', """
+    git clone -b v4.20.0 --depth=1 https://github.com/sqlcipher/sqlcipher.git
+    cd sqlcipher
+win:
+    "%VCINSTALLDIR%Auxiliary\\Build\\vcvarsall.bat" %VSCMD_ARG_HOST_ARCH%
+    nmake /f Makefile.msc sqlite3.c
+mac:
+    ./configure --disable-tcl
+    make sqlite3.c
+""")
+
 stage('opus', """
     git clone -b v1.5.2 https://github.com/xiph/opus.git
     cd opus

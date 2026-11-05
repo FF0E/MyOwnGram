@@ -109,6 +109,7 @@ using RoundData = VoiceData;
 
 namespace Serialize {
 class Document;
+class MessageHistory;
 } // namespace Serialize;
 
 class DocumentData final {
@@ -381,6 +382,7 @@ private:
 	static constexpr Flags kStreamingSupportedNo = Flags();
 
 	friend class Serialize::Document;
+	friend class Serialize::MessageHistory;
 
 	void validateLottieSticker();
 	void setMaybeSupportsStreaming(bool supports);

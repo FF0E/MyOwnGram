@@ -95,6 +95,7 @@ parts:
       - openssl
       - qt
       - rnnoise
+      - sqlcipher
       - tde2e
       - tdesktop_rust
       - webrtc
@@ -381,6 +382,36 @@ parts:
         no-shared no-tests no-dso
       make -j"${CRAFT_PARALLEL_BUILD_COUNT}"
       make DESTDIR="$CRAFT_PART_INSTALL" install_sw
+    prime: [-./*]
+
+  sqlcipher:
+    source: https://github.com/sqlcipher/sqlcipher.git
+    source-depth: 1
+    source-tag: v4.20.0
+    plugin: autotools
+    build-environment:
+      - CFLAGS: ${CFLAGS:+$CFLAGS} -DSQLITE_HAS_CODEC -DSQLCIPHER_CRYPTO_OPENSSL -DSQLITE_EXTRA_INIT=sqlcipher_extra_init -DSQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown
+      - LDFLAGS: ${LDFLAGS:+$LDFLAGS} -lcrypto
+    autotools-configure-parameters:
+      - --prefix=/usr
+      - --libdir=/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR
+      - --includedir=/usr/include/sqlcipher
+      - --disable-tcl
+      - --disable-shared
+      - --disable-load-extension
+      - --with-tempstore=always
+      - --enable-fts5
+    override-build: |
+      craftctl default
+      LIBDIR="$CRAFT_PART_INSTALL/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR"
+      mv "$LIBDIR/libsqlite3.a" "$LIBDIR/libsqlcipher.a"
+      sed 's/Name: SQLite/Name: SQLCipher/;s/-lsqlite3/-lsqlcipher/' \
+        "$LIBDIR/pkgconfig/sqlite3.pc" > "$LIBDIR/pkgconfig/sqlcipher.pc"
+    stage:
+      - usr/include/sqlcipher
+      - usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/libsqlcipher.a
+      - usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/pkgconfig/sqlcipher.pc
+    after: [openssl]
     prime: [-./*]
 
   nv-codec-headers:

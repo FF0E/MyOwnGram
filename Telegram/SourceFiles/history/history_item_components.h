@@ -138,6 +138,17 @@ struct HistoryMessageFromRank
 	QString rank;
 };
 
+struct HistoryMessageArchived
+: RuntimeComponent<HistoryMessageArchived, HistoryItem> {
+	FullMsgId original;
+	rpl::lifetime mediaLifetime;
+	qint64 recordId = 0;
+	TimeId sentAt = 0;
+	int part = 0;
+	bool deleted = false;
+	bool inlineCopy = false;
+};
+
 struct HistoryMessageEdited
 : RuntimeComponent<HistoryMessageEdited, HistoryItem> {
 	TimeId date = 0;

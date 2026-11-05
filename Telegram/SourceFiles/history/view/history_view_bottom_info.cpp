@@ -178,10 +178,21 @@ TextState BottomInfo::textState(
 	if (_data.flags & (Data::Flag::OutLayout | Data::Flag::Sending)) {
 		withTicksWidth += st::historySendStateSpace;
 	}
+	if ((_data.flags & Data::Flag::Deleted) && QRect(
+		width() - withTicksWidth - st::historyDeletedWidth,
+		0,
+		st::historyDeletedWidth,
+		st::msgDateFont->height
+	).contains(position)) {
+		result.customTooltip = true;
+		result.customTooltipText = tr::lng_myowngram_message_history_deleted(tr::now);
+		return result;
+	}
 	if (!_views.isEmpty()) {
 		const auto viewsWidth = _views.maxWidth();
 		const auto right = width()
 			- withTicksWidth
+			- ((_data.flags & Data::Flag::Deleted) ? st::historyDeletedWidth : 0)
 			- ((_data.flags & Data::Flag::Pinned) ? st::historyPinWidth : 0)
 			- st::historyViewsSpace
 			- st::historyViewsWidth
@@ -306,6 +317,15 @@ void BottomInfo::paint(
 		authorEditedWidth,
 		outerWidth);
 
+	if (_data.flags & Data::Flag::Deleted) {
+		right -= st::historyDeletedWidth;
+		st::historyDeletedIcon.paint(
+			p,
+			right,
+			firstLineBottom + st::historyDeletedTop,
+			outerWidth,
+			p.pen().color());
+	}
 	if (_data.flags & Data::Flag::Silent) {
 		const auto &icon = inverted
 			? st->historySilentInvertedIcon()
@@ -610,6 +630,9 @@ QSize BottomInfo::countOptimalSize() {
 		width += st::historySendStateSpace;
 	}
 	width += _authorEditedDate.maxWidth();
+	if (_data.flags & Data::Flag::Deleted) {
+		width += st::historyDeletedWidth;
+	}
 	if (!_views.isEmpty()) {
 		width += st::historyViewsSpace
 			+ _views.maxWidth()
@@ -680,6 +703,12 @@ BottomInfo::Data BottomInfoDataFromMessage(not_null<Message*> message) {
 
 	auto result = BottomInfo::Data();
 	result.date = message->dateTime();
+	if (const auto saved = item->Get<HistoryMessageArchived>()) {
+		result.date = QDateTime::fromSecsSinceEpoch(saved->sentAt);
+		if (saved->deleted) {
+			result.flags |= Flag::Deleted;
+		}
+	}
 	result.effectId = item->effectId();
 	if (message->hasOutLayout()) {
 		result.flags |= Flag::OutLayout;

@@ -1796,6 +1796,10 @@ void Message::draw(Painter &p, const PaintContext &context) const {
 
 	const auto item = data();
 	const auto media = this->media();
+	const auto saved = item->Get<HistoryMessageArchived>();
+	const auto opacity = ScopedPainterOpacity(
+		p,
+		p.opacity() * ((saved && saved->inlineCopy) ? 0.7 : 1.));
 
 	const auto gestureShift = context.gestureHorizontal.visualTranslationFor(
 		item->id.bare);

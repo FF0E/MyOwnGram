@@ -47,6 +47,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/settings_faq_suggestions.h"
 #include "settings/settings_recent_searches.h"
 #include "data/data_session.h"
+#include "data/components/message_history.h"
 #include "data/data_changes.h"
 #include "data/data_user.h"
 #include "data/data_download_manager.h"
@@ -115,6 +116,7 @@ Session::Session(
 , _storage(std::make_unique<Storage::Facade>())
 , _data(std::make_unique<Data::Session>(this))
 , _user(_data->processUser(user))
+, _messageHistory(std::make_unique<Data::MessageHistory>(this))
 , _emojiStickersPack(std::make_unique<Stickers::EmojiPack>(this))
 , _diceStickersPacks(std::make_unique<Stickers::DicePacks>(this))
 , _giftBoxStickersPacks(std::make_unique<Stickers::GiftBoxPack>(this))
@@ -186,6 +188,12 @@ Session::Session(
 , _fastButtonsBots(std::make_unique<Support::FastButtonsBots>(this))
 , _saveSettingsTimer([=] { saveSettings(); }) {
 	Expects(_settings != nullptr);
+
+	_messageHistory->errors() | rpl::on_next([=] {
+		if (!_windows.empty()) {
+			_windows.front()->showToast(tr::lng_myowngram_message_history_save_error(tr::now));
+		}
+	}, lifetime());
 
 	_api->requestTermsUpdate();
 	_api->requestFullPeer(_user);
@@ -322,6 +330,7 @@ QByteArray Session::validTmpPassword() const {
 
 // Can be called only right before ~Session.
 void Session::finishLogout() {
+	_messageHistory->erase();
 	Wallet::CloseWallet(this);
 	unlockTerms();
 	data().clear();

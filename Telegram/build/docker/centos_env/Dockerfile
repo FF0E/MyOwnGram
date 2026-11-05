@@ -833,6 +833,25 @@ cd ..
 rm -rf openssl
 EOF
 
+FROM builder AS sqlcipher
+COPY --link --from=openssl /usr/src/openssl-cache /
+RUN --mount=type=cache,target=/var/cache/ccache <<EOF
+git clone -b v4.20.0 --depth=1 https://github.com/sqlcipher/sqlcipher.git
+cd sqlcipher
+CFLAGS="$CFLAGS -DSQLITE_HAS_CODEC -DSQLCIPHER_CRYPTO_OPENSSL -DSQLITE_EXTRA_INIT=sqlcipher_extra_init -DSQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown" \
+LDFLAGS="$LDFLAGS -lcrypto" ./configure \
+	--includedir=/usr/local/include/sqlcipher \
+	--disable-tcl --disable-shared --disable-load-extension \
+	--with-tempstore=always --enable-fts5
+make -j$(nproc) libsqlite3.LIB=libsqlcipher.a lib
+make DESTDIR=/usr/src/sqlcipher-cache libsqlite3.LIB=libsqlcipher.a install-lib install-headers
+install -d /usr/src/sqlcipher-cache/usr/local/lib/pkgconfig
+sed 's/Name: SQLite/Name: SQLCipher/;s/-lsqlite3/-lsqlcipher/' sqlite3.pc \
+	> /usr/src/sqlcipher-cache/usr/local/lib/pkgconfig/sqlcipher.pc
+cd ..
+rm -rf sqlcipher
+EOF
+
 FROM builder AS xkbcommon
 COPY --link --from=xcb /usr/src/xcb-cache /
 
@@ -1075,6 +1094,7 @@ COPY --link --from=xdamage /usr/src/xdamage-cache /
 COPY --link --from=xcomposite /usr/src/xcomposite-cache /
 COPY --link --from=ffmpeg /usr/src/ffmpeg-cache /
 COPY --link --from=openal /usr/src/openal-cache /
+COPY --link --from=sqlcipher /usr/src/sqlcipher-cache /
 COPY --link --from=openssl /usr/src/openssl-cache /
 COPY --link --from=xkbcommon /usr/src/xkbcommon-cache /
 COPY --link --from=qt /usr/src/qt-cache /

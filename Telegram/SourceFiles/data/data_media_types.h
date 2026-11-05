@@ -15,6 +15,10 @@ class Image;
 class History;
 class HistoryItem;
 
+namespace Serialize {
+class MessageHistory;
+} // namespace Serialize
+
 namespace base {
 template <typename Enum>
 class enum_mask;
@@ -492,6 +496,7 @@ public:
 		const QString &description);
 
 private:
+	friend class Serialize::MessageHistory;
 
 	[[nodiscard]] QString typeString() const;
 

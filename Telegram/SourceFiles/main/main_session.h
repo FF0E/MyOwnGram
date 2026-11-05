@@ -32,6 +32,7 @@ class FastButtonsBots;
 namespace Data {
 class Session;
 class Changes;
+class MessageHistory;
 class GiftAuctions;
 class RecentInlineBots;
 class RecentPeers;
@@ -148,6 +149,9 @@ public:
 
 	[[nodiscard]] Data::Changes &changes() const {
 		return *_changes;
+	}
+	[[nodiscard]] Data::MessageHistory &messageHistory() const {
+		return *_messageHistory;
 	}
 	[[nodiscard]] Data::RecentPeers &recentPeers() const {
 		return *_recentPeers;
@@ -332,6 +336,7 @@ private:
 	// _data depends on _downloader / _uploader.
 	const std::unique_ptr<Data::Session> _data;
 	const not_null<UserData*> _user;
+	const std::unique_ptr<Data::MessageHistory> _messageHistory;
 
 	// _emojiStickersPack depends on _data.
 	const std::unique_ptr<Stickers::EmojiPack> _emojiStickersPack;

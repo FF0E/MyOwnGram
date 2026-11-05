@@ -246,6 +246,9 @@ historyViewsTop: -15px;
 historyPinTop: -18px;
 historySilentWidth: 12px;
 historySilentTop: -13px;
+historyDeletedWidth: 16px;
+historyDeletedTop: -12px;
+historyDeletedIcon: icon{{ "info/message_deleted", msgDateFg }};
 
 historyBotMenuSkip: 8px;
 historyBotMenuMaxWidth: 160px;

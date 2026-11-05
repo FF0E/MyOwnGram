@@ -4006,6 +4006,15 @@ GlobalMsgId HistoryItem::globalId() const {
 }
 
 Data::MessagePosition HistoryItem::position() const {
+	// Slice reloads create new local IDs, but scrolling needs a stable position.
+	if (const auto saved = Get<HistoryMessageArchived>()) {
+		return {
+			.fullId = saved->inlineCopy
+				? saved->original
+				: FullMsgId(PeerId(), MsgId(saved->recordId * 4 + saved->part)),
+			.date = date(),
+		};
+	}
 	return { .fullId = fullId(), .date = date() };
 }
 

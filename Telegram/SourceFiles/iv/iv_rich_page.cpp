@@ -3105,6 +3105,49 @@ std::shared_ptr<const RichPage> ParseRichPage(
 
 std::shared_ptr<const RichPage> ParseRichPage(
 		not_null<Main::Session*> session,
+		const MTPInputRichMessage &message,
+		bool part) {
+	auto result = std::make_shared<RichPage>();
+	auto context = ParseContext(session, ParseSource::RichMessage);
+	const auto &data = message.data();
+	result->rtl = data.is_rtl();
+	result->part = part;
+	if (const auto photos = data.vphotos()) {
+		for (const auto &input : photos->v) {
+			input.match([&](const MTPDinputPhoto &data) {
+				const auto photo = session->data().photo(data.vid().v);
+				context.photos[photo->id] = photo.get();
+				context.photoSizes[photo->id] = QSize(photo->width(), photo->height());
+			}, [](const MTPDinputPhotoEmpty &) {
+			});
+		}
+	}
+	if (const auto documents = data.vdocuments()) {
+		for (const auto &input : documents->v) {
+			input.match([&](const MTPDinputDocument &data) {
+				const auto document = session->data().document(data.vid().v);
+				context.documents[document->id] = document.get();
+				auto &info = context.documentInfos[document->id];
+				info.width = document->dimensions.width();
+				info.height = document->dimensions.height();
+				info.fileName = document->filename();
+				info.duration = int(document->duration() / 1000);
+				info.isAnimation = document->isAnimation();
+				info.isVideoFile = document->isVideoFile();
+				if (const auto song = document->song()) {
+					info.title = song->title;
+					info.performer = song->performer;
+				}
+			}, [](const MTPDinputDocumentEmpty &) {
+			});
+		}
+	}
+	AppendBlocks(data.vblocks().v, &result->blocks, &context);
+	return result;
+}
+
+std::shared_ptr<const RichPage> ParseRichPage(
+		not_null<Main::Session*> session,
 		const MTPPage &page) {
 	return ParsePage(session, page, nullptr);
 }

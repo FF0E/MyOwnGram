@@ -79,6 +79,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/stickers_box.h"
 #include "boxes/translate_box.h"
 #include "data/components/ephemeral_messages.h"
+#include "data/components/message_history.h"
+#include "history/view/history_view_message_history.h"
 #include "data/components/factchecks.h"
 #include "data/data_photo.h"
 #include "data/data_photo_media.h"
@@ -1941,6 +1943,33 @@ void FillContextMenuItems(
 	}
 	if (item && !hasSelection) {
 		AddMessageDetailsAction(result, item, list->controller()->uiShow());
+		const auto saved = item->Get<HistoryMessageArchived>();
+		const auto archive = &item->history()->session().messageHistory();
+		if ((saved || item->isRegular()) && archive->available()) {
+			const auto original = Data::MessageHistory::OriginalId(item);
+			const auto controller = list->controller();
+			result->addAction(tr::lng_myowngram_message_history_title(tr::now), [=] {
+				ShowMessageHistory(controller, original.peer, original.msg);
+			}, &st::menuIconGroupLog);
+			const auto remove = crl::guard(result, [=] {
+				result->addAction(tr::lng_myowngram_message_history_remove(tr::now), [=] {
+					RemoveMessageHistory(controller, original);
+				}, &st::menuIconDelete);
+			});
+			if (saved) {
+				remove();
+			} else {
+				archive->query({
+					.peer = original.peer,
+					.message = original.msg,
+					.limit = 1,
+				}, [=](Storage::MessageHistoryPage page) {
+					if (!page.entries.empty()) {
+						remove();
+					}
+				});
+			}
+		}
 	}
 	if (!skipWhoReacted) {
 		if (hasWhoReactedItem) {

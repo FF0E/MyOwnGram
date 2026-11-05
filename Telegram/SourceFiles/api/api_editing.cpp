@@ -30,6 +30,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "iv/iv_rich_page.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
+#include "data/components/message_history.h"
 #include "mtproto/mtproto_response.h"
 #include "boxes/abstract_box.h" // Ui::show().
 
@@ -350,7 +351,7 @@ mtpRequestId EditMessage(
 		MTP_int(options.scheduleRepeatPeriod),
 		MTP_int(item->shortcutId()),
 		MTPInputRichMessage()
-	)).done([=](
+	)).done([=, ownChange = session->messageHistory().localChange(item->fullId())](
 			const MTPUpdates &result,
 			[[maybe_unused]] mtpRequestId requestId) {
 		const auto apply = [=] { api->applyUpdates(result); };
@@ -763,7 +764,9 @@ mtpRequestId EditRichMessage(
 			MTP_int(options.scheduleRepeatPeriod),
 			MTP_int(item->shortcutId()),
 			*current
-		)).done([=](const MTPUpdates &result, mtpRequestId requestId) {
+		)).done([=, ownChange = session->messageHistory().localChange(origin)](
+				const MTPUpdates &result,
+				mtpRequestId requestId) {
 			api->applyUpdates(result);
 			if (done) {
 				done(originalRequestId ? originalRequestId : requestId);

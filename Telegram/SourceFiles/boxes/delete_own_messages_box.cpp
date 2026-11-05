@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "apiwrap.h"
 #include "base/unixtime.h"
+#include "data/components/message_history.h"
 #include "data/data_channel.h"
 #include "data/data_document.h"
 #include "data/data_media_types.h"
@@ -550,8 +551,14 @@ void DeleteOwnMessages::nextBatch() {
 			deleteDone(ids.size());
 		}
 	});
+	auto ownChanges = std::vector<std::shared_ptr<void>>();
+	for (const auto &id : ids) {
+		ownChanges.push_back(peer->session().messageHistory().localChange(
+			FullMsgId(peer->id, MsgId(id.v))));
+	}
 	// Sent deletions still update the session if the dialog is closed.
-	const auto done = [=](const MTPmessages_AffectedMessages &result) {
+	const auto done = [=, ownChanges = std::move(ownChanges)](
+			const MTPmessages_AffectedMessages &result) {
 		peer->session().api().applyAffectedMessages(peer, result);
 		if (peer->isChannel()) {
 			peer->owner().processMessagesDeleted(peer->id, ids);

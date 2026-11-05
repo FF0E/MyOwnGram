@@ -30,6 +30,7 @@ include(cmake/lib_stripe.cmake)
 include(cmake/lib_tgcalls.cmake)
 include(cmake/lib_prisma.cmake)
 include(cmake/lib_fido2.cmake)
+include(cmake/lib_sqlcipher.cmake)
 include(cmake/lib_zxcvbn.cmake)
 include(cmake/td_export.cmake)
 include(cmake/td_gram.cmake)
@@ -73,6 +74,7 @@ set_target_properties(Telegram PROPERTIES AUTOMOC ON)
 target_link_libraries(Telegram
 PRIVATE
     tdesktop::lib_fido2
+    tdesktop::lib_sqlcipher
     tdesktop::lib_tgcalls
     tdesktop::td_export
     tdesktop::td_gram
@@ -646,6 +648,8 @@ PRIVATE
     data/components/credits.h
     data/components/ephemeral_messages.cpp
     data/components/ephemeral_messages.h
+    data/components/message_history.cpp
+    data/components/message_history.h
     data/components/factchecks.cpp
     data/components/factchecks.h
     data/components/gift_auctions.cpp
@@ -1162,6 +1166,8 @@ PRIVATE
     history/view/history_view_message.h
     history/view/history_view_message_details.cpp
     history/view/history_view_message_details.h
+    history/view/history_view_message_history.cpp
+    history/view/history_view_message_history.h
     history/view/history_view_object.h
     history/view/history_view_paid_reaction_toast.cpp
     history/view/history_view_paid_reaction_toast.h
@@ -1965,6 +1971,8 @@ PRIVATE
     settings/sections/settings_main.h
     settings/sections/settings_myowngram.cpp
     settings/sections/settings_myowngram.h
+    settings/sections/settings_message_history.cpp
+    settings/sections/settings_message_history.h
     settings/settings_recent_searches.cpp
     settings/settings_recent_searches.h
     settings/settings_search.cpp
@@ -2018,6 +2026,8 @@ PRIVATE
     storage/serialize_common.h
     storage/serialize_document.cpp
     storage/serialize_document.h
+    storage/serialize_message_history.cpp
+    storage/serialize_message_history.h
     storage/serialize_peer.cpp
     storage/serialize_peer.h
     storage/storage_account.cpp
@@ -2032,6 +2042,8 @@ PRIVATE
     storage/storage_folder_archive.h
     storage/storage_media_prepare.cpp
     storage/storage_media_prepare.h
+    storage/storage_message_history.cpp
+    storage/storage_message_history.h
     storage/storage_shared_media.cpp
     storage/storage_shared_media.h
     storage/storage_sparse_ids_list.cpp

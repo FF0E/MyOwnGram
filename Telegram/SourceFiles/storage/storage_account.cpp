@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "storage/storage_account.h"
 
+#include "base/openssl_help.h"
 #include "storage/localstorage.h"
 #include "storage/storage_domain.h"
 #include "storage/storage_encryption.h"
@@ -282,6 +283,9 @@ base::flat_set<QString> Account::collectGoodNames() const {
 		"map1",
 		"maps",
 		"configs",
+		"message-history.sqlite",
+		"message-history.sqlite-wal",
+		"message-history.sqlite-shm",
 	};
 	const auto push = [&](FileKey key) {
 		if (!key) {
@@ -1886,6 +1890,21 @@ Core::FileLocation Account::readFileLocation(MediaKey location) {
 		return i.value();
 	}
 	return Core::FileLocation();
+}
+
+QString Account::messageHistoryPath() const {
+	return _basePath + u"message-history.sqlite"_q;
+}
+
+QByteArray Account::messageHistoryKey() const {
+	Expects(_localKey != nullptr);
+
+	const auto context = "myowngram-message-history:"
+		+ QByteArray::number(_dataNameKey, 16);
+	const auto key = openssl::HmacSha256(
+		bytes::make_span(_localKey->data()),
+		bytes::make_span(context));
+	return QByteArray(reinterpret_cast<const char*>(key.data()), key.size());
 }
 
 EncryptionKey Account::cacheKey() const {

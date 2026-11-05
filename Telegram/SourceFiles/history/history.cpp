@@ -774,7 +774,8 @@ void History::destroyMessagesByTopic(MsgId topicRootId) {
 	auto toDestroy = std::vector<not_null<HistoryItem*>>();
 	toDestroy.reserve(_items.size());
 	for (const auto &message : _items) {
-		if (message->topicRootId() == topicRootId) {
+		if (!message->Has<HistoryMessageArchived>()
+			&& message->topicRootId() == topicRootId) {
 			toDestroy.push_back(message.get());
 		}
 	}
@@ -791,7 +792,8 @@ void History::destroyMessagesBySublist(not_null<PeerData*> sublistPeer) {
 	toDestroy.reserve(_items.size());
 	const auto peerId = sublistPeer->id;
 	for (const auto &message : _items) {
-		if (message->sublistPeerId() == peerId) {
+		if (!message->Has<HistoryMessageArchived>()
+			&& message->sublistPeerId() == peerId) {
 			toDestroy.push_back(message.get());
 		}
 	}
