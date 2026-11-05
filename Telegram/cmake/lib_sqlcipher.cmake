@@ -19,7 +19,13 @@ else()
     add_library(lib_sqlcipher STATIC)
     init_target(lib_sqlcipher "(external)")
     target_sources(lib_sqlcipher PRIVATE ${libs_loc}/sqlcipher/sqlite3.c)
-    target_include_directories(lib_sqlcipher SYSTEM PUBLIC ${libs_loc}/sqlcipher)
+    set(sqlcipher_include_loc ${CMAKE_CURRENT_BINARY_DIR}/gen/sqlcipher)
+    configure_file(
+        ${libs_loc}/sqlcipher/sqlite3.h
+        ${sqlcipher_include_loc}/sqlite3.h
+        COPYONLY
+    )
+    target_include_directories(lib_sqlcipher SYSTEM PUBLIC ${sqlcipher_include_loc})
     target_compile_definitions(lib_sqlcipher
     PUBLIC
         SQLITE_HAS_CODEC
