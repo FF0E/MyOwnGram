@@ -248,7 +248,7 @@ historySilentWidth: 12px;
 historySilentTop: -13px;
 historyDeletedWidth: 16px;
 historyDeletedTop: -12px;
-historyDeletedIcon: icon{{ "info/message_deleted", msgDateFg }};
+historyDeletedIcon: icon{{ "info/message_deleted", msgInDateFg }};
 
 historyBotMenuSkip: 8px;
 historyBotMenuMaxWidth: 160px;
