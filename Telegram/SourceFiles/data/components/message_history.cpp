@@ -123,10 +123,10 @@ MessageHistory::MessageHistory(not_null<Main::Session*> session)
 : _session(session)
 , _enabled(session->local().readPref<bool>(kEnabled))
 , _includeAutoDelete(session->local().readPref<bool>(kAutoDelete))
-, _retention(session->local().readPref<int>(kRetention))
-, _download(Download(session->local().readPref<int>(
+, _retention(session->local().readPref<QByteArray>(kRetention).toInt())
+, _download(Download(session->local().readPref<QByteArray>(
 	kDownload,
-	int(Download::Automatic))))
+	QByteArray::number(int(Download::Automatic))).toInt()))
 , _available(QFileInfo::exists(session->local().messageHistoryPath()))
 , _flushTimer([=] { flush(); })
 , _expireTimer([=] { expire(); }) {
@@ -178,7 +178,9 @@ void MessageHistory::setIncludeAutoDelete(bool include) {
 }
 
 void MessageHistory::setRetention(int period) {
-	_session->local().writePref<int>(kRetention, period);
+	_session->local().writePref<QByteArray>(
+		kRetention,
+		QByteArray::number(period));
 	_retention = period;
 	_expireTimer.cancel();
 	if (_available && period) {
@@ -187,7 +189,9 @@ void MessageHistory::setRetention(int period) {
 }
 
 void MessageHistory::setDownload(Download value) {
-	_session->local().writePref<int>(kDownload, int(value));
+	_session->local().writePref<QByteArray>(
+		kDownload,
+		QByteArray::number(int(value)));
 	_download = value;
 }
 
