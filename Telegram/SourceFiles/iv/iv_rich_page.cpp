@@ -3109,7 +3109,7 @@ std::shared_ptr<const RichPage> ParseRichPage(
 		bool part) {
 	auto result = std::make_shared<RichPage>();
 	auto context = ParseContext(session, ParseSource::RichMessage);
-	const auto &data = message.data();
+	const auto &data = message.c_inputRichMessage();
 	result->rtl = data.is_rtl();
 	result->part = part;
 	if (const auto photos = data.vphotos()) {

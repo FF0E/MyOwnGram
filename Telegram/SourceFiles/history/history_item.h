@@ -43,6 +43,10 @@ template <typename Enum>
 class enum_mask;
 } // namespace base
 
+namespace Serialize {
+class MessageHistory;
+} // namespace Serialize
+
 namespace Storage {
 enum class SharedMediaType : signed char;
 using SharedMediaTypesMask = base::enum_mask<SharedMediaType>;
@@ -224,6 +228,7 @@ public:
 		const TextWithEntities &content,
 		PhotoData *photo = nullptr,
 		DocumentData *document = nullptr);
+	void markArchived();
 	void setFactcheck(MessageFactcheck info);
 	[[nodiscard]] bool hasUnrequestedFactcheck() const;
 	[[nodiscard]] TextWithEntities factcheckText() const;
@@ -842,6 +847,7 @@ private:
 	friend class HistoryView::Message;
 	friend class HistoryView::Service;
 	friend class HistoryView::ServiceMessagePainter;
+	friend class Serialize::MessageHistory;
 
 };
 

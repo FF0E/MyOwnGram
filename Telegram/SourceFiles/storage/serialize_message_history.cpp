@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "storage/serialize_message_history.h"
 
 #include "api/api_media.h"
+#include "core/version.h"
 #include "data/data_channel.h"
 #include "data/data_document.h"
 #include "data/data_game.h"
@@ -286,7 +287,7 @@ void MessageHistory::WriteRich(
 	}
 	stream << page->part;
 	WriteTL(stream, *serialized.value);
-	const auto &data = serialized.value->data();
+	const auto &data = serialized.value->c_inputRichMessage();
 	const auto photos = data.vphotos();
 	stream << qint32(photos ? photos->v.size() : 0);
 	if (photos) {
@@ -790,7 +791,7 @@ MessageHistory::Item MessageHistory::Read(
 	if (const auto reply = item->Get<HistoryMessageReply>()) {
 		reply->updateFields(item, MsgId(message), MsgId(top), topicPost);
 	}
-	item->AddComponents(HistoryMessageArchived::Bit());
+	item->markArchived();
 	const auto archive = item->Get<HistoryMessageArchived>();
 	archive->original = FullMsgId(history->peer->id, MsgId(original));
 	archive->sentAt = date;

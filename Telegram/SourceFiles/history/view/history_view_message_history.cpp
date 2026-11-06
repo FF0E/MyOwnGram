@@ -15,6 +15,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_session.h"
 #include "history/history.h"
 #include "history/history_item_components.h"
+#include "history/history_item_helpers.h"
 #include "history/view/history_view_element.h"
 #include "history/view/history_view_list_widget.h"
 #include "lang/lang_keys.h"
@@ -37,6 +38,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_boxes.h"
 #include "styles/style_chat.h"
 #include "styles/style_info.h"
+#include "styles/style_layers.h"
 #include "styles/style_menu_icons.h"
 
 namespace HistoryView {
@@ -338,14 +340,14 @@ void Widget::listShowPremiumToast(not_null<DocumentData*> document) {
 }
 
 void Widget::listOpenPhoto(not_null<PhotoData*> photo, FullMsgId context) {
-	controller()->openPhoto(photo, { .itemId = context });
+	controller()->openPhoto(photo, { .id = context });
 }
 
 void Widget::listOpenDocument(
 		not_null<DocumentData*> document,
 		FullMsgId context,
 		bool showInMediaView) {
-	controller()->openDocument(document, showInMediaView, { .itemId = context });
+	controller()->openDocument(document, showInMediaView, { .id = context });
 }
 
 QString Widget::listElementAuthorRank(not_null<const Element*> view) {
@@ -480,7 +482,7 @@ void Widget::loadMore() {
 
 void Widget::addEntry(const Entry &entry, std::vector<Item> &rows) {
 	const auto prepare = [&](Item item, int part) {
-		item->AddComponents(HistoryMessageArchived::Bit());
+		item->markArchived();
 		const auto data = item->Get<HistoryMessageArchived>();
 		data->original = entry.message;
 		data->recordId = entry.id;
@@ -510,8 +512,8 @@ void Widget::addEntry(const Entry &entry, std::vector<Item> &rows) {
 			header(tr::lng_myowngram_message_history_edited_event(tr::now), 0);
 			prepare(std::move(updated), 1);
 			header(previous->media() && previous->media()->allowsEditCaption()
-				? tr::lng_admin_log_original_caption(tr::now)
-				: tr::lng_admin_log_original_message(tr::now), 2);
+				? tr::lng_admin_log_previous_caption(tr::now)
+				: tr::lng_admin_log_previous_message(tr::now), 2);
 			prepare(std::move(previous), 3);
 		}
 	}
@@ -589,7 +591,7 @@ void Widget::showMenu() {
 	_menu->addAction(tr::lng_myowngram_message_history_cleanup(tr::now), [=] {
 		controller()->show(Box(Settings::MessageHistoryCleanupBox, controller()));
 	}, &st::menuIconTTL);
-	_menu->addAction(tr::lng_settings_title(tr::now), [=] {
+	_menu->addAction(tr::lng_menu_settings(tr::now), [=] {
 		controller()->show(Box(Settings::MessageHistorySettingsBox, controller()));
 	}, &st::menuIconSettings);
 	_menu->addSeparator();

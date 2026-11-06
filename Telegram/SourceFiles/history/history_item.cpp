@@ -2177,6 +2177,10 @@ void HistoryItem::addLogEntryOriginal(
 		document);
 }
 
+void HistoryItem::markArchived() {
+	AddComponents(HistoryMessageArchived::Bit());
+}
+
 void HistoryItem::setFactcheck(MessageFactcheck info) {
 	if (!info) {
 		if (Has<HistoryMessageFactcheck>()) {
