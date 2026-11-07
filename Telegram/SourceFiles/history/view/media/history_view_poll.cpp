@@ -2321,7 +2321,8 @@ void Poll::showVoteRestrictionToast() const {
 }
 
 bool Poll::isAuthorNotVoted() const {
-	return _parent->data()->out()
+	return _parent->data()->isRegular()
+		&& _parent->data()->out()
 		&& !_voted
 		&& !(_flags & PollData::Flag::Closed);
 }
@@ -2338,7 +2339,7 @@ bool Poll::canSendVotes() const {
 }
 
 bool Poll::showVotersCount() const {
-	if (voteRestricted()) {
+	if (_parent->data()->Has<HistoryMessageArchived>() || voteRestricted()) {
 		return true;
 	}
 	if (_voted && !showVotes()) {
@@ -2362,7 +2363,8 @@ bool Poll::inlineFooter() const {
 }
 
 bool Poll::canAddOption() const {
-	return (_parent->context() != Context::MediaEditor)
+	return _parent->data()->isRegular()
+		&& (_parent->context() != Context::MediaEditor)
 		&& (_flags & PollData::Flag::OpenAnswers)
 		&& !(_flags & PollData::Flag::Closed)
 		&& !_parent->data()->Has<HistoryMessageForwarded>()
@@ -3290,6 +3292,9 @@ void Poll::Options::showAnswerVotesTooltip(const QByteArray &option) {
 }
 
 void Poll::Options::showResults() {
+	if (!_owner->_parent->data()->isRegular()) {
+		return;
+	}
 	_owner->_parent->delegate()->elementShowPollResults(
 		_owner->_poll,
 		_owner->_parent->data()->fullId());
@@ -3453,7 +3458,8 @@ void Poll::draw(Painter &p, const PaintContext &context) const {
 	if (width() < st::msgPadding.left() + st::msgPadding.right() + 1) return;
 	auto paintw = width();
 
-	if (_poll->checkResultsReload(context.now)) {
+	if (_parent->data()->isRegular()
+		&& _poll->checkResultsReload(context.now)) {
 		history()->session().api().polls().reloadResults(_parent->data());
 	}
 

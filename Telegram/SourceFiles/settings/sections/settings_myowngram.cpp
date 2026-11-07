@@ -601,6 +601,11 @@ const auto kMain = BuildHelper({
 		.icon = { &st::menuIconChatBubble },
 	});
 	builder.addSectionButton({
+		.title = tr::lng_myowngram_message_history_title(),
+		.targetSection = MessageHistoryId(),
+		.icon = { &st::menuIconGroupLog },
+	});
+	builder.addSectionButton({
 		.title = tr::lng_settings_stickers_emoji(),
 		.targetSection = StickersAndEmoji::Id(),
 		.icon = { &st::menuIconStickers },
@@ -635,15 +640,6 @@ const auto kChatsAndProfiles = BuildHelper({
 	builder.addDivider();
 	builder.addSkip();
 	builder.addSubsectionTitle(tr::lng_myowngram_message_display());
-	builder.addButton({
-		.id = u"myowngram/message-history"_q,
-		.title = tr::lng_myowngram_message_history_title(),
-		.st = &st::settingsButtonNoIcon,
-		.onClick = [controller = builder.controller()] {
-			controller->show(Box(MessageHistorySettingsBox, controller));
-		},
-		.keywords = { u"deleted"_q, u"edited"_q, u"history"_q },
-	});
 	const auto seconds = builder.addButton({
 		.id = u"myowngram/message-seconds"_q,
 		.title = tr::lng_myowngram_show_message_seconds(),

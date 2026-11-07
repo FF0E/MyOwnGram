@@ -34,6 +34,7 @@ namespace Data {
 namespace {
 
 constexpr auto kFlushDelay = crl::time(250);
+constexpr auto kRetryDelay = crl::time(30 * 1000);
 constexpr auto kExpireInterval = crl::time(60 * 60 * 1000);
 constexpr auto kEnabled = "myowngram-message-history-enabled";
 constexpr auto kAutoDelete = "myowngram-message-history-auto-delete";
@@ -42,12 +43,11 @@ constexpr auto kDownload = "myowngram-message-history-download";
 
 struct SliceState : base::has_weak_ptr {
 	MessagesSlice live;
-	base::flat_map<qint64, Serialize::MessageHistory::Item> items;
+	base::flat_map<FullMsgId, std::shared_ptr<HistoryItem>> items;
 	Storage::MessageHistoryRange range;
 	bool moreBefore = false;
 	bool moreAfter = false;
 	bool haveLive = false;
-	bool haveArchive = false;
 	int generation = 0;
 };
 
@@ -61,9 +61,13 @@ MessagesSlice MergeDeletedMessages(
 		return result;
 	}
 	const auto anchorPeer = anchor.peer ? anchor.peer : request.peer;
+	result.ids.erase(ranges::remove_if(result.ids, [&](FullMsgId id) {
+		return state.items.contains(id);
+	}), result.ids.end());
 	const auto liveCount = result.ids.size();
 	for (const auto &[id, item] : state.items) {
 		result.ids.push_back(item->fullId());
+		result.ownedItems.push_back(item);
 	}
 	const auto position = [&](FullMsgId id) {
 		const auto item = session->data().message(id);
@@ -80,13 +84,16 @@ MessagesSlice MergeDeletedMessages(
 		middle,
 		result.ids.end(),
 		[&](FullMsgId a, FullMsgId b) { return key(a) < key(b); });
-	auto around = ranges::find(
-		result.ids,
-		anchor,
-		[&](FullMsgId id) { return position(id).fullId; });
+	const auto find = [&](FullMsgId id) {
+		return ranges::find(
+			result.ids,
+			position(id).fullId,
+			[&](FullMsgId value) { return position(value).fullId; });
+	};
+	auto around = find(anchor);
 	if (around == result.ids.end()
 		&& (!IsServerMsgId(anchor.msg) || anchorPeer != request.peer)) {
-		around = ranges::find(result.ids, state.live.nearestToAround);
+		around = find(state.live.nearestToAround);
 	}
 	if (around == result.ids.end()) {
 		around = ranges::find_if(result.ids, [&](FullMsgId id) {
@@ -95,6 +102,9 @@ MessagesSlice MergeDeletedMessages(
 				&& IsServerMsgId(original.msg)
 				&& (original.msg >= state.range.around);
 		});
+	}
+	if (around == result.ids.end()) {
+		around = find(state.live.nearestToAround);
 	}
 	const auto index = std::min(
 		int(around - result.ids.begin()),
@@ -136,7 +146,21 @@ MessageHistory::MessageHistory(not_null<Main::Session*> session)
 }
 
 MessageHistory::~MessageHistory() {
-	flush();
+	auto entries = std::vector<Storage::MessageHistoryEntry>();
+	for (const auto &[id, pending] : _pending) {
+		if (id > _savingTill) {
+			entries.push_back(pending.entry);
+		}
+	}
+	if (!entries.empty()) {
+		worker().with([entries = std::move(entries)](
+				Storage::MessageHistoryDatabase &database) {
+			const auto error = database.add(entries);
+			if (!error.isEmpty()) {
+				LOG(("Message history: %1").arg(error));
+			}
+		});
+	}
 }
 
 bool MessageHistory::enabled() const {
@@ -152,11 +176,11 @@ bool MessageHistory::includeAutoDelete() const {
 }
 
 int MessageHistory::retention() const {
-	return _retention;
+	return _retention.current();
 }
 
 MessageHistory::Download MessageHistory::download() const {
-	return _download;
+	return _download.current();
 }
 
 rpl::producer<bool> MessageHistory::enabledValue() const {
@@ -165,6 +189,14 @@ rpl::producer<bool> MessageHistory::enabledValue() const {
 
 rpl::producer<bool> MessageHistory::includeAutoDeleteValue() const {
 	return _includeAutoDelete.value();
+}
+
+rpl::producer<int> MessageHistory::retentionValue() const {
+	return _retention.value();
+}
+
+rpl::producer<MessageHistory::Download> MessageHistory::downloadValue() const {
+	return _download.value();
 }
 
 void MessageHistory::setEnabled(bool enabled) {
@@ -255,8 +287,29 @@ void MessageHistory::deleted(not_null<HistoryItem*> item) {
 	if (!captures(item) || _localChanges.contains(item->fullId())) {
 		return;
 	}
-	add(snapshot(item, Storage::MessageHistoryKind::Deleted));
+	auto entry = snapshot(item, Storage::MessageHistoryKind::Deleted);
+	auto copy = inlineItem(entry);
+	add(std::move(entry), std::move(copy));
 	recoverMedia(item);
+}
+
+std::shared_ptr<HistoryItem> MessageHistory::inlineItem(
+		const Storage::MessageHistoryEntry &entry) {
+	const auto i = _inlineItems.find(entry.message);
+	auto item = (i != _inlineItems.end()) ? i->second.item.lock() : nullptr;
+	if (!item) {
+		item = Serialize::MessageHistory::Read(
+			_session->data().history(entry.message.peer),
+			entry.previous,
+			true);
+		_inlineItems[entry.message] = { entry.topic, entry.sublist, item };
+	}
+	if (item) {
+		const auto saved = item->Get<HistoryMessageArchived>();
+		saved->recordId = entry.id;
+		saved->deleted = true;
+	}
+	return item;
 }
 
 std::shared_ptr<void> MessageHistory::localChange(FullMsgId id) {
@@ -367,39 +420,63 @@ void MessageHistory::recoverMedia(not_null<HistoryItem*> item) {
 	}
 }
 
-void MessageHistory::add(Storage::MessageHistoryEntry entry) {
+void MessageHistory::add(
+		Storage::MessageHistoryEntry entry,
+		std::shared_ptr<HistoryItem> item) {
 	_available = true;
-	_pending.push_back(std::move(entry));
+	_pending.emplace(++_nextPendingId, PendingEntry{
+		.entry = std::move(entry),
+		.item = item,
+	});
 	if (!_flushTimer.isActive()) {
 		_flushTimer.callOnce(kFlushDelay);
 	}
 	if (retention() && !_expireTimer.isActive()) {
 		_expireTimer.callOnce(kExpireInterval);
 	}
+	if (item) {
+		_deleted.fire(std::move(item));
+	}
 }
 
 void MessageHistory::flush() {
 	_flushTimer.cancel();
-	if (_pending.empty()) {
+	if (_pending.empty() || _savingTill) {
 		return;
+	}
+	auto entries = std::vector<Storage::MessageHistoryEntry>();
+	auto peers = base::flat_set<PeerId>();
+	for (const auto &[id, pending] : _pending) {
+		entries.push_back(pending.entry);
+		peers.emplace(pending.entry.message.peer);
+		_savingTill = id;
 	}
 	worker().with([
 		weak = base::make_weak(this),
-		entries = base::take(_pending)
+		till = _savingTill,
+		peers = std::move(peers),
+		entries = std::move(entries)
 	](Storage::MessageHistoryDatabase &database) {
 		const auto error = database.add(entries);
-		auto peers = base::flat_set<PeerId>();
-		for (const auto &entry : entries) {
-			peers.emplace(entry.message.peer);
-		}
 		crl::on_main(weak, [=] {
+			weak->_savingTill = 0;
 			if (!error.isEmpty()) {
-				weak->report(error);
-			} else {
-				for (const auto peer : peers) {
-					weak->_changes.fire_copy(peer);
+				if (!std::exchange(weak->_saveFailed, true)) {
+					weak->report(error);
 				}
+				if (!weak->_pending.empty()) {
+					weak->_flushTimer.callOnce(kRetryDelay);
+				}
+				return;
 			}
+			weak->_saveFailed = false;
+			weak->_pending.erase(
+				weak->_pending.begin(),
+				weak->_pending.upper_bound(till));
+			for (const auto peer : peers) {
+				weak->_changes.fire_copy(peer);
+			}
+			weak->flush();
 		});
 	});
 }
@@ -448,14 +525,32 @@ void MessageHistory::clear(PeerId peer, MsgId message) {
 	if (!_available) {
 		return;
 	}
+	const auto history = _session->data().history(peer);
+	const auto migrated = !message ? history->migrateFrom() : nullptr;
+	const auto migratedPeer = migrated ? migrated->peer->id : PeerId();
+	for (auto i = _pending.begin(); i != _pending.end();) {
+		const auto id = i->second.entry.message;
+		if ((id.peer == peer || id.peer == migratedPeer)
+			&& (!message || id.msg == message)) {
+			i = _pending.erase(i);
+		} else {
+			++i;
+		}
+	}
 	flush();
 	worker().with([
 		weak = base::make_weak(this),
 		peer,
-		message
+		message,
+		migratedPeer
 	](Storage::MessageHistoryDatabase &database) {
-		const auto error = database.clear(peer, message);
-		crl::on_main(weak, [=] { weak->report(error, peer); });
+		const auto error = database.clear(peer, message, migratedPeer);
+		crl::on_main(weak, [=] {
+			weak->report(error, peer);
+			if (error.isEmpty() && migratedPeer) {
+				weak->report({}, migratedPeer);
+			}
+		});
 	});
 }
 
@@ -537,8 +632,25 @@ rpl::producer<MessagesSlice> MessageHistory::withDeleted(
 		auto lifetime = rpl::lifetime();
 		const auto state = lifetime.make_state<SliceState>();
 		state->range = request;
+		const auto matches = [=](FullMsgId id, const CachedItem &cached) {
+			return (id.peer == request.peer)
+				&& (!request.topic
+					|| cached.topic == request.topic
+					|| id.msg == request.topic)
+				&& (!request.sublist || cached.sublist == request.sublist);
+		};
+		for (auto i = _inlineItems.begin(); i != _inlineItems.end();) {
+			if (auto item = i->second.item.lock()) {
+				if (matches(i->first, i->second)) {
+					state->items.emplace(i->first, std::move(item));
+				}
+				++i;
+			} else {
+				i = _inlineItems.erase(i);
+			}
+		}
 		const auto emit = [=] {
-			if (state->haveLive && state->haveArchive) {
+			if (state->haveLive) {
 				consumer.put_next(MergeDeletedMessages(
 					_session,
 					*state,
@@ -546,34 +658,33 @@ rpl::producer<MessagesSlice> MessageHistory::withDeleted(
 					anchor));
 			}
 		};
-		const auto reload = [=] {
+		const auto reload = crl::guard(state, [=] {
 			const auto generation = ++state->generation;
 			range(state->range, crl::guard(state, [=](Storage::MessageHistoryPage page) {
 				if (generation != state->generation) {
 					return;
 				} else if (!page.error.isEmpty()) {
 					report(page.error);
-					state->haveArchive = true;
-					emit();
 					return;
 				}
 				state->moreBefore = page.moreBefore;
 				state->moreAfter = page.moreAfter;
-				auto keep = base::flat_set<qint64>();
+				auto keep = base::flat_set<FullMsgId>();
+				auto unreadable = false;
 				for (const auto &entry : page.entries) {
-					keep.emplace(entry.id);
-					if (state->items.contains(entry.id)) {
-						continue;
+					keep.emplace(entry.message);
+					if (auto item = inlineItem(entry)) {
+						state->items[entry.message] = std::move(item);
+					} else {
+						unreadable = true;
 					}
-					auto item = Serialize::MessageHistory::Read(
-						_session->data().history(entry.message.peer),
-						entry.previous,
-						true);
-					if (item) {
-						const auto saved = item->Get<HistoryMessageArchived>();
-						saved->recordId = entry.id;
-						saved->deleted = true;
-						state->items.emplace(entry.id, std::move(item));
+				}
+				for (const auto &[id, pending] : _pending) {
+					if (pending.item && matches(
+							pending.entry.message,
+							_inlineItems.find(pending.entry.message)->second)) {
+						keep.emplace(pending.entry.message);
+						state->items[pending.entry.message] = pending.item;
 					}
 				}
 				for (auto i = state->items.begin(); i != state->items.end();) {
@@ -583,10 +694,20 @@ rpl::producer<MessagesSlice> MessageHistory::withDeleted(
 						i = state->items.erase(i);
 					}
 				}
-				state->haveArchive = true;
 				emit();
+				if (unreadable) {
+					report(u"Could not decode a saved message."_q);
+				}
 			}));
-		};
+		});
+		_deleted.events() | rpl::on_next([=](
+				const std::shared_ptr<HistoryItem> &item) {
+			const auto id = OriginalId(item.get());
+			if (matches(id, _inlineItems.find(id)->second)) {
+				state->items[id] = item;
+				emit();
+			}
+		}, lifetime);
 		changes() | rpl::filter([=](PeerId peer) {
 			return !peer || peer == request.peer;
 		}) | rpl::on_next([=] {
@@ -598,12 +719,15 @@ rpl::producer<MessagesSlice> MessageHistory::withDeleted(
 			const auto first = !state->haveLive;
 			state->live = std::move(slice);
 			state->haveLive = true;
+			if (first && !IsServerMsgId(state->range.around)) {
+				const auto nearest = state->live.nearestToAround;
+				state->range.around = (nearest.peer == request.peer
+					&& IsServerMsgId(nearest.msg))
+					? nearest.msg
+					: MsgId(ServerMaxMsgId - 1);
+			}
 			emit();
 			if (first) {
-				if (!IsServerMsgId(state->range.around)) {
-					state->range.around = IsServerMsgId(state->live.nearestToAround.msg)
-						? state->live.nearestToAround.msg : MsgId(ServerMaxMsgId - 1);
-				}
 				reload();
 			}
 		}, lifetime);

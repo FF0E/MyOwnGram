@@ -1948,26 +1948,26 @@ void FillContextMenuItems(
 		if ((saved || item->isRegular()) && archive->available()) {
 			const auto original = Data::MessageHistory::OriginalId(item);
 			const auto controller = list->controller();
-			result->addAction(tr::lng_myowngram_message_history_title(tr::now), [=] {
-				ShowMessageHistory(controller, original.peer, original.msg);
-			}, &st::menuIconGroupLog);
-			const auto remove = crl::guard(result, [=] {
-				result->addAction(tr::lng_myowngram_message_history_remove(tr::now), [=] {
-					RemoveMessageHistory(controller, original);
-				}, &st::menuIconDelete);
-			});
-			if (saved) {
-				remove();
-			} else {
+			const auto historyAction = result->addAction(
+				tr::lng_myowngram_message_history_message_title(tr::now),
+				[=] { ShowMessageHistory(controller, original.peer, original.msg); },
+				&st::menuIconGroupLog);
+			const auto removeAction = result->addAction(
+				tr::lng_myowngram_message_history_remove(tr::now),
+				[=] { RemoveMessageHistory(controller, original); },
+				&st::menuIconDelete);
+			historyAction->setEnabled(saved != nullptr);
+			removeAction->setEnabled(saved != nullptr);
+			if (!saved) {
 				archive->query({
 					.peer = original.peer,
 					.message = original.msg,
 					.limit = 1,
-				}, [=](Storage::MessageHistoryPage page) {
-					if (!page.entries.empty()) {
-						remove();
-					}
-				});
+				}, crl::guard(result, [=](Storage::MessageHistoryPage page) {
+					const auto available = !page.entries.empty();
+					historyAction->setEnabled(available);
+					removeAction->setEnabled(available);
+				}));
 			}
 		}
 	}
@@ -2001,7 +2001,7 @@ base::unique_qptr<Ui::PopupMenu> FillContextMenu(
 	// Build the full message menu.
 	FillContextMenuItems(result, list, request, hasPollOption);
 
-	if (item) {
+	if (item && item->isRegular()) {
 		const auto media = item->media();
 		const auto poll = media ? media->poll() : nullptr;
 		if (poll && !poll->closed()) {
@@ -2135,7 +2135,8 @@ void FillPollOptionPage(
 	if (!poll) {
 		return;
 	}
-	if (!poll->closed()
+	if (item->isRegular()
+		&& !poll->closed()
 		&& !poll->quiz()
 		&& poll->voted()
 		&& !poll->revotingDisabled()) {
@@ -2144,7 +2145,7 @@ void FillPollOptionPage(
 			[=] { poll->session().api().polls().sendVotes(itemId, {}); },
 			&st::menuIconRetractVote);
 	}
-	if (replyToOption) {
+	if (replyToOption && item->isRegular()) {
 		menu->addAction(
 			tr::lng_context_reply_to_poll_option(
 				tr::now,
@@ -2179,7 +2180,7 @@ void FillPollOptionPage(
 			&st::menuIconLink);
 	}
 	const auto canDelete = [&] {
-		if (!a->addedDate) {
+		if (!item->isRegular() || !a->addedDate) {
 			return false;
 		}
 		if (poll->creator()) {
@@ -2419,8 +2420,11 @@ void AddPollActions(
 		&& (context != Context::ChatPreview)) {
 		return;
 	}
+	if (!item->isRegular()) {
+		return;
+	}
 	const auto itemId = item->fullId();
-	if (poll->canViewStats() && item->isRegular() && !skipViewStats) {
+	if (poll->canViewStats() && !skipViewStats) {
 		menu->addAction(tr::lng_polls_view_stats(tr::now), [=] {
 			ShowPollStatsBox(controller, itemId);
 		}, &st::menuIconStats);

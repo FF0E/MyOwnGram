@@ -23,6 +23,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "dialogs/ui/dialogs_layout.h"
 #include "data/business/data_shortcut_messages.h"
 #include "data/components/credits.h"
+#include "data/components/message_history.h"
 #include "data/components/scheduled_messages.h"
 #include "data/components/sponsored_messages.h"
 #include "data/components/top_peers.h"
@@ -4476,7 +4477,7 @@ void History::clear(ClearType type, bool markEmpty) {
 			&& (*_lastMessage)->isRegular())
 			? (*_lastMessage)->id
 			: MsgId(std::numeric_limits<int64>::max());
-		clearUpTill(tillId);
+		clearUpTill(tillId, false);
 		if (blocks.empty() && _lastMessage && *_lastMessage) {
 			addItemToBlock(*_lastMessage);
 		}
@@ -4499,19 +4500,30 @@ void History::clear(ClearType type, bool markEmpty) {
 	owner().sendHistoryChangeNotifications();
 }
 
-void History::clearUpTill(MsgId availableMinId) {
+void History::clearUpTill(MsgId availableMinId, bool captureDeleted) {
 	auto remove = std::vector<not_null<HistoryItem*>>();
+	auto boundary = (HistoryItem*)nullptr;
 	remove.reserve(_items.size());
 	for (const auto &item : _items) {
-		const auto itemId = item->id;
 		if (!item->isRegular()) {
 			continue;
-		} else if (itemId == availableMinId) {
-			owner().scheduleItemPhotoCacheClear(item.get());
-			item->applyEditionToHistoryCleared();
-		} else if (itemId < availableMinId) {
+		} else if (item->id == availableMinId) {
+			boundary = item.get();
+		} else if (item->id < availableMinId) {
 			remove.push_back(item.get());
 		}
+	}
+	if (captureDeleted) {
+		for (const auto &item : remove) {
+			session().messageHistory().deleted(item);
+		}
+	}
+	if (boundary) {
+		if (captureDeleted) {
+			session().messageHistory().deleted(boundary);
+		}
+		owner().scheduleItemPhotoCacheClear(boundary);
+		boundary->applyEditionToHistoryCleared();
 	}
 	if (!remove.empty()) {
 		owner().notifyItemsAboutToBeDestroyed(remove);

@@ -3535,7 +3535,8 @@ bool HistoryItem::canDeleteForEveryone(TimeId now) const {
 }
 
 bool HistoryItem::canBeSelected() const {
-	return (isRegular() || isEphemeral())
+	const auto saved = Get<HistoryMessageArchived>();
+	return (isRegular() || isEphemeral() || (saved && saved->inlineCopy))
 		&& !isService()
 		&& !IsAnchoredEphemeral(this);
 }

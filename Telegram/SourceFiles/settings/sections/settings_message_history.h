@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include "settings/settings_type.h"
+
 namespace Ui {
 class GenericBox;
 } // namespace Ui
@@ -17,9 +19,7 @@ class SessionController;
 
 namespace Settings {
 
-void MessageHistorySettingsBox(
-	not_null<Ui::GenericBox*> box,
-	not_null<Window::SessionController*> controller);
+[[nodiscard]] Type MessageHistoryId();
 void MessageHistoryCleanupBox(
 	not_null<Ui::GenericBox*> box,
 	not_null<Window::SessionController*> controller);

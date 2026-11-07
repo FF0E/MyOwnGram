@@ -947,7 +947,9 @@ void ListWidget::refreshRows(const Data::MessagesSlice &old) {
 	for (auto e = end(_items), i = e - revealCount; i != e; ++i) {
 		const auto item = (*i)->data();
 		const auto streamed = item->history()->streamedDraftsIfExists();
+		const auto saved = item->Get<HistoryMessageArchived>();
 		if (!item->isSponsored()
+			&& !(saved && saved->inlineCopy)
 			&& (!streamed || !streamed->hasFor(item))) {
 			_itemRevealPending.emplace(*i);
 		}
@@ -5892,6 +5894,32 @@ void ListWidget::viewReplaced(not_null<const Element*> was, Element *now) {
 }
 
 void ListWidget::itemRemoved(not_null<const HistoryItem*> item) {
+	const auto preserved = ranges::find_if(_slice.ownedItems, [&](const auto &copy) {
+		const auto saved = copy->template Get<HistoryMessageArchived>();
+		return saved && saved->inlineCopy && saved->original == item->fullId();
+	});
+	if (preserved != _slice.ownedItems.end()) {
+		const auto copy = preserved->get();
+		for (const auto pointer : {
+			&_selectedTextItem,
+			&_accessibilityFocusedItem,
+			&_accessibilitySelectionAnchor,
+		}) {
+			if (*pointer == item) {
+				*pointer = copy;
+			}
+		}
+		const auto identity = _accessibilityIdentities.find(item);
+		if (identity != _accessibilityIdentities.end()) {
+			const auto token = identity->second;
+			_accessibilityIdentities.erase(identity);
+			_accessibilityIdentities.emplace(copy, token);
+		}
+		if (removeFromSelection(_selected, item->fullId())
+			&& addToSelection(_selected, copy)) {
+			pushSelectedItems();
+		}
+	}
 	if (_reactionsItem.current() == item) {
 		_reactionsItem = nullptr;
 	}

@@ -1119,7 +1119,7 @@ void Filler::addMessageHistory() {
 	}
 	const auto controller = _controller;
 	const auto peer = _peer->id;
-	_addAction(tr::lng_myowngram_message_history_title(tr::now), [=] {
+	_addAction(tr::lng_myowngram_message_history_chat_title(tr::now), [=] {
 		HistoryView::ShowMessageHistory(controller, peer);
 	}, &st::menuIconGroupLog);
 }
@@ -2000,7 +2000,6 @@ void Filler::fillContextMenuActions() {
 }
 
 void Filler::fillHistoryActions() {
-	addMessageHistory();
 	addToggleMuteSubmenu(true);
 	addCreateTopic();
 	addInfo();
@@ -2017,6 +2016,7 @@ void Filler::fillHistoryActions() {
 	addViewDiscussion();
 	addDirectMessages();
 	addExportChat();
+	addMessageHistory();
 	addTranslate();
 	addReport();
 	addDeleteOwnMessages();
@@ -2056,12 +2056,12 @@ void Filler::fillProfileActions() {
 }
 
 void Filler::fillRepliesActions() {
-	addMessageHistory();
 	if (_topic) {
 		addInfo();
 		addJumpToBeginning();
 		addManageTopic();
 	}
+	addMessageHistory();
 	addBoostChat();
 	addCreatePoll();
 	addCreateTodoList();

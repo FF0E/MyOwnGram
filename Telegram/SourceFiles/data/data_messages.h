@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+class HistoryItem;
+
 namespace Data {
 
 enum class LoadDirection : char {
@@ -87,6 +89,7 @@ struct MessagesSlice {
 	std::optional<int> skippedBefore;
 	std::optional<int> skippedAfter;
 	std::optional<int> fullCount;
+	std::vector<std::shared_ptr<HistoryItem>> ownedItems;
 };
 
 struct MessagesQuery {

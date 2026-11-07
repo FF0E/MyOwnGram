@@ -547,7 +547,7 @@ std::unique_ptr<Data::Media> MessageHistory::ReadMedia(
 		const auto poll = archive->mediaLifetime.make_state<PollData>(
 			&session->data(),
 			item->id.bare);
-		poll->setFlags(PollData::Flags::from_raw(flags) | PollData::Flag::Closed);
+		poll->setFlags(PollData::Flags::from_raw(flags));
 		poll->totalVoters = votes;
 		poll->question = ReadText(stream);
 		poll->solution = ReadText(stream);

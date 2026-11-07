@@ -10,17 +10,155 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/components/message_history.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
+#include "settings/sections/settings_myowngram.h"
+#include "settings/settings_builder.h"
+#include "settings/settings_common_session.h"
 #include "ui/boxes/single_choice_box.h"
 #include "ui/layers/generic_box.h"
 #include "ui/widgets/buttons.h"
-#include "ui/widgets/checkbox.h"
-#include "ui/widgets/labels.h"
+#include "ui/wrap/vertical_layout.h"
 #include "window/window_session_controller.h"
-#include "styles/style_boxes.h"
-#include "styles/style_layers.h"
+
+#include "styles/style_menu_icons.h"
 #include "styles/style_settings.h"
 
 namespace Settings {
+namespace {
+
+using Download = Data::MessageHistory::Download;
+
+class MessageHistory final : public Section<MessageHistory> {
+public:
+	MessageHistory(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller);
+
+	[[nodiscard]] rpl::producer<QString> title() override;
+
+};
+
+rpl::producer<QString> RetentionLabel(int period) {
+	if (!period) {
+		return tr::lng_local_storage_limit_never();
+	} else if (period < 0) {
+		return tr::lng_weeks(lt_count, rpl::single(-period) | tr::to_count());
+	}
+	return tr::lng_months(lt_count, rpl::single(period) | tr::to_count());
+}
+
+rpl::producer<QString> DownloadLabel(Download value) {
+	if (value == Download::Off) {
+		return tr::lng_myowngram_message_history_download_off();
+	} else if (value == Download::Automatic) {
+		return tr::lng_myowngram_message_history_download_automatic();
+	}
+	return tr::lng_myowngram_message_history_download_always();
+}
+
+void DownloadBox(
+		not_null<Ui::GenericBox*> box,
+		not_null<Window::SessionController*> controller) {
+	const auto archive = &controller->session().messageHistory();
+	SingleChoiceBox(box, {
+		.title = tr::lng_myowngram_message_history_download(),
+		.options = {
+			tr::lng_myowngram_message_history_download_off(tr::now),
+			tr::lng_myowngram_message_history_download_automatic(tr::now),
+			tr::lng_myowngram_message_history_download_always(tr::now),
+		},
+		.initialSelection = int(archive->download()),
+		.callback = [=](int index) { archive->setDownload(Download(index)); },
+	});
+}
+
+const auto kMessageHistory = Builder::BuildHelper({
+	.id = MessageHistory::Id(),
+	.parentId = MyOwnGramId(),
+	.title = &tr::lng_myowngram_message_history_title,
+	.icon = &st::menuIconGroupLog,
+}, [](Builder::SectionBuilder &builder) {
+	const auto archive = &builder.session()->messageHistory();
+	const auto controller = builder.controller();
+	builder.addSkip();
+	const auto enabled = builder.addButton({
+		.id = u"myowngram/message-history"_q,
+		.title = tr::lng_myowngram_message_history_save(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = archive->enabledValue(),
+		.keywords = { u"deleted"_q, u"edited"_q, u"history"_q },
+	});
+	if (enabled) {
+		enabled->toggledValue() | rpl::on_next([=](bool value) {
+			archive->setEnabled(value);
+		}, enabled->lifetime());
+	}
+	builder.addDividerText(tr::lng_myowngram_message_history_about());
+	builder.addSkip();
+	const auto autoDelete = builder.addButton({
+		.id = u"myowngram/message-history/auto-delete"_q,
+		.title = tr::lng_myowngram_message_history_auto_delete(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = archive->includeAutoDeleteValue(),
+		.keywords = { u"automatic"_q, u"deleted"_q, u"history"_q },
+	});
+	if (autoDelete) {
+		autoDelete->toggledValue() | rpl::on_next([=](bool value) {
+			archive->setIncludeAutoDelete(value);
+		}, autoDelete->lifetime());
+		archive->enabledValue() | rpl::on_next([=](bool value) {
+			autoDelete->setDisabled(!value);
+		}, autoDelete->lifetime());
+	}
+	const auto download = builder.addButton({
+		.id = u"myowngram/message-history/download"_q,
+		.title = tr::lng_myowngram_message_history_download(),
+		.st = &st::settingsButtonNoIcon,
+		.label = archive->downloadValue()
+			| rpl::map(DownloadLabel)
+			| rpl::flatten_latest(),
+		.onClick = [=] { controller->show(Box(DownloadBox, controller)); },
+		.keywords = { u"attachments"_q, u"media"_q, u"history"_q },
+	});
+	if (download) {
+		archive->enabledValue() | rpl::on_next([=](bool value) {
+			download->setDisabled(!value);
+		}, download->lifetime());
+	}
+	builder.addDividerText(tr::lng_myowngram_message_history_download_about());
+	builder.addSkip();
+	builder.addButton({
+		.id = u"myowngram/message-history/cleanup"_q,
+		.title = tr::lng_myowngram_message_history_cleanup(),
+		.st = &st::settingsButtonNoIcon,
+		.label = archive->retentionValue()
+			| rpl::map(RetentionLabel)
+			| rpl::flatten_latest(),
+		.onClick = [=] {
+			controller->show(Box(MessageHistoryCleanupBox, controller));
+		},
+		.keywords = { u"retention"_q, u"remove"_q, u"history"_q },
+	});
+	builder.addDividerText(tr::lng_myowngram_message_history_cleanup_about());
+});
+
+MessageHistory::MessageHistory(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller)
+: Section(parent, controller) {
+	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
+	build(content, kMessageHistory.build);
+	Ui::ResizeFitChild(this, content);
+}
+
+rpl::producer<QString> MessageHistory::title() {
+	return tr::lng_myowngram_message_history_title();
+}
+
+} // namespace
+
+Type MessageHistoryId() {
+	return MessageHistory::Id();
+}
 
 void MessageHistoryCleanupBox(
 		not_null<Ui::GenericBox*> box,
@@ -39,78 +177,11 @@ void MessageHistoryCleanupBox(
 	}
 	const auto selected = ranges::find(periods, archive->retention());
 	SingleChoiceBox(box, {
-		.title = tr::lng_myowngram_message_history_cleanup(),
+		.title = tr::lng_myowngram_message_history_cleanup_title(),
 		.options = options,
 		.initialSelection = int(selected - periods.begin()),
 		.callback = [=](int index) { archive->setRetention(periods[index]); },
 	});
-}
-
-void MessageHistorySettingsBox(
-		not_null<Ui::GenericBox*> box,
-		not_null<Window::SessionController*> controller) {
-	const auto archive = &controller->session().messageHistory();
-	box->setTitle(tr::lng_myowngram_message_history_title());
-	box->addButton(tr::lng_close(), [=] { box->closeBox(); });
-	const auto enabled = box->addRow(object_ptr<Ui::Checkbox>(
-		box,
-		tr::lng_myowngram_message_history_save(tr::now),
-		archive->enabled()));
-	enabled->checkedChanges() | rpl::on_next([=](bool value) {
-		archive->setEnabled(value);
-	}, enabled->lifetime());
-	archive->enabledValue() | rpl::on_next([=](bool value) {
-		enabled->setChecked(value);
-	}, enabled->lifetime());
-	box->addRow(object_ptr<Ui::FlatLabel>(
-		box,
-		tr::lng_myowngram_message_history_about(),
-		st::boxLabel));
-	const auto autoDelete = box->addRow(object_ptr<Ui::Checkbox>(
-		box,
-		tr::lng_myowngram_message_history_auto_delete(tr::now),
-		archive->includeAutoDelete()));
-	autoDelete->checkedChanges() | rpl::on_next([=](bool value) {
-		archive->setIncludeAutoDelete(value);
-	}, autoDelete->lifetime());
-	archive->includeAutoDeleteValue() | rpl::on_next([=](bool value) {
-		autoDelete->setChecked(value);
-	}, autoDelete->lifetime());
-	box->addRow(object_ptr<Ui::SettingsButton>(
-		box,
-		tr::lng_myowngram_message_history_download(),
-		st::settingsButtonNoIcon
-	))->setClickedCallback([=] {
-		controller->show(Box([=](not_null<Ui::GenericBox*> choice) {
-			SingleChoiceBox(choice, {
-				.title = tr::lng_myowngram_message_history_download(),
-				.options = {
-					tr::lng_myowngram_message_history_download_off(tr::now),
-					tr::lng_myowngram_message_history_download_automatic(tr::now),
-					tr::lng_myowngram_message_history_download_always(tr::now),
-				},
-				.initialSelection = int(archive->download()),
-				.callback = [=](int index) {
-					archive->setDownload(Data::MessageHistory::Download(index));
-				},
-			});
-		}));
-	});
-	box->addRow(object_ptr<Ui::FlatLabel>(
-		box,
-		tr::lng_myowngram_message_history_download_about(),
-		st::boxLabel));
-	box->addRow(object_ptr<Ui::SettingsButton>(
-		box,
-		tr::lng_myowngram_message_history_cleanup(),
-		st::settingsButtonNoIcon
-	))->setClickedCallback([=] {
-		controller->show(Box(MessageHistoryCleanupBox, controller));
-	});
-	box->addRow(object_ptr<Ui::FlatLabel>(
-		box,
-		tr::lng_myowngram_message_history_cleanup_about(),
-		st::boxLabel));
 }
 
 } // namespace Settings

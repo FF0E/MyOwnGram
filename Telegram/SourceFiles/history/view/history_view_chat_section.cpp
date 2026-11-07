@@ -4933,11 +4933,26 @@ rpl::producer<Data::MessagesSlice> ChatWidget::listSource(
 		: _sublist
 		? sublistSource(aroundId, limitBefore, limitAfter)
 		: historySource(aroundId, limitBefore, limitAfter);
+	const auto migrated = (!_replies && !_sublist)
+		? _history->migrateFrom()
+		: nullptr;
+	if (migrated) {
+		source = archive.withDeleted({
+			.peer = migrated->peer->id,
+			.around = (aroundId.fullId.peer == migrated->peer->id)
+				? aroundId.fullId.msg
+				: MsgId(ServerMaxMsgId - 1),
+			.limitBefore = limitBefore,
+			.limitAfter = limitAfter,
+		}, aroundId.fullId, std::move(source));
+	}
 	return archive.withDeleted({
 		.peer = _peer->id,
 		.topic = _repliesRootId,
 		.sublist = _sublist ? _sublist->sublistPeer()->id : PeerId(),
-		.around = aroundId.fullId.msg,
+		.around = (migrated && aroundId.fullId.peer == migrated->peer->id)
+			? MsgId(1)
+			: aroundId.fullId.msg,
 		.limitBefore = limitBefore,
 		.limitAfter = limitAfter,
 	}, aroundId.fullId, std::move(source));

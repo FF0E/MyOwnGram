@@ -125,7 +125,7 @@ public:
 		ClearHistory,
 	};
 	void clear(ClearType type, bool markEmpty = false);
-	void clearUpTill(MsgId availableMinId);
+	void clearUpTill(MsgId availableMinId, bool captureDeleted = true);
 
 	void applyGroupAdminChanges(const base::flat_set<UserId> &changes);
 

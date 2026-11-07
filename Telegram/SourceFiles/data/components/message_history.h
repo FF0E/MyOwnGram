@@ -36,6 +36,8 @@ public:
 	[[nodiscard]] Download download() const;
 	[[nodiscard]] rpl::producer<bool> enabledValue() const;
 	[[nodiscard]] rpl::producer<bool> includeAutoDeleteValue() const;
+	[[nodiscard]] rpl::producer<int> retentionValue() const;
+	[[nodiscard]] rpl::producer<Download> downloadValue() const;
 	void setEnabled(bool enabled);
 	void setIncludeAutoDelete(bool include);
 	void setRetention(int period);
@@ -68,6 +70,17 @@ public:
 	[[nodiscard]] static FullMsgId OriginalId(not_null<const HistoryItem*> item);
 
 private:
+	struct PendingEntry {
+		Storage::MessageHistoryEntry entry;
+		std::shared_ptr<HistoryItem> item;
+	};
+
+	struct CachedItem {
+		MsgId topic;
+		PeerId sublist;
+		std::weak_ptr<HistoryItem> item;
+	};
+
 	using Worker = crl::object_on_queue<Storage::MessageHistoryDatabase>;
 
 	[[nodiscard]] Worker &worker();
@@ -75,8 +88,12 @@ private:
 	[[nodiscard]] Storage::MessageHistoryEntry snapshot(
 		not_null<HistoryItem*> item,
 		Storage::MessageHistoryKind kind) const;
+	[[nodiscard]] std::shared_ptr<HistoryItem> inlineItem(
+		const Storage::MessageHistoryEntry &entry);
 	void recoverMedia(not_null<HistoryItem*> item);
-	void add(Storage::MessageHistoryEntry entry);
+	void add(
+		Storage::MessageHistoryEntry entry,
+		std::shared_ptr<HistoryItem> item = nullptr);
 	void flush();
 	void expire();
 	void report(QString error, PeerId peer = {});
@@ -84,15 +101,20 @@ private:
 	const not_null<Main::Session*> _session;
 	rpl::variable<bool> _enabled;
 	rpl::variable<bool> _includeAutoDelete;
-	int _retention = 0;
-	Download _download = Download::Automatic;
+	rpl::variable<int> _retention = 0;
+	rpl::variable<Download> _download = Download::Automatic;
 	bool _available = false;
+	bool _saveFailed = false;
 	std::unique_ptr<Worker> _worker;
-	std::vector<Storage::MessageHistoryEntry> _pending;
+	base::flat_map<qint64, PendingEntry> _pending;
+	base::flat_map<FullMsgId, CachedItem> _inlineItems;
+	qint64 _nextPendingId = 0;
+	qint64 _savingTill = 0;
 	base::flat_map<FullMsgId, int> _localChanges;
 	base::Timer _flushTimer;
 	base::Timer _expireTimer;
 	rpl::event_stream<PeerId> _changes;
+	rpl::event_stream<std::shared_ptr<HistoryItem>> _deleted;
 	rpl::event_stream<> _errors;
 
 };

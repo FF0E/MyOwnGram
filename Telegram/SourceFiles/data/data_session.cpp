@@ -3376,9 +3376,10 @@ void Session::processMessagesDeleted(
 	for (const auto &messageId : data) {
 		const auto i = list ? list->find(messageId.v) : Messages::iterator();
 		if (list && i != list->end()) {
-			const auto history = i->second->history();
-			session().messageHistory().deleted(i->second);
-			toDestroy.push_back(i->second);
+			const auto item = i->second;
+			const auto history = item->history();
+			session().messageHistory().deleted(item);
+			toDestroy.push_back(item);
 			historiesToCheck.emplace(history);
 		} else if (affected) {
 			affected->unknownMessageDeleted(messageId.v);

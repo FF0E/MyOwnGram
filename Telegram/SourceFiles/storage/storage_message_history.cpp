@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "storage/storage_message_history.h"
 
 #include <QtCore/QFile>
+#include <limits>
 #include <sqlite3.h>
 
 namespace Storage {
@@ -269,49 +270,65 @@ MessageHistoryPage MessageHistoryDatabase::query(
 	}
 	_error.clear();
 	const auto searching = !query.search.isEmpty();
-	auto sql = QByteArray("SELECT ") + kColumns + " FROM events";
+	auto prefix = QByteArray("SELECT ") + kColumns + " FROM events";
 	if (searching) {
-		sql += " JOIN events_text ON events_text.rowid=events.id";
+		prefix += " JOIN events_text ON events_text.rowid=events.id";
 	}
-	sql += " WHERE peer=?1";
+	prefix += " WHERE (peer=?1 OR peer=?7)";
 	if (query.message) {
-		sql += " AND message=?2";
-	}
-	if (query.before) {
-		sql += " AND id<?3";
+		prefix += " AND message=?2";
 	}
 	if (query.kind) {
-		sql += " AND kind=?4";
+		prefix += " AND kind=?4";
 	}
 	if (searching) {
-		sql += " AND events_text MATCH ?5";
+		prefix += " AND events_text MATCH ?5";
 	}
-	sql += searching
-		? " ORDER BY events_text.rowid DESC LIMIT ?6"
-		: " ORDER BY id DESC LIMIT ?6";
-	auto statement = Statement(_database, sql.constData(), _error);
-	statement.bind(1, qint64(SerializePeerId(query.peer)));
-	if (query.message) {
-		statement.bind(2, query.message.bare);
-	}
-	if (query.before) {
-		statement.bind(3, query.before);
-	}
-	if (query.kind) {
-		statement.bind(4, qint32(*query.kind));
-	}
-	if (searching) {
-		auto text = query.search;
-		statement.bindText(5, '"' + text.replace('"', u"\"\""_q) + u"\"*"_q);
-	}
-	statement.bind(6, query.limit + 1);
 	auto result = MessageHistoryPage();
-	while (statement.next()) {
-		result.entries.push_back(statement.entry());
-	}
-	if (int(result.entries.size()) > query.limit) {
-		result.entries.pop_back();
-		result.moreBefore = true;
+	for (const auto before : { true, false }) {
+		if (!before && (!query.around || !query.limitAfter)) {
+			continue;
+		}
+		const auto sql = prefix + (before
+			? " AND id<=?3 ORDER BY id DESC LIMIT ?6"
+			: " AND id>?3 ORDER BY id LIMIT ?6");
+		auto statement = Statement(_database, sql.constData(), _error);
+		statement.bind(1, qint64(SerializePeerId(query.peer)));
+		statement.bind(7, query.migratedPeer
+			? qint64(SerializePeerId(query.migratedPeer))
+			: qint64(SerializePeerId(query.peer)));
+		if (query.message) {
+			statement.bind(2, query.message.bare);
+		}
+		statement.bind(3, query.around
+			? query.around
+			: std::numeric_limits<qint64>::max());
+		if (query.kind) {
+			statement.bind(4, qint32(*query.kind));
+		}
+		if (searching) {
+			auto text = query.search;
+			statement.bindText(5, '"' + text.replace('"', u"\"\""_q) + u"\"*"_q);
+		}
+		const auto limit = before ? query.limit : query.limitAfter;
+		statement.bind(6, limit + 1);
+		auto entries = std::vector<MessageHistoryEntry>();
+		while (statement.next()) {
+			if (int(entries.size()) == limit) {
+				(before ? result.moreBefore : result.moreAfter) = true;
+				break;
+			}
+			entries.push_back(statement.entry());
+		}
+		if (before) {
+			result.entries = std::move(entries);
+		} else {
+			ranges::reverse(entries);
+			result.entries.insert(
+				result.entries.begin(),
+				std::make_move_iterator(entries.begin()),
+				std::make_move_iterator(entries.end()));
+		}
 	}
 	result.error = _error;
 	return result;
@@ -358,18 +375,21 @@ MessageHistoryPage MessageHistoryDatabase::range(
 	return result;
 }
 
-QString MessageHistoryDatabase::clear(PeerId peer, MsgId message) {
+QString MessageHistoryDatabase::clear(
+		PeerId peer,
+		MsgId message,
+		PeerId migratedPeer) {
 	if (!_database) {
 		return _error;
 	}
 	_error.clear();
 	auto statement = Statement(_database, message
 		? "DELETE FROM events WHERE peer=?1 AND message=?2"
-		: "DELETE FROM events WHERE peer=?1", _error);
+		: "DELETE FROM events WHERE peer=?1 OR peer=?2", _error);
 	statement.bind(1, qint64(SerializePeerId(peer)));
-	if (message) {
-		statement.bind(2, message.bare);
-	}
+	statement.bind(2, message
+		? message.bare
+		: qint64(SerializePeerId(migratedPeer ? migratedPeer : peer)));
 	if (!statement.run() || !execute("PRAGMA incremental_vacuum")) {
 		return _error;
 	}
