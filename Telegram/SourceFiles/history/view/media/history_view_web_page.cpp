@@ -1273,6 +1273,17 @@ void WebPage::draw(Painter &p, const PaintContext &context) const {
 			? inner.width()
 			: paintw;
 		_parent->prepareCustomEmojiPaint(p, context, _description);
+		auto selection = toDescriptionSelection(context.selection);
+		auto palette = stm->textPalette;
+		const auto saved = _parent->data()->Get<HistoryMessageArchived>();
+		if (saved && !saved->searchQuery.isEmpty() && selection.empty()) {
+			selection = FindSearchQueryHighlight(
+				_description.toString(),
+				saved->searchQuery);
+			palette.selectBg = st::searchedTextMatchBg;
+			palette.selectFg = palette.selectLinkFg = palette.selectMonoFg
+				= palette.selectSpoilerFg = st::searchedTextMatchFg;
+		}
 		_description.draw(p, {
 			.position = { inner.left(), tshift },
 			.outerWidth = width(),
@@ -1280,11 +1291,12 @@ void WebPage::draw(Painter &p, const PaintContext &context) const {
 			.geometry = previewGeometry
 				? logEntryGeometry(descriptionWidth)
 				: Ui::Text::GeometryDescriptor(),
+			.palette = &palette,
 			.spoiler = Ui::Text::DefaultSpoilerCache(),
 			.now = context.now,
 			.pausedEmoji = context.paused || On(PowerSaving::kEmojiChat),
 			.pausedSpoiler = context.paused || On(PowerSaving::kChatSpoiler),
-			.selection = toDescriptionSelection(context.selection),
+			.selection = selection,
 			.elisionHeight = ((_descriptionLines > 0)
 				? (_descriptionLines * lineHeight)
 				: 0),

@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_message_history.h"
 
 #include "base/timer.h"
+#include "core/shortcuts.h"
 #include "data/components/message_history.h"
 #include "data/data_media_types.h"
 #include "data/data_messages.h"
@@ -17,21 +18,28 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_item_helpers.h"
 #include "history/view/history_view_element.h"
 #include "history/view/history_view_list_widget.h"
+#include "history/view/history_view_service_message.h"
+#include "info/profile/info_profile_values.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
+#include "menu/menu_checked_action.h"
 #include "profile/profile_back_button.h"
 #include "settings/sections/settings_message_history.h"
 #include "storage/serialize_message_history.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/chat/chat_style.h"
 #include "ui/chat/chat_theme.h"
+#include "ui/controls/jump_down_button.h"
+#include "ui/controls/userpic_button.h"
 #include "ui/layers/generic_box.h"
 #include "ui/painter.h"
+#include "ui/rect.h"
+#include "ui/ui_utility.h"
 #include "ui/widgets/buttons.h"
-#include "ui/widgets/discrete_sliders.h"
 #include "ui/widgets/elastic_scroll.h"
 #include "ui/widgets/fields/input_field.h"
 #include "ui/widgets/popup_menu.h"
+#include "ui/widgets/shadow.h"
 #include "window/section_memento.h"
 #include "window/section_widget.h"
 #include "window/window_session_controller.h"
@@ -40,6 +48,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "styles/style_boxes.h"
 #include "styles/style_chat.h"
+#include "styles/style_chat_helpers.h"
 #include "styles/style_info.h"
 #include "styles/style_layers.h"
 #include "styles/style_menu_icons.h"
@@ -53,6 +62,13 @@ using Item = std::shared_ptr<HistoryItem>;
 using OwnedItem = Serialize::MessageHistory::Item;
 
 constexpr auto kSearchDelay = crl::time(250);
+
+struct ViewState {
+	ListMemento list{ Data::MaxMessagePosition };
+	std::vector<Item> rows;
+	bool moreBefore = true;
+	bool moreAfter = false;
+};
 
 class Memento final : public Window::SectionMemento {
 public:
@@ -68,10 +84,9 @@ public:
 	MsgId message;
 	QString search;
 	std::optional<Kind> filter;
-	ListMemento list{ Data::MaxMessagePosition };
-	std::vector<Item> rows;
-	bool moreBefore = true;
-	bool moreAfter = false;
+	ViewState view;
+	std::optional<ViewState> browse;
+	bool searchShown = false;
 
 };
 
@@ -145,6 +160,7 @@ public:
 	void listAddTranslatedItems(not_null<TranslateTracker*> tracker) override;
 	Ui::ElasticScroll *listScrollArea() const override;
 	bool listThanosEffectEnabled() const override;
+	FullMsgId listMessageHistoryId() override;
 
 private:
 	void resizeEvent(QResizeEvent *e) override;
@@ -152,10 +168,23 @@ private:
 	void doSetInnerFocus() override;
 	void showFinishedHook() override;
 	void updateVisible();
+	void updateHeader();
+	void updateFilterLabel();
+	void updateSubtitle();
+	void updateEmpty();
+	void showSearch();
+	void cancelSearch();
+	void toggleSearch(bool shown, anim::type animated = anim::type::normal);
+	void applySearch();
+	void setFilter(std::optional<Kind> filter);
+	void showFilter();
+	void jumpToLatest();
 	void reload();
 	void refresh();
 	void showMenu();
 	void addEntry(const Entry &entry, std::vector<Item> &rows);
+	[[nodiscard]] ViewState saveView();
+	void restoreView(ViewState state);
 	[[nodiscard]] Data::MessagesSlice slice(
 		Data::MessagePosition around,
 		int before,
@@ -168,15 +197,26 @@ private:
 	object_ptr<Ui::ElasticScroll> _scroll;
 	QPointer<ListWidget> _inner;
 	object_ptr<Profile::BackButton> _back;
+	object_ptr<Ui::PlainShadow> _shadow;
 	object_ptr<Ui::IconButton> _menuButton;
+	object_ptr<Ui::IconButton> _searchButton;
+	object_ptr<Ui::CrossButton> _cancelSearch;
 	object_ptr<Ui::InputField> _search;
-	object_ptr<Ui::SettingsSlider> _filters;
+	object_ptr<Ui::RoundButton> _filterButton;
+	object_ptr<Ui::JumpDownButton> _scrollDown;
+	rpl::variable<QString> _emptyActionText;
+	object_ptr<Ui::RoundButton> _emptyAction;
+	Ui::Text::String _emptyText;
+	QRect _emptyRect;
 	base::unique_qptr<Ui::PopupMenu> _menu;
 	base::Timer _searchTimer;
 	rpl::event_stream<> _changes;
+	std::array<QString, 3> _filterLabels;
+	std::optional<ViewState> _browse;
 	QString _query;
 	QString _error;
 	std::optional<Kind> _filter;
+	int _filterWidth = 0;
 	qint64 _around = 0;
 	int _limitBefore = 0;
 	int _limitAfter = 0;
@@ -184,6 +224,7 @@ private:
 	bool _loading = false;
 	bool _moreBefore = true;
 	bool _moreAfter = false;
+	bool _searchShown = false;
 
 };
 
@@ -200,42 +241,104 @@ Widget::Widget(
 , WindowListDelegate(controller)
 , _history(controller->session().data().history(memento->peer))
 , _message(memento->message)
-, _rows(memento->rows)
+, _rows(memento->view.rows)
 , _scroll(this, controller->chatStyle()->value(lifetime(), st::historyScroll))
 , _back(this)
+, _shadow(this)
 , _menuButton(this, st::topBarMenuToggle)
-, _search(this, st::defaultInputField,
-	Ui::InputField::Mode::SingleLine, tr::lng_dlg_filter(), memento->search)
-, _filters(this, st::chatTabsSlider)
-, _searchTimer([=] { reload(); })
+, _searchButton(this, st::topBarSearch)
+, _cancelSearch(this, st::historyAdminLogCancelSearch)
+, _search(this, st::defaultMultiSelectSearchField, tr::lng_dlg_filter())
+, _filterButton(this, rpl::single(QString()), st::messageHistoryFilter)
+, _scrollDown(_scroll, st::historyToDown)
+, _emptyAction(_scroll, _emptyActionText.value(), st::defaultLightButton)
+, _searchTimer([=] { applySearch(); })
+, _browse(memento->browse)
 , _query(memento->search)
-, _filter(memento->filter)
-, _moreBefore(memento->moreBefore)
-, _moreAfter(memento->moreAfter) {
+, _filter(_message ? std::nullopt : memento->filter)
+, _moreBefore(memento->view.moreBefore)
+, _moreAfter(memento->view.moreAfter) {
 	_inner = _scroll->setOwnedWidget(object_ptr<ListWidget>(
 		this,
 		&controller->session(),
 		static_cast<ListDelegate*>(this)));
-	_back->setText(_message
-		? tr::lng_myowngram_message_history_message_title(tr::now)
-		: tr::lng_myowngram_message_history_chat_title(tr::now));
-	_back->setSubtext(_history->peer->name());
+	_back->setWidget(Ui::CreateChild<Ui::UserpicButton>(
+		_back.get(),
+		_history->peer,
+		st::topBarInfoButton));
+	Info::Profile::NameValue(
+		_history->peer
+	) | rpl::on_next([=](QString name) {
+		_back->setText(name);
+	}, lifetime());
 	_back->setClickedCallback([=] { controller->showBackFromStack(); });
 	_menuButton->setClickedCallback([=] { showMenu(); });
+	_searchButton->setClickedCallback([=] { showSearch(); });
+	_cancelSearch->setClickedCallback([=] { cancelSearch(); });
+	_filterButton->setClickedCallback([=] { showFilter(); });
+	_filterButton->setVisible(!_message);
+	_scrollDown->setClickedCallback([=] { jumpToLatest(); });
+	_scrollDown->hide();
+	_search->setText(_query);
+	_search->hide();
+	_cancelSearch->hide(anim::type::instant);
+	_emptyAction->hide();
+	_emptyAction->setClickedCallback([=] {
+		if (!_error.isEmpty()) {
+			reload();
+		} else if (!_query.isEmpty()) {
+			_search->clear();
+			applySearch();
+		} else if (_filter) {
+			setFilter(std::nullopt);
+		} else {
+			controller->showSettings(Settings::MessageHistoryId());
+		}
+	});
 	_search->changes() | rpl::on_next([=] {
-		_searchTimer.callOnce(kSearchDelay);
+		_cancelSearch->setAccessibleName(_search->getLastText().isEmpty()
+			? tr::lng_sr_cancel_search(tr::now)
+			: tr::lng_sr_clear_search(tr::now));
+		if (_search->getLastText().trimmed().isEmpty()) {
+			applySearch();
+		} else {
+			_searchTimer.callOnce(kSearchDelay);
+		}
 	}, lifetime());
+	_search->submits() | rpl::on_next([=] { applySearch(); }, lifetime());
+	_search->cancelled() | rpl::on_next([=] { cancelSearch(); }, lifetime());
 	rpl::combine(
 		tr::lng_myowngram_message_history_filter_all(),
 		tr::lng_myowngram_message_history_filter_deleted(),
 		tr::lng_myowngram_message_history_filter_edited()
 	) | rpl::on_next([=](QString all, QString deleted, QString edited) {
-		_filters->setSections({ all, deleted, edited });
-		_filters->setActiveSectionFast(_filter ? int(*_filter) + 1 : 0);
+		_filterLabels = { all, deleted, edited };
+		updateFilterLabel();
 	}, lifetime());
-	_filters->sectionActivated() | rpl::on_next([=](int index) {
-		_filter = index ? std::make_optional(Kind(index - 1)) : std::nullopt;
-		reload();
+	tr::lng_myowngram_message_history_title(
+	) | rpl::on_next([=] {
+		updateSubtitle();
+		_back->setAccessibleName(tr::lng_terms_back(tr::now));
+		_searchButton->setAccessibleName(tr::lng_dlg_filter(tr::now));
+		_cancelSearch->setAccessibleName(_search->getLastText().isEmpty()
+			? tr::lng_sr_cancel_search(tr::now)
+			: tr::lng_sr_clear_search(tr::now));
+		_menuButton->setAccessibleName(
+			tr::lng_myowngram_message_history_menu(tr::now));
+		_scrollDown->setAccessibleName(tr::lng_jump_to_bottom(tr::now));
+		updateEmpty();
+	}, lifetime());
+	Shortcuts::Requests(
+	) | rpl::filter([=] {
+		return Ui::AppInFocus()
+			&& Ui::InFocusChain(this)
+			&& !controller->isLayerShown()
+			&& isActiveWindow();
+	}) | rpl::on_next([=](not_null<Shortcuts::Request*> request) {
+		request->check(Shortcuts::Command::Search, 2) && request->handle([=] {
+			showSearch();
+			return true;
+		});
 	}, lifetime());
 	_inner->scrollKeyEvents() | rpl::on_next([=](not_null<QKeyEvent*> e) {
 		_scroll->keyPressEvent(e);
@@ -251,6 +354,8 @@ Widget::Widget(
 		_inner->update();
 		update();
 	}, lifetime());
+	session().messageHistory().enabledValue(
+	) | rpl::on_next([=] { updateEmpty(); }, lifetime());
 	session().messageHistory().changes(
 	) | rpl::filter([=](PeerId peer) {
 		return !peer
@@ -258,7 +363,8 @@ Widget::Widget(
 			|| (!_message && _history->migrateFrom()
 				&& peer == _history->migrateFrom()->peer->id);
 	}) | rpl::on_next([=] { refresh(); }, lifetime());
-	_inner->restoreState(&memento->list);
+	_inner->restoreState(&memento->view.list);
+	toggleSearch(memento->searchShown || !_query.isEmpty(), anim::type::instant);
 }
 
 Widget::~Widget() {
@@ -289,7 +395,11 @@ Context Widget::listContext() {
 }
 
 void Widget::listCancelRequest() {
-	controller()->showBackFromStack();
+	if (_searchShown) {
+		cancelSearch();
+	} else {
+		controller()->showBackFromStack();
+	}
 }
 
 void Widget::listDeleteRequest() {
@@ -349,7 +459,9 @@ void Widget::listSendBotCommand(
 }
 
 void Widget::listSearch(const QString &query, const FullMsgId &context) {
+	showSearch();
 	_search->setText(query);
+	applySearch();
 }
 
 void Widget::listHandleViaClick(not_null<UserData*> bot) {
@@ -413,34 +525,201 @@ bool Widget::listThanosEffectEnabled() const {
 	return false;
 }
 
+FullMsgId Widget::listMessageHistoryId() {
+	return { _history->peer->id, _message };
+}
+
 void Widget::doSetInnerFocus() {
-	_inner->setFocus();
+	if (_searchShown) {
+		_search->setFocus();
+	} else {
+		_inner->setFocus();
+	}
 }
 
 void Widget::showFinishedHook() {
 	_inner->showFinished();
 }
 
-std::shared_ptr<Window::SectionMemento> Widget::createMemento() {
-	auto result = std::make_shared<Memento>(_history->peer->id, _message);
-	result->search = _query;
-	result->filter = _filter;
-	result->rows = _rows;
-	result->moreBefore = _moreBefore;
-	result->moreAfter = _moreAfter;
-	_inner->saveState(&result->list);
+ViewState Widget::saveView() {
+	auto result = ViewState{
+		.rows = _rows,
+		.moreBefore = _moreBefore,
+		.moreAfter = _moreAfter,
+	};
+	_inner->saveState(&result.list);
 	return result;
 }
 
-void Widget::resizeEvent(QResizeEvent *e) {
-	_back->resizeToWidth(width() - _menuButton->width());
+void Widget::restoreView(ViewState state) {
+	++_generation;
+	_error.clear();
+	_rows = state.rows;
+	if (_filter) {
+		std::erase_if(_rows, [&](const Item &item) {
+			return item->Get<HistoryMessageArchived>()->deleted
+				!= (*_filter == Kind::Deleted);
+		});
+	}
+	for (const auto &item : _rows) {
+		item->Get<HistoryMessageArchived>()->searchQuery = _query;
+	}
+	_moreBefore = state.moreBefore;
+	_moreAfter = state.moreAfter;
+	_limitBefore = 0;
+	_inner->restoreState(&state.list);
+}
+
+std::shared_ptr<Window::SectionMemento> Widget::createMemento() {
+	applySearch();
+	auto result = std::make_shared<Memento>(_history->peer->id, _message);
+	result->search = _query;
+	result->filter = _filter;
+	result->view = saveView();
+	result->browse = _browse;
+	result->searchShown = _searchShown;
+	return result;
+}
+
+void Widget::updateHeader() {
 	_menuButton->moveToRight(0, 0);
-	const auto padding = st::boxRowPadding;
-	_search->resizeToWidth(width() - padding.left() - padding.right());
-	_search->moveToLeft(padding.left(), _back->height() + padding.top());
-	_filters->resizeToWidth(width());
-	_filters->moveToLeft(0, _search->y() + _search->height() + padding.bottom());
-	const auto top = _filters->y() + _filters->height();
+	if (!_message) {
+		_filterButton->setFullWidth(std::max(1, std::min(
+			_filterWidth,
+			width() / 3)));
+		_filterButton->moveToRight(
+			_menuButton->width() + _searchButton->width(),
+			(st::topBarHeight - _filterButton->height()) / 2);
+	}
+	const auto filterWidth = _message ? 0 : _filterButton->width();
+	const auto searchHiddenLeft = width()
+		- _menuButton->width()
+		- _searchButton->width();
+	const auto searchShownLeft = st::historyAdminLogTopBarLeft;
+	_searchButton->moveToLeft(
+		_searchShown ? searchShownLeft : searchHiddenLeft,
+		0);
+	_cancelSearch->moveToLeft(searchHiddenLeft, 0);
+	_back->resizeToWidth(std::max(0, searchHiddenLeft - filterWidth));
+	_back->setVisible(!_searchShown);
+	const auto fieldLeft = searchShownLeft + _searchButton->width();
+	_search->setGeometryToLeft(
+		fieldLeft,
+		st::historyAdminLogSearchTop,
+		std::max(0, searchHiddenLeft - filterWidth - fieldLeft),
+		_search->height());
+	_search->setVisible(_searchShown);
+	_shadow->setGeometry(0, _back->height(), width(), st::lineWidth);
+	_shadow->raise();
+}
+
+void Widget::updateFilterLabel() {
+	const auto text = _filterLabels[_filter ? int(*_filter) + 1 : 0];
+	_filterButton->setFullWidth(0);
+	_filterButton->setText(rpl::single(text));
+	_filterWidth = _filterButton->width();
+	_filterButton->setToolTip(text);
+	updateHeader();
+}
+
+void Widget::updateSubtitle() {
+	if (!_message) {
+		_back->setSubtext(tr::lng_myowngram_message_history_title(tr::now));
+		return;
+	}
+	const auto i = ranges::find_if(_rows, [](const Item &item) {
+		return !item->isService();
+	});
+	_back->setSubtext(i == _rows.end()
+		? tr::lng_myowngram_message_history_message_title(tr::now)
+		: tr::lng_myowngram_message_history_message_subtitle(
+			tr::now,
+			lt_date,
+			QLocale().toString(QDateTime::fromSecsSinceEpoch(
+				(*i)->Get<HistoryMessageArchived>()->sentAt), QLocale::ShortFormat)));
+}
+
+void Widget::showSearch() {
+	toggleSearch(true);
+	_search->setFocus();
+}
+
+void Widget::toggleSearch(bool shown, anim::type animated) {
+	if (_searchShown == shown) {
+		return;
+	}
+	_searchShown = shown;
+	_searchButton->setDisabled(shown);
+	_cancelSearch->toggle(shown, animated);
+	if (!shown) {
+		_inner->setFocus();
+	}
+	updateHeader();
+}
+
+void Widget::cancelSearch() {
+	if (!_search->getLastText().isEmpty()) {
+		_search->clear();
+		applySearch();
+		_search->setFocus();
+	} else {
+		toggleSearch(false);
+	}
+}
+
+void Widget::applySearch() {
+	_searchTimer.cancel();
+	const auto query = _search->getLastText().trimmed();
+	if (query == _query) {
+		return;
+	}
+	if (_query.isEmpty() && !query.isEmpty()) {
+		_browse = saveView();
+	}
+	_query = query;
+	if (_query.isEmpty() && _browse) {
+		auto state = std::move(*_browse);
+		_browse.reset();
+		restoreView(std::move(state));
+	} else {
+		reload();
+	}
+}
+
+void Widget::setFilter(std::optional<Kind> filter) {
+	if (_filter == filter) {
+		return;
+	}
+	_searchTimer.cancel();
+	applySearch();
+	_filter = filter;
+	updateFilterLabel();
+	reload();
+}
+
+void Widget::showFilter() {
+	_menu = base::make_unique_q<Ui::PopupMenu>(this, st::popupMenuWithIcons);
+	for (auto index = 0; index != int(_filterLabels.size()); ++index) {
+		const auto filter = index
+			? std::make_optional(Kind(index - 1))
+			: std::nullopt;
+		Menu::AddCheckedAction(
+			_menu.get(),
+			_filterLabels[index],
+			[=] { setFilter(filter); },
+			nullptr,
+			_filter == filter);
+	}
+	_menu->popup(_filterButton->mapToGlobal(_filterButton->rect().bottomLeft()));
+}
+
+void Widget::jumpToLatest() {
+	_inner->showAtPosition(Data::MaxMessagePosition, Window::SectionShow());
+}
+
+void Widget::resizeEvent(QResizeEvent *e) {
+	updateHeader();
+	const auto top = _back->height();
 	_scroll->setGeometry(0, top, width(), std::max(0, height() - top));
 	_inner->resizeToWidth(width(), _scroll->height());
 	updateVisible();
@@ -453,13 +732,23 @@ void Widget::paintEvent(QPaintEvent *e) {
 	}
 	SectionWidget::PaintBackground(controller(), _theme.get(), this, e->rect());
 	auto p = Painter(this);
-	p.fillRect(0, 0, width(), _scroll->y(), st::boxBg);
+	p.fillRect(0, 0, width(), _scroll->y(), st::topBarBg);
 }
 
 void Widget::updateVisible() {
 	_inner->setVisibleTopBottom(
 		_scroll->scrollTop(),
 		_scroll->scrollTop() + _scroll->height());
+	_scrollDown->moveToRight(
+		st::historyToDownPosition.x(),
+		_scroll->height() - _scrollDown->height() - st::historyToDownPosition.y());
+	_scrollDown->setVisible(!_rows.empty()
+		&& (_moreAfter
+			|| !_inner->loadedAtBottom()
+			|| _scroll->scrollTop() + st::historyToDownShownAfter / 4
+				< _scroll->scrollTopMax()));
+	_scrollDown->raise();
+	updateEmpty();
 }
 
 bool Widget::listScrollTo(int top, bool syntetic) {
@@ -482,18 +771,12 @@ bool Widget::listIsLessInOrder(
 
 void Widget::reload() {
 	_searchTimer.cancel();
-	_query = _search->getLastText().trimmed();
-	_error.clear();
-	_rows.clear();
-	_moreBefore = true;
-	_moreAfter = false;
-	_limitBefore = 0;
-	auto state = ListMemento(Data::MaxMessagePosition);
-	_inner->restoreState(&state);
+	restoreView(ViewState());
 }
 
 void Widget::refresh() {
 	_loading = true;
+	updateEmpty();
 	const auto generation = ++_generation;
 	const auto migrated = !_message ? _history->migrateFrom() : nullptr;
 	session().messageHistory().query({
@@ -513,6 +796,7 @@ void Widget::refresh() {
 		_error = page.error;
 		if (!_error.isEmpty()) {
 			controller()->showToast(tr::lng_myowngram_message_history_error(tr::now));
+			updateEmpty();
 			_inner->update();
 			return;
 		}
@@ -532,7 +816,9 @@ void Widget::refresh() {
 			}
 		}
 		_rows = std::move(rows);
+		updateSubtitle();
 		_changes.fire({});
+		updateEmpty();
 		_inner->update();
 	}));
 }
@@ -545,6 +831,7 @@ void Widget::addEntry(const Entry &entry, std::vector<Item> &rows) {
 		data->recordId = entry.id;
 		data->part = part;
 		data->sentAt = item->date();
+		data->searchQuery = _query;
 		data->deleted = (entry.kind == Kind::Deleted);
 		item->updateDate(TimeId(entry.savedAt));
 		rows.emplace_back(std::move(item));
@@ -571,6 +858,37 @@ void Widget::addEntry(const Entry &entry, std::vector<Item> &rows) {
 		return;
 	}
 	auto updated = Serialize::MessageHistory::Read(history, entry.updated, false);
+	const auto media = previous ? previous->media() : nullptr;
+	const auto compact = !previous
+		|| (!previous->richPage()
+			&& (!media
+				|| dynamic_cast<Data::MediaPhoto*>(media)
+				|| dynamic_cast<Data::MediaFile*>(media)));
+	if (updated && compact) {
+		const auto updatedMedia = updated->media();
+		const auto caption = media && media->allowsEditCaption()
+			&& updatedMedia
+			&& (media->photo() == updatedMedia->photo())
+			&& (media->document() == updatedMedia->document());
+		const auto label = caption
+			? tr::lng_admin_log_previous_caption(tr::now)
+			: tr::lng_admin_log_previous_message(tr::now);
+		const auto text = !previous
+			? tr::lng_myowngram_message_history_unreadable(tr::now, tr::italic)
+			: (previous->originalText().empty() && (!media || caption))
+			? tr::lng_admin_log_empty_text(tr::now, tr::italic)
+			: previous->originalText();
+		updated->addLogEntryOriginal(
+			WebPageId(updated->id.bare),
+			label,
+			text,
+			media && !caption ? media->photo() : nullptr,
+			media && !caption ? media->document() : nullptr);
+		updated->Get<HistoryMessageArchived>()->mediaLifetime.make_state<OwnedItem>(
+			std::move(previous));
+		prepare(std::move(updated), 1);
+		return;
+	}
 	if (updated) {
 		prepare(std::move(updated), 1);
 	} else {
@@ -600,8 +918,17 @@ Data::MessagesSlice Widget::slice(
 		});
 	}
 	const auto center = (i == _rows.end()) ? count - 1 : int(i - _rows.begin());
-	const auto from = std::max(0, center - before);
-	const auto till = std::min(count, center + after + 1);
+	auto from = std::max(0, center - before);
+	auto till = std::min(count, center + after + 1);
+	const auto recordAt = [&](int index) {
+		return _rows[index]->Get<HistoryMessageArchived>()->recordId;
+	};
+	while (from > 0 && recordAt(from - 1) == recordAt(from)) {
+		--from;
+	}
+	while (till > 0 && till < count && recordAt(till - 1) == recordAt(till)) {
+		++till;
+	}
 	auto result = Data::MessagesSlice();
 	if (!_moreBefore && !_moreAfter) {
 		result.fullCount = count;
@@ -640,26 +967,70 @@ rpl::producer<Data::MessagesSlice> Widget::listSource(
 	) | rpl::map([=] { return slice(around, before, after); });
 }
 
-void Widget::listPaintEmpty(Painter &p, const Ui::ChatPaintContext &context) {
+void Widget::updateEmpty() {
+	if (!_rows.empty()) {
+		_emptyAction->hide();
+		return;
+	}
 	const auto text = !_error.isEmpty()
 		? tr::lng_myowngram_message_history_error(tr::now)
 		: _loading
 		? tr::lng_contacts_loading(tr::now)
-		: !_query.isEmpty() || _filter
-		? tr::lng_myowngram_message_history_no_results(tr::now)
+		: !_query.isEmpty()
+		? (_filter == Kind::Deleted
+			? tr::lng_myowngram_message_history_no_deleted_results(tr::now)
+			: _filter == Kind::Edited
+			? tr::lng_myowngram_message_history_no_edited_results(tr::now)
+			: tr::lng_myowngram_message_history_no_results(tr::now))
+		: _filter
+		? (*_filter == Kind::Deleted
+			? tr::lng_myowngram_message_history_no_deleted(tr::now)
+			: tr::lng_myowngram_message_history_no_edits(tr::now))
+		: _message
+		? tr::lng_myowngram_message_history_no_versions(tr::now)
+		: !session().messageHistory().enabled()
+		? tr::lng_myowngram_message_history_saving_off(tr::now)
 		: tr::lng_myowngram_message_history_empty(tr::now);
-	p.setFont(st::normalFont);
-	p.setPen(st::windowFg);
-	p.drawText(QRect(0, _scroll->scrollTop(), width(), _scroll->height()),
-		Qt::AlignCenter, text);
+	_emptyText.setText(st::serviceTextStyle, text);
+	const auto padding = st::historyAdminLogEmptyPadding;
+	const auto outerWidth = std::min(width(), st::historyAdminLogEmptyWidth);
+	const auto innerWidth = std::max(1, outerWidth - rect::m::sum::h(padding));
+	const auto height = _emptyText.countHeight(innerWidth) + rect::m::sum::v(padding);
+	_emptyRect = QRect(
+		(width() - outerWidth) / 2,
+		_scroll->height() / 3,
+		outerWidth,
+		height);
+	_emptyActionText = !_error.isEmpty()
+		? tr::lng_bot_download_retry(tr::now)
+		: !_query.isEmpty()
+		? tr::lng_sr_clear_search(tr::now)
+		: _filter
+		? tr::lng_myowngram_message_history_show_all(tr::now)
+		: tr::lng_menu_settings(tr::now);
+	_emptyAction->moveToLeft(
+		(width() - _emptyAction->width()) / 2,
+		_emptyRect.y() + _emptyRect.height() + padding.bottom());
+	_emptyAction->setVisible(!_loading);
+	_emptyAction->raise();
+	_inner->update();
+}
+
+void Widget::listPaintEmpty(Painter &p, const Ui::ChatPaintContext &context) {
+	const auto rect = _emptyRect.translated(0, _scroll->scrollTop());
+	ServiceMessagePainter::PaintBubble(p, context.st, rect);
+	p.setPen(context.st->msgServiceFg());
+	const auto padding = st::historyAdminLogEmptyPadding;
+	_emptyText.draw(p, {
+		.position = rect.topLeft() + QPoint(padding.left(), padding.top()),
+		.availableWidth = rect.width() - rect::m::sum::h(padding),
+		.align = style::al_top,
+	});
 }
 
 void Widget::showMenu() {
 	_menu = base::make_unique_q<Ui::PopupMenu>(this, st::popupMenuWithIcons);
-	_menu->addAction(tr::lng_myowngram_message_history_cleanup(tr::now), [=] {
-		controller()->show(Box(Settings::MessageHistoryCleanupBox, controller()));
-	}, &st::menuIconTTL);
-	_menu->addAction(tr::lng_menu_settings(tr::now), [=] {
+	_menu->addAction(tr::lng_myowngram_message_history_settings(tr::now), [=] {
 		controller()->showSettings(Settings::MessageHistoryId());
 	}, &st::menuIconSettings);
 	_menu->addSeparator();

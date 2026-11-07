@@ -1948,15 +1948,19 @@ void FillContextMenuItems(
 		if ((saved || item->isRegular()) && archive->available()) {
 			const auto original = Data::MessageHistory::OriginalId(item);
 			const auto controller = list->controller();
-			const auto historyAction = result->addAction(
-				tr::lng_myowngram_message_history_message_title(tr::now),
-				[=] { ShowMessageHistory(controller, original.peer, original.msg); },
-				&st::menuIconGroupLog);
+			const auto historyAction = (list->delegate()->listMessageHistoryId() == original)
+				? nullptr
+				: result->addAction(
+					tr::lng_myowngram_message_history_message_title(tr::now),
+					[=] { ShowMessageHistory(controller, original.peer, original.msg); },
+					&st::menuIconGroupLog).get();
 			const auto removeAction = result->addAction(
 				tr::lng_myowngram_message_history_remove(tr::now),
 				[=] { RemoveMessageHistory(controller, original); },
 				&st::menuIconDelete);
-			historyAction->setEnabled(saved != nullptr);
+			if (historyAction) {
+				historyAction->setEnabled(saved != nullptr);
+			}
 			removeAction->setEnabled(saved != nullptr);
 			if (!saved) {
 				archive->query({
@@ -1965,7 +1969,9 @@ void FillContextMenuItems(
 					.limit = 1,
 				}, crl::guard(result, [=](Storage::MessageHistoryPage page) {
 					const auto available = !page.entries.empty();
-					historyAction->setEnabled(available);
+					if (historyAction) {
+						historyAction->setEnabled(available);
+					}
 					removeAction->setEnabled(available);
 				}));
 			}

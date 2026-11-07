@@ -232,6 +232,7 @@ public:
 		Fn<void()> finished) = 0;
 	virtual Ui::ElasticScroll *listScrollArea() const { return nullptr; }
 	virtual bool listThanosEffectEnabled() const { return true; }
+	virtual FullMsgId listMessageHistoryId() { return {}; }
 	virtual bool listShowForumThreadBars() const { return false; }
 	virtual AboutView *listAboutView() { return nullptr; }
 	virtual bool listInvertedOrder() { return false; }

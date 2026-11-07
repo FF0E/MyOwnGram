@@ -2169,12 +2169,40 @@ void HistoryItem::addLogEntryOriginal(
 	Expects(isAdminLogEntry());
 
 	AddComponents(HistoryMessageLogEntryOriginal::Bit());
-	Get<HistoryMessageLogEntryOriginal>()->page = _history->owner().webpage(
-		localId,
-		label,
-		content,
-		photo,
-		document);
+	if (const auto saved = Get<HistoryMessageArchived>()) {
+		const auto page = saved->mediaLifetime.make_state<WebPageData>(
+			&_history->owner(),
+			localId);
+		page->applyChanges(
+			WebPageType::Article,
+			QString(),
+			QString(),
+			label,
+			QString(),
+			content,
+			FullStoryId(),
+			photo,
+			document,
+			WebPageCollage(),
+			nullptr,
+			nullptr,
+			nullptr,
+			nullptr,
+			0,
+			0,
+			QString(),
+			false,
+			false,
+			0);
+		Get<HistoryMessageLogEntryOriginal>()->page = page;
+	} else {
+		Get<HistoryMessageLogEntryOriginal>()->page = _history->owner().webpage(
+			localId,
+			label,
+			content,
+			photo,
+			document);
+	}
 }
 
 void HistoryItem::markArchived() {

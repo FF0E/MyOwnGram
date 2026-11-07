@@ -728,6 +728,16 @@ QString DateTooltipText(not_null<Element*> view) {
 	const auto format = QLocale::LongFormat;
 	const auto item = view->data();
 	auto dateText = locale.toString(view->dateTime(), format);
+	const auto saved = item->Get<HistoryMessageArchived>();
+	if (saved && !saved->inlineCopy) {
+		dateText = tr::lng_myowngram_message_history_saved_at(
+			tr::now,
+			lt_date,
+			dateText) + '\n' + tr::lng_myowngram_message_history_sent_at(
+			tr::now,
+			lt_date,
+			locale.toString(base::unixtime::parse(saved->sentAt), format));
+	}
 	if (item->awaitingVideoProcessing()) {
 		dateText += '\n' + tr::lng_approximate_about(tr::now);
 	}
@@ -1928,6 +1938,20 @@ int Element::textHeightFor(int textWidth) const {
 		if (const auto rich = const_cast<Element*>(this)->richpage()) {
 			const auto articleHeight = rich->article.resizeGetHeight(
 				richPageWidthFor(textWidth));
+			const auto saved = data()->Get<HistoryMessageArchived>();
+			if (saved && !saved->searchQuery.isEmpty()) {
+				const auto sources = rich->article.searchSources();
+				auto matches = std::vector<Iv::Markdown::MarkdownArticleSearchMatch>();
+				for (auto index = 0; index != int(sources.size()); ++index) {
+					const auto range = FindSearchQueryHighlight(
+						sources[index].text,
+						saved->searchQuery);
+					if (!range.empty()) {
+						matches.push_back({ index, range.from, range.to });
+					}
+				}
+				rich->article.setSearchMatches(std::move(matches), -1);
+			}
 			const auto skips = rich->edgeSkips();
 			_textHeight = skips.top()
 				+ articleHeight

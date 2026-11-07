@@ -3105,11 +3105,20 @@ void Message::paintText(
 		});
 	}
 
+	auto selection = context.selection;
+	auto palette = stm->textPalette;
+	const auto saved = data()->Get<HistoryMessageArchived>();
+	if (saved && !saved->searchQuery.isEmpty() && selection.empty()) {
+		selection = FindSearchQueryHighlight(text().toString(), saved->searchQuery);
+		palette.selectBg = st::searchedTextMatchBg;
+		palette.selectFg = palette.selectLinkFg = palette.selectMonoFg
+			= palette.selectSpoilerFg = st::searchedTextMatchFg;
+	}
 	auto highlightRequest = context.computeHighlightCache();
 	text().draw(p, {
 		.position = trect.topLeft(),
 		.availableWidth = std::max(textRealWidth(), trect.width()),
-		.palette = &stm->textPalette,
+		.palette = &palette,
 		.pre = stm->preCache.get(),
 		.blockquote = context.quoteCache(
 			contentColorCollectible(),
@@ -3119,7 +3128,7 @@ void Message::paintText(
 		.now = context.now,
 		.pausedEmoji = context.paused || On(PowerSaving::kEmojiChat),
 		.pausedSpoiler = context.paused || On(PowerSaving::kChatSpoiler),
-		.selection = context.selection,
+		.selection = selection,
 		.highlight = needRippleMask
 			? &rippleRequest
 			: (highlightRequest ? &*highlightRequest : nullptr),

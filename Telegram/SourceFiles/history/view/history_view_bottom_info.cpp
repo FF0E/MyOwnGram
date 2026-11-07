@@ -700,11 +700,15 @@ QRect BottomInfo::effectIconGeometry() const {
 BottomInfo::Data BottomInfoDataFromMessage(not_null<Message*> message) {
 	using Flag = BottomInfo::Data::Flag;
 	const auto item = message->data();
+	const auto saved = item->Get<HistoryMessageArchived>();
+	const auto historyEntry = saved && !saved->inlineCopy;
 
 	auto result = BottomInfo::Data();
 	result.date = message->dateTime();
-	if (const auto saved = item->Get<HistoryMessageArchived>()) {
-		result.date = QDateTime::fromSecsSinceEpoch(saved->sentAt);
+	if (saved) {
+		if (saved->inlineCopy) {
+			result.date = QDateTime::fromSecsSinceEpoch(saved->sentAt);
+		}
 		if (saved->deleted) {
 			result.flags |= Flag::Deleted;
 		}
@@ -736,7 +740,7 @@ BottomInfo::Data BottomInfoDataFromMessage(not_null<Message*> message) {
 			}
 		}
 	}
-	if (const auto editedDate = message->displayedEditDate()) {
+	if (const auto editedDate = historyEntry ? 0 : message->displayedEditDate()) {
 		result.flags |= Flag::Edited;
 		if (item->history()->session().messagePrimaryEditedDate()) {
 			result.flags |= Flag::EditedPrimary;
@@ -795,7 +799,7 @@ BottomInfo::Data BottomInfoDataFromMessage(not_null<Message*> message) {
 			result.flags |= Flag::Silent;
 		}
 	}
-	if (!forwarded) {
+	if (!forwarded || historyEntry) {
 		return result;
 	}
 	if (forwarded->savedFromMsgId && forwarded->savedFromDate) {

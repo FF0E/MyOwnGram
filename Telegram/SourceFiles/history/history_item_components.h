@@ -142,6 +142,7 @@ struct HistoryMessageArchived
 : RuntimeComponent<HistoryMessageArchived, HistoryItem> {
 	FullMsgId original;
 	rpl::lifetime mediaLifetime;
+	QString searchQuery;
 	qint64 recordId = 0;
 	TimeId sentAt = 0;
 	int part = 0;
