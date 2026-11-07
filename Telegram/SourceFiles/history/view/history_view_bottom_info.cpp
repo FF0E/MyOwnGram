@@ -511,12 +511,13 @@ void BottomInfo::layoutDateText() {
 	const auto editedPrimary = !updated
 		&& (_data.flags & Data::Flag::EditedPrimary)
 		&& !(_data.flags & Data::Flag::ForwardedDate);
-	const auto edited = editedPrimary
+	const auto editedIcon = !updated
+		&& !editedPrimary
+		&& (_data.flags & Data::Flag::Edited);
+	const auto edited = (editedPrimary || editedIcon)
 		? QString()
 		: updated
 		? (tr::lng_ephemeral_updated(tr::now) + ' ')
-		: (_data.flags & Data::Flag::Edited)
-		? (tr::lng_edited(tr::now) + ' ')
 		: (_data.flags & Data::Flag::EstimateDate)
 		? (tr::lng_approximate(tr::now) + ' ')
 		: _data.scheduleRepeatPeriod
@@ -543,7 +544,8 @@ void BottomInfo::layoutDateText() {
 		? Ui::FormatDateTimeSavedFrom(_data.date, time)
 		: time);
 	const auto afterAuthor = prefix + date;
-	const auto afterAuthorWidth = st::msgDateFont->width(afterAuthor);
+	const auto afterAuthorWidth = st::msgDateFont->width(afterAuthor)
+		+ (editedIcon ? st::historyEditedIcon.icon.width() : 0);
 	const auto authorWidth = st::msgDateFont->width(author);
 	const auto maxWidth = st::maxSignatureSize;
 	_authorElided = !author.isEmpty()
@@ -551,16 +553,9 @@ void BottomInfo::layoutDateText() {
 	const auto name = _authorElided
 		? st::msgDateFont->elided(author, maxWidth - afterAuthorWidth)
 		: author;
-	const auto full = (_data.flags & Data::Flag::Sponsored)
-		? QString()
-		: (_data.flags & Data::Flag::Imported)
-		? (date + ' ' + tr::lng_imported(tr::now))
-		: name.isEmpty()
-		? date
-		: (name + afterAuthor);
 	auto helper = Ui::Text::CustomEmojiHelper(
 		Core::TextContext({ .session = &_reactionsOwner->session() }));
-	auto marked = TextWithEntities();
+	auto marked = tr::marked();
 	if (const auto count = _data.stars) {
 		marked.append(
 			Ui::Text::IconEmoji(&st::starIconEmojiSmall)
@@ -579,7 +574,19 @@ void BottomInfo::layoutDateText() {
 			.textColor = false,
 		})).append("  ");
 	}
-	marked.append(full);
+	if (!(_data.flags & Data::Flag::Sponsored)) {
+		const auto imported = (_data.flags & Data::Flag::Imported);
+		if (!imported && !name.isEmpty()) {
+			marked.append(name).append(prefix);
+		}
+		if (editedIcon) {
+			marked.append(Ui::Text::IconEmoji(&st::historyEditedIcon));
+		}
+		marked.append(date);
+		if (imported) {
+			marked.append(' ').append(tr::lng_imported(tr::now));
+		}
+	}
 	_authorEditedDate.setMarkedText(
 		st::msgDateTextStyle,
 		marked,

@@ -247,8 +247,13 @@ historyPinTop: -18px;
 historySilentWidth: 12px;
 historySilentTop: -13px;
 historyDeletedWidth: 16px;
-historyDeletedTop: -12px;
-historyDeletedIcon: icon{{ "info/message_deleted", msgInDateFg }};
+historyDeletedTop: -14px;
+historyDeletedIcon: icon{{ "info/message_deleted-14x14", msgInDateFg }};
+historyEditedIcon: IconEmoji {
+	icon: icon{{ "chat/paid_edit-20x20", msgInDateFg }};
+	padding: margins(0px, 0px, 0px, 0px);
+	useIconColor: false;
+}
 
 historyBotMenuSkip: 8px;
 historyBotMenuMaxWidth: 160px;
