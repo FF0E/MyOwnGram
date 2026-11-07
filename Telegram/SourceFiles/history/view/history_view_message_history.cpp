@@ -196,6 +196,7 @@ private:
 	std::shared_ptr<Ui::ChatTheme> _theme;
 	object_ptr<Ui::ElasticScroll> _scroll;
 	QPointer<ListWidget> _inner;
+	object_ptr<Ui::RpWidget> _topBar;
 	object_ptr<Profile::BackButton> _back;
 	object_ptr<Ui::PlainShadow> _shadow;
 	object_ptr<Ui::IconButton> _menuButton;
@@ -243,13 +244,14 @@ Widget::Widget(
 , _message(memento->message)
 , _rows(memento->view.rows)
 , _scroll(this, controller->chatStyle()->value(lifetime(), st::historyScroll))
-, _back(this)
+, _topBar(this)
+, _back(_topBar)
 , _shadow(this)
-, _menuButton(this, st::topBarMenuToggle)
-, _searchButton(this, st::topBarSearch)
-, _cancelSearch(this, st::historyAdminLogCancelSearch)
-, _search(this, st::defaultMultiSelectSearchField, tr::lng_dlg_filter())
-, _filterButton(this, rpl::single(QString()), st::messageHistoryFilter)
+, _menuButton(_topBar, st::topBarMenuToggle)
+, _searchButton(_topBar, st::topBarSearch)
+, _cancelSearch(_topBar, st::historyAdminLogCancelSearch)
+, _search(_topBar, st::defaultMultiSelectSearchField, tr::lng_dlg_filter())
+, _filterButton(_topBar, rpl::single(QString()), st::messageHistoryFilter)
 , _scrollDown(_scroll, st::historyToDown)
 , _emptyAction(_scroll, _emptyActionText.value(), st::defaultLightButton)
 , _searchTimer([=] { applySearch(); })
@@ -582,6 +584,7 @@ std::shared_ptr<Window::SectionMemento> Widget::createMemento() {
 }
 
 void Widget::updateHeader() {
+	_topBar->setGeometry(0, 0, width(), st::topBarHeight);
 	_menuButton->moveToRight(0, 0);
 	if (!_message) {
 		_filterButton->setFullWidth(std::max(1, std::min(
@@ -595,12 +598,13 @@ void Widget::updateHeader() {
 	const auto searchHiddenLeft = width()
 		- _menuButton->width()
 		- _searchButton->width();
-	const auto searchShownLeft = st::historyAdminLogTopBarLeft;
+	const auto searchShownLeft = st::topBarArrowPadding.left();
 	_searchButton->moveToLeft(
 		_searchShown ? searchShownLeft : searchHiddenLeft,
 		0);
 	_cancelSearch->moveToLeft(searchHiddenLeft, 0);
 	_back->resizeToWidth(std::max(0, searchHiddenLeft - filterWidth));
+	_back->moveToLeft(0, 0);
 	_back->setVisible(!_searchShown);
 	const auto fieldLeft = searchShownLeft + _searchButton->width();
 	_search->setGeometryToLeft(
@@ -698,7 +702,7 @@ void Widget::setFilter(std::optional<Kind> filter) {
 }
 
 void Widget::showFilter() {
-	_menu = base::make_unique_q<Ui::PopupMenu>(this, st::popupMenuWithIcons);
+	_menu = base::make_unique_q<Ui::PopupMenu>(this, st::defaultPopupMenu);
 	for (auto index = 0; index != int(_filterLabels.size()); ++index) {
 		const auto filter = index
 			? std::make_optional(Kind(index - 1))
@@ -710,7 +714,11 @@ void Widget::showFilter() {
 			nullptr,
 			_filter == filter);
 	}
-	_menu->popup(_filterButton->mapToGlobal(_filterButton->rect().bottomLeft()));
+	_menu->setForcedOrigin(Ui::PanelAnimation::Origin::TopRight);
+	_menu->popup(_filterButton->mapToGlobal(QPoint(
+		_filterButton->width()
+			+ Ui::BoxShadow::ExtendFor(_menu->st().shadow).right(),
+		_filterButton->height())));
 }
 
 void Widget::jumpToLatest() {
@@ -1039,7 +1047,14 @@ void Widget::showMenu() {
 		: tr::lng_myowngram_message_history_clear(tr::now), [=] {
 		RemoveMessageHistory(controller(), { _history->peer->id, _message });
 	}, &st::menuIconDelete);
-	_menu->popup(_menuButton->mapToGlobal(_menuButton->rect().bottomRight()));
+	_menu->setForcedOrigin(Ui::PanelAnimation::Origin::TopRight);
+	_menu->popup(Ui::PopupMenu::ConstrainToParentScreen(
+		_menu,
+		_topBar->mapToGlobal(QPoint(
+			_topBar->width()
+				+ st::topBarMenuPosition.x()
+				+ Ui::BoxShadow::ExtendFor(_menu->st().shadow).right(),
+			st::topBarMenuPosition.y()))));
 }
 
 object_ptr<Window::SectionWidget> Memento::createWidget(
