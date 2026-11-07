@@ -9346,7 +9346,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_message_history_cleanup_title" = "Automatic cleanup for this account";
 "lng_myowngram_message_history_cleanup_about" = "Remove saved changes after this period, counted from when they were saved. This applies to all chats in this account and does not delete messages from Telegram.";
 "lng_myowngram_message_history_deleted" = "Deleted";
-"lng_myowngram_message_history_deleted_event" = "Message deleted";
 "lng_myowngram_message_history_edited_event" = "Message edited";
 "lng_myowngram_message_history_filter_all" = "All changes";
 "lng_myowngram_message_history_filter_deleted" = "Deleted messages";

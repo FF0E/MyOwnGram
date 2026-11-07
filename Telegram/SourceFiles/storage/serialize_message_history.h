@@ -9,6 +9,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "history/history_item.h"
 
+struct PollMedia;
+struct WebPageData;
+
 namespace Main {
 class Session;
 } // namespace Main
@@ -36,6 +39,20 @@ private:
 		QDataStream &stream,
 		not_null<Main::Session*> session,
 		int appVersion);
+	static void WriteWebPage(
+		QDataStream &stream,
+		not_null<WebPageData*> page,
+		qint32 flags);
+	static WebPageData *ReadWebPage(
+		QDataStream &stream,
+		not_null<HistoryItem*> item,
+		int appVersion,
+		qint32 &flags);
+	static void WritePollMedia(QDataStream &stream, const PollMedia &media);
+	[[nodiscard]] static PollMedia ReadPollMedia(
+		QDataStream &stream,
+		not_null<HistoryItem*> item,
+		int appVersion);
 	static void WriteRich(QDataStream &stream, not_null<HistoryItem*> item);
 	[[nodiscard]] static std::shared_ptr<const Iv::RichPage> ReadRich(
 		QDataStream &stream,
@@ -45,7 +62,8 @@ private:
 	[[nodiscard]] static std::unique_ptr<Data::Media> ReadMedia(
 		QDataStream &stream,
 		not_null<HistoryItem*> item,
-		int appVersion);
+		int appVersion,
+		int format);
 
 };
 

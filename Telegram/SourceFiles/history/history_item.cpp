@@ -2170,7 +2170,7 @@ void HistoryItem::addLogEntryOriginal(
 
 	AddComponents(HistoryMessageLogEntryOriginal::Bit());
 	if (const auto saved = Get<HistoryMessageArchived>()) {
-		const auto page = saved->mediaLifetime.make_state<WebPageData>(
+		const auto page = saved->mediaLifetime->make_state<WebPageData>(
 			&_history->owner(),
 			localId);
 		page->applyChanges(
@@ -4044,7 +4044,10 @@ Data::MessagePosition HistoryItem::position() const {
 		return {
 			.fullId = saved->inlineCopy
 				? saved->original
-				: FullMsgId(PeerId(), MsgId(saved->recordId * 4 + saved->part)),
+				: FullMsgId(
+					PeerId(),
+					MsgId(saved->recordId * HistoryMessageArchived::kPartsCount
+						+ saved->part)),
 			.date = date(),
 		};
 	}

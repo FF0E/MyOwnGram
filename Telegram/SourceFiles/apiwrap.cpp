@@ -2880,6 +2880,9 @@ void ApiWrap::refreshFileReference(
 	};
 	v::match(origin.data, [&](Data::FileOriginMessage data) {
 		if (const auto item = _session->data().message(data)) {
+			if (const auto saved = item->Get<HistoryMessageArchived>()) {
+				data = saved->original;
+			}
 			if (const auto iv = item->Get<HistoryMessageMediaForInstantView>()) {
 				if (!iv->url.isEmpty()) {
 					return refreshFileReference(
@@ -2936,17 +2939,18 @@ void ApiWrap::refreshFileReference(
 					MTP_int(item->shortcutId()),
 					MTP_vector<MTPint>(1, MTP_int(realId)),
 					MTP_long(0)));
-			} else if (const auto channel = item->history()->peer->asChannel()) {
+			} else if (const auto channel
+					= _session->data().peer(data.peer)->asChannel()) {
 				request(MTPchannels_GetMessages(
 					channel->inputChannel(),
 					MTP_vector<MTPInputMessage>(
 						1,
-						MTP_inputMessageID(MTP_int(item->id)))));
+						MTP_inputMessageID(MTP_int(data.msg)))));
 			} else {
 				request(MTPmessages_GetMessages(
 					MTP_vector<MTPInputMessage>(
 						1,
-						MTP_inputMessageID(MTP_int(item->id)))));
+						MTP_inputMessageID(MTP_int(data.msg)))));
 			}
 		} else {
 			fail();

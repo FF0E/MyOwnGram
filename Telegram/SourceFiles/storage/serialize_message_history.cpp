@@ -31,7 +31,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 namespace Serialize {
 namespace {
 
-constexpr auto kFormat = qint32(3);
+constexpr auto kFormat = qint32(4);
 
 enum class MediaKind : qint32 {
 	None,
@@ -272,6 +272,106 @@ DocumentData *MessageHistory::ReadDocument(
 		size);
 }
 
+void MessageHistory::WriteWebPage(
+		QDataStream &stream,
+		not_null<WebPageData*> page,
+		qint32 flags) {
+	stream << qint32(page->type) << page->url << page->displayUrl
+		<< page->siteName << page->title << page->author
+		<< qint32(page->duration) << flags;
+	WriteText(stream, page->description);
+	WritePhoto(stream, page->photo);
+	WriteDocument(stream, page->document);
+}
+
+WebPageData *MessageHistory::ReadWebPage(
+		QDataStream &stream,
+		not_null<HistoryItem*> item,
+		int appVersion,
+		qint32 &flags) {
+	const auto session = &item->history()->session();
+	auto type = qint32(0);
+	auto url = QString();
+	auto display = QString();
+	auto site = QString();
+	auto title = QString();
+	auto author = QString();
+	auto duration = qint32(0);
+	stream >> type >> url >> display >> site >> title >> author
+		>> duration >> flags;
+	auto description = ReadText(stream);
+	const auto photo = ReadPhoto(stream, session, appVersion);
+	const auto document = ReadDocument(stream, session, appVersion);
+	const auto archive = item->Get<HistoryMessageArchived>();
+	const auto page = archive->mediaLifetime->make_state<WebPageData>(
+		&session->data(),
+		item->id.bare);
+	page->applyChanges(
+		WebPageType(type),
+		url,
+		display,
+		site,
+		title,
+		description,
+		FullStoryId(),
+		photo,
+		document,
+		WebPageCollage(),
+		nullptr,
+		nullptr,
+		nullptr,
+		nullptr,
+		0,
+		duration,
+		author,
+		false,
+		false,
+		0);
+	return page;
+}
+
+void MessageHistory::WritePollMedia(
+		QDataStream &stream,
+		const PollMedia &media) {
+	WritePhoto(stream, media.photo);
+	WriteDocument(stream, media.document);
+	stream << media.geo.has_value();
+	if (media.geo) {
+		WriteTL(stream, media.geo->toMTP());
+	}
+	stream << media.url << bool(media.webpage);
+	if (media.webpage) {
+		WriteWebPage(stream, media.webpage, 0);
+	}
+}
+
+PollMedia MessageHistory::ReadPollMedia(
+		QDataStream &stream,
+		not_null<HistoryItem*> item,
+		int appVersion) {
+	const auto session = &item->history()->session();
+	auto result = PollMedia();
+	result.photo = ReadPhoto(stream, session, appVersion);
+	result.document = ReadDocument(stream, session, appVersion);
+	auto geo = false;
+	stream >> geo;
+	if (geo) {
+		const auto point = ReadTL<MTPGeoPoint>(stream);
+		if (stream.status() != QDataStream::Ok || point.type() != mtpc_geoPoint) {
+			stream.setStatus(QDataStream::ReadCorruptData);
+			return {};
+		}
+		result.geo = Data::LocationPoint(point.c_geoPoint());
+	}
+	auto webpage = false;
+	stream >> result.url >> webpage;
+	if (webpage) {
+		auto flags = qint32(0);
+		result.webpage = ReadWebPage(stream, item, appVersion, flags);
+	}
+	return result;
+}
+
 void MessageHistory::WriteRich(
 		QDataStream &stream,
 		not_null<HistoryItem*> item) {
@@ -348,13 +448,8 @@ void MessageHistory::WriteMedia(QDataStream &stream, Data::Media *media) {
 	if (!media) {
 		stream << qint32(MediaKind::None);
 	} else if (const auto page = media->webpage()) {
-		stream << qint32(MediaKind::WebPage)
-			<< qint32(page->type) << page->url << page->displayUrl
-			<< page->siteName << page->title << page->author
-			<< qint32(page->duration) << qint32(media->webpageFlags().value());
-		WriteText(stream, page->description);
-		WritePhoto(stream, page->photo);
-		WriteDocument(stream, page->document);
+		stream << qint32(MediaKind::WebPage);
+		WriteWebPage(stream, page, qint32(media->webpageFlags().value()));
 	} else if (const auto photo = media->photo()) {
 		stream << qint32(MediaKind::Photo) << media->hasSpoiler();
 		WritePhoto(stream, photo);
@@ -380,6 +475,11 @@ void MessageHistory::WriteMedia(QDataStream &stream, Data::Media *media) {
 			WriteText(stream, answer.text);
 			stream << answer.option << qint32(answer.votes)
 				<< answer.chosen << answer.correct;
+		}
+		WritePollMedia(stream, poll->attachedMedia);
+		WritePollMedia(stream, poll->solutionMedia);
+		for (const auto &answer : poll->answers) {
+			WritePollMedia(stream, answer.media);
 		}
 	} else if (const auto todo = media->todolist()) {
 		stream << qint32(MediaKind::Todo);
@@ -449,7 +549,8 @@ void MessageHistory::WriteMedia(QDataStream &stream, Data::Media *media) {
 std::unique_ptr<Data::Media> MessageHistory::ReadMedia(
 		QDataStream &stream,
 		not_null<HistoryItem*> item,
-		int appVersion) {
+		int appVersion,
+		int format) {
 	const auto session = &item->history()->session();
 	const auto archive = item->Get<HistoryMessageArchived>();
 	auto kind = qint32(0);
@@ -498,43 +599,8 @@ std::unique_ptr<Data::Media> MessageHistory::ReadMedia(
 			item, UserId(id), first, last, phone, vcard);
 	} break;
 	case MediaKind::WebPage: {
-		auto type = qint32(0);
-		auto url = QString();
-		auto display = QString();
-		auto site = QString();
-		auto title = QString();
-		auto author = QString();
-		auto duration = qint32(0);
 		auto flags = qint32(0);
-		stream >> type >> url >> display >> site >> title >> author
-			>> duration >> flags;
-		auto description = ReadText(stream);
-		const auto photo = ReadPhoto(stream, session, appVersion);
-		const auto document = ReadDocument(stream, session, appVersion);
-		const auto page = archive->mediaLifetime.make_state<WebPageData>(
-			&session->data(),
-			item->id.bare);
-		page->applyChanges(
-			WebPageType(type),
-			url,
-			display,
-			site,
-			title,
-			description,
-			FullStoryId(),
-			photo,
-			document,
-			WebPageCollage(),
-			nullptr,
-			nullptr,
-			nullptr,
-			nullptr,
-			0,
-			duration,
-			author,
-			false,
-			false,
-			0);
+		const auto page = ReadWebPage(stream, item, appVersion, flags);
 		return std::make_unique<Data::MediaWebPage>(
 			item,
 			page,
@@ -544,7 +610,7 @@ std::unique_ptr<Data::Media> MessageHistory::ReadMedia(
 		auto flags = qint32(0);
 		auto votes = qint32(0);
 		stream >> flags >> votes;
-		const auto poll = archive->mediaLifetime.make_state<PollData>(
+		const auto poll = archive->mediaLifetime->make_state<PollData>(
 			&session->data(),
 			item->id.bare);
 		poll->setFlags(PollData::Flags::from_raw(flags));
@@ -559,10 +625,18 @@ std::unique_ptr<Data::Media> MessageHistory::ReadMedia(
 			stream >> answer.option >> answer.votes >> answer.chosen >> answer.correct;
 			poll->answers.push_back(std::move(answer));
 		}
+		if (format >= 4) {
+			poll->attachedMedia = ReadPollMedia(stream, item, appVersion);
+			poll->solutionMedia = ReadPollMedia(stream, item, appVersion);
+			for (auto &answer : poll->answers) {
+				answer.media = ReadPollMedia(stream, item, appVersion);
+			}
+		}
+		++poll->version;
 		return std::make_unique<Data::MediaPoll>(item, poll);
 	} break;
 	case MediaKind::Todo: {
-		const auto todo = archive->mediaLifetime.make_state<TodoListData>(
+		const auto todo = archive->mediaLifetime->make_state<TodoListData>(
 			&session->data(),
 			item->fullId());
 		todo->title = ReadText(stream);
@@ -601,7 +675,7 @@ std::unique_ptr<Data::Media> MessageHistory::ReadMedia(
 	} break;
 	case MediaKind::Game: {
 		auto access = quint64(0);
-		const auto game = archive->mediaLifetime.make_state<GameData>(
+		const auto game = archive->mediaLifetime->make_state<GameData>(
 			&session->data(),
 			item->id.bare);
 		stream >> access >> game->shortName
@@ -624,7 +698,7 @@ std::unique_ptr<Data::Media> MessageHistory::ReadMedia(
 		auto count = qint32(0);
 		stream >> count;
 		for (auto i = 0; i < count && stream.status() == QDataStream::Ok; ++i) {
-			if (auto media = ReadMedia(stream, item, appVersion)) {
+			if (auto media = ReadMedia(stream, item, appVersion, format)) {
 				invoice.extendedMedia.push_back(std::move(media));
 			}
 		}
@@ -728,6 +802,7 @@ QByteArray MessageHistory::Write(not_null<HistoryItem*> item) {
 	WriteText(stream, item->originalText());
 	WriteMedia(stream, item->media());
 	WriteRich(stream, item);
+	stream << item->forbidsForward();
 	return std::move(writer).result();
 }
 
@@ -746,7 +821,7 @@ MessageHistory::Item MessageHistory::Read(
 	auto invert = false;
 	stream >> format >> appVersion >> original >> date >> outgoing >> post
 		>> invert;
-	if (format != kFormat) {
+	if (format != 3 && format != kFormat) {
 		return nullptr;
 	}
 	const auto session = &history->session();
@@ -829,10 +904,17 @@ MessageHistory::Item MessageHistory::Read(
 		}
 	}
 	auto text = ReadText(stream);
-	auto media = ReadMedia(stream, item, appVersion);
+	auto media = ReadMedia(stream, item, appVersion, format);
 	auto rich = ReadRich(stream, session, appVersion);
+	auto noForwards = false;
+	if (!stream.atEnd()) {
+		stream >> noForwards;
+	}
 	if (stream.status() != QDataStream::Ok) {
 		return nullptr;
+	}
+	if (noForwards) {
+		item->_flags |= MessageFlag::NoForwards;
 	}
 	item->applyContent({
 		.text = std::move(text),

@@ -694,7 +694,6 @@ void Widget::setFilter(std::optional<Kind> filter) {
 	if (_filter == filter) {
 		return;
 	}
-	_searchTimer.cancel();
 	applySearch();
 	_filter = filter;
 	updateFilterLabel();
@@ -853,9 +852,9 @@ void Widget::addEntry(const Entry &entry, std::vector<Item> &rows) {
 	};
 	const auto history = session().data().history(entry.message.peer);
 	const auto deleted = (entry.kind == Kind::Deleted);
-	header(deleted
-		? tr::lng_myowngram_message_history_deleted_event(tr::now)
-		: tr::lng_myowngram_message_history_edited_event(tr::now), 0);
+	if (!deleted) {
+		header(tr::lng_myowngram_message_history_edited_event(tr::now), 0);
+	}
 	auto previous = Serialize::MessageHistory::Read(history, entry.previous, false);
 	if (deleted) {
 		if (previous) {
@@ -892,8 +891,8 @@ void Widget::addEntry(const Entry &entry, std::vector<Item> &rows) {
 			text,
 			media && !caption ? media->photo() : nullptr,
 			media && !caption ? media->document() : nullptr);
-		updated->Get<HistoryMessageArchived>()->mediaLifetime.make_state<OwnedItem>(
-			std::move(previous));
+		const auto archive = updated->Get<HistoryMessageArchived>();
+		archive->mediaLifetime->make_state<OwnedItem>(std::move(previous));
 		prepare(std::move(updated), 1);
 		return;
 	}
@@ -961,9 +960,9 @@ rpl::producer<Data::MessagesSlice> Widget::listSource(
 		Data::MessagePosition around,
 		int before,
 		int after) {
-	const auto item = session().data().message(around.fullId);
-	const auto saved = item ? item->Get<HistoryMessageArchived>() : nullptr;
-	const auto record = saved ? saved->recordId : 0;
+	const auto record = (around == Data::MaxMessagePosition)
+		? 0
+		: around.fullId.msg.bare / HistoryMessageArchived::kPartsCount;
 	if (_around != record || _limitBefore != before + 1 || _limitAfter != after) {
 		_around = record;
 		_limitBefore = before + 1;

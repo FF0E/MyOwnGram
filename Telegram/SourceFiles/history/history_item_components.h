@@ -140,8 +140,11 @@ struct HistoryMessageFromRank
 
 struct HistoryMessageArchived
 : RuntimeComponent<HistoryMessageArchived, HistoryItem> {
+	static constexpr auto kPartsCount = 4;
+
 	FullMsgId original;
-	rpl::lifetime mediaLifetime;
+	std::shared_ptr<rpl::lifetime> mediaLifetime
+		= std::make_shared<rpl::lifetime>();
 	QString searchQuery;
 	qint64 recordId = 0;
 	TimeId sentAt = 0;

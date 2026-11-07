@@ -15,7 +15,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_game.h"
 #include "data/data_media_types.h"
 #include "data/data_photo.h"
+#include "data/data_poll.h"
 #include "data/data_session.h"
+#include "data/data_web_page.h"
 #include "history/history.h"
 #include "history/history_item_components.h"
 #include "iv/iv_rich_page.h"
@@ -377,6 +379,14 @@ void MessageHistory::recoverMedia(not_null<HistoryItem*> item) {
 			}
 		});
 	};
+	const auto pollMedia = [&](const PollMedia &media) {
+		photo(media.photo);
+		document(media.document);
+		if (const auto page = media.webpage) {
+			photo(page->photo);
+			document(page->document);
+		}
+	};
 	const auto media = [&](const auto &self, const Media *data) -> void {
 		if (!data) {
 			return;
@@ -384,7 +394,13 @@ void MessageHistory::recoverMedia(not_null<HistoryItem*> item) {
 		photo(data->photo());
 		photo(data->videoCover());
 		document(data->document());
-		if (const auto game = data->game()) {
+		if (const auto poll = data->poll()) {
+			pollMedia(poll->attachedMedia);
+			pollMedia(poll->solutionMedia);
+			for (const auto &answer : poll->answers) {
+				pollMedia(answer.media);
+			}
+		} else if (const auto game = data->game()) {
 			photo(game->photo);
 			document(game->document);
 		} else if (const auto invoice = data->invoice()) {

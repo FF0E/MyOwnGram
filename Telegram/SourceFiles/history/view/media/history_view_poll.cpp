@@ -233,6 +233,7 @@ public:
 		not_null<QWidget*> parent,
 		not_null<Window::SessionController*> controller,
 		not_null<WebPageData*> webpage,
+		std::shared_ptr<rpl::lifetime> mediaLifetime,
 		Fn<void()> close);
 	~OpenLinkPreviewWidget();
 
@@ -251,6 +252,7 @@ private:
 	const std::unique_ptr<Ui::ChatStyle> _style;
 	const std::unique_ptr<OpenLinkPreviewDelegate> _delegate;
 	const not_null<History*> _history;
+	const std::shared_ptr<rpl::lifetime> _mediaLifetime;
 	AdminLog::OwnedItem _item;
 
 };
@@ -259,6 +261,7 @@ OpenLinkPreviewWidget::OpenLinkPreviewWidget(
 	not_null<QWidget*> parent,
 	not_null<Window::SessionController*> controller,
 	not_null<WebPageData*> webpage,
+	std::shared_ptr<rpl::lifetime> mediaLifetime,
 	Fn<void()> close)
 : RpWidget(parent)
 , _controller(base::make_weak(controller))
@@ -270,7 +273,8 @@ OpenLinkPreviewWidget::OpenLinkPreviewWidget(
 	controller,
 	[=] { update(); }))
 , _history(controller->session().data().history(
-	controller->session().userPeerId())) {
+	controller->session().userPeerId()))
+, _mediaLifetime(std::move(mediaLifetime)) {
 	_style->apply(_theme.get());
 	setMouseTracking(true);
 
@@ -413,7 +417,8 @@ void OpenPollOptionLinkBox(
 		not_null<Ui::GenericBox*> box,
 		not_null<Window::SessionController*> controller,
 		QString url,
-		WebPageData *webpage) {
+		WebPageData *webpage,
+		std::shared_ptr<rpl::lifetime> mediaLifetime) {
 	box->setTitle(tr::lng_polls_option_open_link_title());
 	const auto content = box->verticalLayout();
 
@@ -462,6 +467,7 @@ void OpenPollOptionLinkBox(
 				content,
 				controller,
 				webpage,
+				std::move(mediaLifetime),
 				[=] { box->closeBox(); }),
 			st::pollOpenLinkPreviewOuterPadding);
 	}
@@ -592,6 +598,9 @@ struct PollThumbnailData {
 			: (media.webpage ? media.webpage->url : QString());
 		const auto webpage = media.webpage;
 		const auto session = &poll->session();
+		const auto item = session->data().message(messageContext.id);
+		const auto saved = item ? item->Get<HistoryMessageArchived>() : nullptr;
+		const auto mediaLifetime = saved ? saved->mediaLifetime : nullptr;
 		if (!url.isEmpty()) {
 			result.handler = std::make_shared<LambdaClickHandler>(
 				[=](ClickContext clickContext) {
@@ -607,7 +616,8 @@ struct PollThumbnailData {
 						OpenPollOptionLinkBox,
 						controller,
 						url,
-						webpage));
+						webpage,
+						mediaLifetime));
 				});
 		}
 	}
@@ -2513,7 +2523,9 @@ QSize Poll::countCurrentSize(int newWidth) {
 }
 
 void Poll::updateTexts() {
-	const auto current = _poll->owner().poll(_poll->id);
+	const auto current = _parent->data()->Has<HistoryMessageArchived>()
+		? _poll
+		: _poll->owner().poll(_poll->id);
 	if (_poll != current) {
 		_poll = current;
 		_pollVersion = 0;
