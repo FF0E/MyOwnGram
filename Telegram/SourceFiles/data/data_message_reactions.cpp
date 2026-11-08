@@ -1528,6 +1528,9 @@ void Reactions::send(not_null<HistoryItem*> item, bool addToRecent) {
 }
 
 void Reactions::poll(not_null<HistoryItem*> item, crl::time now) {
+	if (!item->isRegular()) {
+		return;
+	}
 	// Group them by one second.
 	const auto last = item->lastReactionsRefreshTime();
 	const auto grouped = ((last + 999) / 1000) * 1000;

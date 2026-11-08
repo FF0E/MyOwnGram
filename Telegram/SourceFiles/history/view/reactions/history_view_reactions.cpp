@@ -744,6 +744,9 @@ void InlineList::paintSingleBg(
 bool InlineList::getState(
 		QPoint point,
 		not_null<TextState*> outResult) const {
+	if (_data.flags & Data::Flag::ReadOnly) {
+		return false;
+	}
 	const auto dimension = countDimension(width());
 	const auto left = dimension.left;
 	if (!QRect(left, 0, dimension.width, height()).contains(point)) {
@@ -925,6 +928,14 @@ InlineListData InlineListDataFromMessage(not_null<Element*> view) {
 	}
 	auto result = InlineListData();
 	result.reactions = item->reactionsWithLocal();
+	result.flags = (view->hasOutLayout() ? Flag::OutLayout : Flag())
+		| (view->embedReactionsInBubble() ? Flag::InBubble : Flag())
+		| (item->reactionsAreTags() ? Flag::Tags : Flag())
+		| (item->isService() ? Flag::Centered : Flag());
+	if (!item->isRegular()) {
+		result.flags |= Flag::ReadOnly;
+		return result;
+	}
 
 	const auto shouldAddEmptyPaidButton = [&] {
 		if (view->context() == Context::ChatPreview) {
@@ -993,10 +1004,6 @@ InlineListData InlineListDataFromMessage(not_null<Element*> view) {
 			}
 		}
 	}
-	result.flags = (view->hasOutLayout() ? Flag::OutLayout : Flag())
-		| (view->embedReactionsInBubble() ? Flag::InBubble : Flag())
-		| (item->reactionsAreTags() ? Flag::Tags : Flag())
-		| (item->isService() ? Flag::Centered : Flag());
 	return result;
 }
 

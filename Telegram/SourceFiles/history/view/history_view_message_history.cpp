@@ -36,6 +36,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/rect.h"
 #include "ui/ui_utility.h"
 #include "ui/widgets/buttons.h"
+#include "ui/widgets/checkbox.h"
 #include "ui/widgets/elastic_scroll.h"
 #include "ui/widgets/fields/input_field.h"
 #include "ui/widgets/popup_menu.h"
@@ -632,7 +633,7 @@ void Widget::updateSubtitle() {
 		return;
 	}
 	const auto i = ranges::find_if(_rows, [](const Item &item) {
-		return !item->isService();
+		return item->Get<HistoryMessageArchived>()->part != 0;
 	});
 	_back->setSubtext(i == _rows.end()
 		? tr::lng_myowngram_message_history_message_title(tr::now)
@@ -867,7 +868,9 @@ void Widget::addEntry(const Entry &entry, std::vector<Item> &rows) {
 	auto updated = Serialize::MessageHistory::Read(history, entry.updated, false);
 	const auto media = previous ? previous->media() : nullptr;
 	const auto compact = !previous
-		|| (!previous->richPage()
+		|| (!previous->isService()
+			&& !previous->inlineReplyMarkup()
+			&& !previous->richPage()
 			&& (!media
 				|| dynamic_cast<Data::MediaPhoto*>(media)
 				|| dynamic_cast<Data::MediaFile*>(media)));
@@ -1083,21 +1086,41 @@ void ShowMessageHistory(
 
 void RemoveMessageHistory(
 		not_null<Window::SessionController*> controller,
-		FullMsgId message) {
-	controller->show(Ui::MakeConfirmBox({
-		.text = message.msg
-			? tr::lng_myowngram_message_history_remove_sure()
-			: tr::lng_myowngram_message_history_clear_sure(
-				lt_chat,
-				rpl::single(controller->session().data().peer(message.peer)->name())),
-		.confirmed = [=](Fn<void()> close) {
-			controller->session().messageHistory().clear(message.peer, message.msg);
-			close();
-		},
-		.confirmText = message.msg
-			? tr::lng_myowngram_message_history_remove()
-			: tr::lng_myowngram_message_history_clear(),
-		.confirmStyle = &st::attentionBoxButton,
+		FullMsgId message,
+		qint64 recordId) {
+	controller->show(Box([=](not_null<Ui::GenericBox*> box) {
+		const auto group = std::make_shared<Ui::RadiobuttonGroup>(0);
+		Ui::ConfirmBox(box, {
+			.text = recordId
+				? tr::lng_myowngram_message_history_remove_record_sure()
+				: message.msg
+				? tr::lng_myowngram_message_history_remove_sure()
+				: tr::lng_myowngram_message_history_clear_sure(
+					lt_chat,
+					rpl::single(controller->session().data().peer(message.peer)->name())),
+			.confirmed = [=](Fn<void()> close) {
+				const auto kind = group->current()
+					? std::make_optional(Kind(group->current() - 1))
+					: std::nullopt;
+				controller->session().messageHistory().clear(
+					message.peer, message.msg, kind, recordId);
+				close();
+			},
+			.confirmText = tr::lng_box_delete(),
+			.confirmStyle = &st::attentionBoxButton,
+		});
+		if (!recordId) {
+			const auto labels = std::array{
+				tr::lng_myowngram_message_history_filter_all(tr::now),
+				tr::lng_myowngram_message_history_filter_deleted(tr::now),
+				tr::lng_myowngram_message_history_filter_edited(tr::now),
+			};
+			for (auto i = 0; i != labels.size(); ++i) {
+				box->addRow(object_ptr<Ui::Radiobutton>(
+					box, group, i, labels[i], st::defaultBoxCheckbox),
+					st::boxRowPadding);
+			}
+		}
 	}));
 }
 

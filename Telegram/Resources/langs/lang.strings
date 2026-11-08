@@ -9334,7 +9334,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_message_history_settings" = "Message history settings";
 "lng_myowngram_message_history_saved_at" = "Saved: {date}";
 "lng_myowngram_message_history_sent_at" = "Originally sent: {date}";
-"lng_myowngram_message_history_save" = "Save message history";
+"lng_myowngram_message_history_save_edits" = "Save message edits";
+"lng_myowngram_message_history_save_deleted" = "Preserve deleted messages";
 "lng_myowngram_message_history_about" = "Save edits and deletions while messages are loaded. Changes you make in this app are not saved. These settings apply to this account. Turning saving off keeps existing history.";
 "lng_myowngram_message_history_auto_delete" = "Include messages with auto delete";
 "lng_myowngram_message_history_download" = "Download deleted attachments";
@@ -9362,10 +9363,12 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_message_history_unreadable" = "This saved version could not be read.";
 "lng_myowngram_message_history_error" = "Could not read message history.";
 "lng_myowngram_message_history_save_error" = "Could not update message history.";
-"lng_myowngram_message_history_clear" = "Clear all saved history";
-"lng_myowngram_message_history_clear_sure" = "Clear all saved message history for {chat}? This includes every conversation in this chat and also removes preserved deleted messages. Search and filters do not limit what is removed. This does not delete messages from Telegram.";
+"lng_myowngram_message_history_clear" = "Clear saved history";
+"lng_myowngram_message_history_clear_sure" = "Choose which saved changes to remove for {chat}. This includes every conversation in this chat, regardless of the current search or filter. Messages on Telegram are not deleted.";
 "lng_myowngram_message_history_remove" = "Delete saved versions";
-"lng_myowngram_message_history_remove_sure" = "Remove all saved versions of this message from history? This does not delete the message from Telegram.";
+"lng_myowngram_message_history_remove_sure" = "Choose which saved changes to remove for this message. The message on Telegram is not deleted.";
+"lng_myowngram_message_history_remove_record" = "Remove this recorded change";
+"lng_myowngram_message_history_remove_record_sure" = "Remove this recorded change from history? Other saved changes to this message are kept. Messages on Telegram are not deleted.";
 "lng_myowngram_new_chat_view_required" = "Required by MyOwnGram. This setting is always enabled.";
 "lng_myowngram_chats_profiles_title" = "Chats and profiles";
 "lng_myowngram_message_display" = "Message display";

@@ -820,6 +820,7 @@ public:
 		FullMsgId namedId) const;
 	[[nodiscard]] std::vector<not_null<PeerData*>> pollRecentVoters(
 		PollId id) const;
+	[[nodiscard]] Fn<void()> changingPoll(not_null<const PollData*> poll);
 	not_null<PollData*> processPoll(const MTPPoll &data);
 	not_null<PollData*> processPoll(const MTPDmessageMediaPoll &data);
 
@@ -867,6 +868,12 @@ public:
 	void unregisterGameView(
 		not_null<const GameData*> game,
 		not_null<ViewElement*> view);
+	void registerPollItem(
+		not_null<const PollData*> poll,
+		not_null<HistoryItem*> item);
+	void unregisterPollItem(
+		not_null<const PollData*> poll,
+		not_null<HistoryItem*> item);
 	void registerPollView(
 		not_null<const PollData*> poll,
 		not_null<ViewElement*> view);
@@ -1325,6 +1332,9 @@ private:
 	std::unordered_map<
 		not_null<const GameData*>,
 		base::flat_set<not_null<ViewElement*>>> _gameViews;
+	std::unordered_map<
+		not_null<const PollData*>,
+		base::flat_map<not_null<HistoryItem*>, int>> _pollItems;
 	std::unordered_map<
 		not_null<const PollData*>,
 		base::flat_set<not_null<ViewElement*>>> _pollViews;

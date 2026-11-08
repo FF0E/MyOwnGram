@@ -21,6 +21,7 @@ void ShowMessageHistory(
 	MsgId message = {});
 void RemoveMessageHistory(
 	not_null<Window::SessionController*> controller,
-	FullMsgId message);
+	FullMsgId message,
+	qint64 recordId = 0);
 
 } // namespace HistoryView

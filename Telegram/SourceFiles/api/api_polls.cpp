@@ -432,7 +432,8 @@ void Polls::addAnswer(
 		item->history()->peer->input(),
 		MTP_int(item->id),
 		answer
-	)).done([=](const MTPUpdates &result) {
+	)).done([=, ownChange = _session->messageHistory().localChange(itemId)](
+			const MTPUpdates &result) {
 		_pollAddAnswerRequestIds.erase(itemId);
 		_session->updates().applyUpdates(result);
 		if (done) {
@@ -459,7 +460,8 @@ void Polls::deleteAnswer(FullMsgId itemId, const QByteArray &option) {
 		item->history()->peer->input(),
 		MTP_int(item->id),
 		MTP_bytes(option)
-	)).done([=](const MTPUpdates &result) {
+	)).done([=, ownChange = _session->messageHistory().localChange(itemId)](
+			const MTPUpdates &result) {
 		_pollVotesRequestIds.erase(itemId);
 		_session->updates().applyUpdates(result);
 	}).fail([=] {

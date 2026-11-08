@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "apiwrap.h"
 #include "base/random.h"
 #include "data/business/data_shortcut_messages.h" // ShortcutIdToMTP
+#include "data/components/message_history.h"
 #include "data/data_changes.h"
 #include "data/data_histories.h"
 #include "data/data_todo_list.h"
@@ -168,7 +169,8 @@ void TodoLists::add(
 		item->history()->peer->input(),
 		MTP_int(item->id.bare),
 		TodoListItemsToMTP(&item->history()->session(), items)
-	)).done([=](const MTPUpdates &result) {
+	)).done([=, ownChange = session->messageHistory().localChange(item->fullId())](
+			const MTPUpdates &result) {
 		session->api().applyUpdates(result);
 		if (const auto onstack = done) {
 			onstack();
@@ -235,7 +237,8 @@ void TodoLists::send(FullMsgId itemId, Accumulated &entry) {
 		MTP_int(item->id),
 		MTP_vector_from_range(completed),
 		MTP_vector_from_range(incompleted)
-	)).done([=](const MTPUpdates &result) {
+	)).done([=, ownChange = _session->messageHistory().localChange(itemId)](
+			const MTPUpdates &result) {
 		_session->api().applyUpdates(result);
 		finishRequest(itemId);
 	}).fail([=](const MTP::Error &error) {

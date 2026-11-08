@@ -13,6 +13,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_document.h"
 #include "data/data_game.h"
 #include "data/data_media_types.h"
+#include "data/data_message_reaction_id.h"
 #include "data/data_photo.h"
 #include "data/data_poll.h"
 #include "data/data_session.h"
@@ -21,6 +22,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_web_page.h"
 #include "history/history.h"
 #include "history/history_item_components.h"
+#include "history/history_item_helpers.h"
 #include "iv/iv_data.h"
 #include "iv/iv_rich_message_serializer.h"
 #include "iv/iv_rich_page.h"
@@ -31,7 +33,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 namespace Serialize {
 namespace {
 
-constexpr auto kFormat = qint32(4);
+constexpr auto kFormat = qint32(5);
 
 enum class MediaKind : qint32 {
 	None,
@@ -48,6 +50,7 @@ enum class MediaKind : qint32 {
 	Story,
 	GiveawayStart,
 	GiveawayResults,
+	Call,
 };
 
 void WriteText(QDataStream &stream, const TextWithEntities &text) {
@@ -73,9 +76,9 @@ TextWithEntities ReadText(QDataStream &stream) {
 	return result;
 }
 
-void WritePeer(QDataStream &stream, PeerData *peer) {
+void WritePeer(QDataStream &stream, PeerData *peer, bool full = true) {
 	stream << quint64(peer ? SerializePeerId(peer->id) : 0);
-	if (peer) {
+	if (peer && full) {
 		auto writer = ByteArrayWriter();
 		Serialize::writePeer(writer, peer);
 		stream << std::move(writer).result();
@@ -151,11 +154,65 @@ ImageWithLocation ReadImage(QDataStream &stream, int appVersion) {
 	return { .location = *location, .bytesCount = size };
 }
 
+void WriteMarkup(QDataStream &stream, not_null<HistoryItem*> item) {
+	const auto markup = item->inlineReplyMarkup();
+	stream << qint32(markup ? markup->data.rows.size() : 0);
+	if (markup) {
+		for (const auto &row : markup->data.rows) {
+			stream << qint32(row.size());
+			for (const auto &button : row) {
+				stream << qint32(button.type) << button.text
+					<< quint64(button.visual.iconId) << qint32(button.visual.color)
+					<< button.data << button.forwardText << qint64(button.buttonId)
+					<< qint32(button.peerTypes.value());
+			}
+		}
+	}
+}
+
+HistoryMessageMarkupData ReadMarkup(QDataStream &stream) {
+	auto result = HistoryMessageMarkupData();
+	auto rows = qint32(0);
+	stream >> rows;
+	if (rows) {
+		result.flags = ReplyMarkupFlag::Inline;
+	}
+	using Button = HistoryMessageMarkupButton;
+	for (auto i = 0; i < rows && stream.status() == QDataStream::Ok; ++i) {
+		auto &row = result.rows.emplace_back();
+		auto count = qint32(0);
+		stream >> count;
+		for (auto j = 0; j < count && stream.status() == QDataStream::Ok; ++j) {
+			auto type = qint32(0);
+			auto text = QString();
+			auto icon = quint64(0);
+			auto color = qint32(0);
+			auto data = QByteArray();
+			auto forward = QString();
+			auto id = qint64(0);
+			auto peers = qint32(0);
+			stream >> type >> text >> icon >> color >> data >> forward >> id >> peers;
+			row.emplace_back(
+				Button::Type(type),
+				text,
+				Button::Visual{ icon, Button::Color(color) },
+				data,
+				forward,
+				id);
+			row.back().peerTypes = InlineBots::PeerTypes::from_raw(peers);
+		}
+	}
+	return result;
+}
+
 } // namespace
 
-void MessageHistory::WritePhoto(QDataStream &stream, PhotoData *photo) {
+void MessageHistory::WritePhoto(
+		QDataStream &stream,
+		PhotoData *photo,
+		Purpose purpose) {
 	stream << quint64(photo ? photo->id : 0);
-	if (!photo) {
+	if (!photo || purpose == Purpose::Content) {
 		return;
 	}
 	stream << qint32(photo->_dc) << quint64(photo->_access)
@@ -212,9 +269,10 @@ PhotoData *MessageHistory::ReadPhoto(
 
 void MessageHistory::WriteDocument(
 		QDataStream &stream,
-		DocumentData *document) {
+		DocumentData *document,
+		Purpose purpose) {
 	stream << quint64(document ? document->id : 0);
-	if (!document) {
+	if (!document || purpose == Purpose::Content) {
 		return;
 	}
 	stream << qint32(document->_dc) << quint64(document->_access)
@@ -275,13 +333,14 @@ DocumentData *MessageHistory::ReadDocument(
 void MessageHistory::WriteWebPage(
 		QDataStream &stream,
 		not_null<WebPageData*> page,
-		qint32 flags) {
+		qint32 flags,
+		Purpose purpose) {
 	stream << qint32(page->type) << page->url << page->displayUrl
 		<< page->siteName << page->title << page->author
 		<< qint32(page->duration) << flags;
 	WriteText(stream, page->description);
-	WritePhoto(stream, page->photo);
-	WriteDocument(stream, page->document);
+	WritePhoto(stream, page->photo, purpose);
+	WriteDocument(stream, page->document, purpose);
 }
 
 WebPageData *MessageHistory::ReadWebPage(
@@ -332,16 +391,17 @@ WebPageData *MessageHistory::ReadWebPage(
 
 void MessageHistory::WritePollMedia(
 		QDataStream &stream,
-		const PollMedia &media) {
-	WritePhoto(stream, media.photo);
-	WriteDocument(stream, media.document);
+		const PollMedia &media,
+		Purpose purpose) {
+	WritePhoto(stream, media.photo, purpose);
+	WriteDocument(stream, media.document, purpose);
 	stream << media.geo.has_value();
 	if (media.geo) {
 		WriteTL(stream, media.geo->toMTP());
 	}
 	stream << media.url << bool(media.webpage);
 	if (media.webpage) {
-		WriteWebPage(stream, media.webpage, 0);
+		WriteWebPage(stream, media.webpage, 0, purpose);
 	}
 }
 
@@ -374,7 +434,8 @@ PollMedia MessageHistory::ReadPollMedia(
 
 void MessageHistory::WriteRich(
 		QDataStream &stream,
-		not_null<HistoryItem*> item) {
+		not_null<HistoryItem*> item,
+		Purpose purpose) {
 	const auto page = item->fullRichPage() ? item->fullRichPage() : item->richPage();
 	const auto session = &item->history()->session();
 	const auto serialized = page
@@ -387,6 +448,9 @@ void MessageHistory::WriteRich(
 	}
 	stream << page->part;
 	WriteTL(stream, *serialized.value);
+	if (purpose == Purpose::Content) {
+		return;
+	}
 	const auto &data = serialized.value->c_inputRichMessage();
 	const auto photos = data.vphotos();
 	stream << qint32(photos ? photos->v.size() : 0);
@@ -444,20 +508,24 @@ std::shared_ptr<const Iv::RichPage> MessageHistory::ReadRich(
 		: nullptr;
 }
 
-void MessageHistory::WriteMedia(QDataStream &stream, Data::Media *media) {
+void MessageHistory::WriteMedia(
+		QDataStream &stream,
+		Data::Media *media,
+		Purpose purpose) {
+	const auto full = (purpose == Purpose::Snapshot);
 	if (!media) {
 		stream << qint32(MediaKind::None);
 	} else if (const auto page = media->webpage()) {
 		stream << qint32(MediaKind::WebPage);
-		WriteWebPage(stream, page, qint32(media->webpageFlags().value()));
+		WriteWebPage(stream, page, qint32(media->webpageFlags().value()), purpose);
 	} else if (const auto photo = media->photo()) {
 		stream << qint32(MediaKind::Photo) << media->hasSpoiler();
-		WritePhoto(stream, photo);
+		WritePhoto(stream, photo, purpose);
 	} else if (const auto document = media->document()) {
 		stream << qint32(MediaKind::Document) << media->hasSpoiler()
 			<< qint32(media->videoTimestamp());
-		WriteDocument(stream, document);
-		WritePhoto(stream, media->videoCover());
+		WriteDocument(stream, document, purpose);
+		WritePhoto(stream, media->videoCover(), purpose);
 	} else if (const auto contact = media->sharedContact()) {
 		stream << qint32(MediaKind::Contact) << quint64(contact->userId.bare)
 			<< contact->firstName << contact->lastName << contact->phoneNumber
@@ -465,21 +533,58 @@ void MessageHistory::WriteMedia(QDataStream &stream, Data::Media *media) {
 		for (const auto &[type, value] : contact->vcardItems) {
 			stream << qint32(type) << value;
 		}
+	} else if (const auto call = media->call()) {
+		stream << qint32(MediaKind::Call) << quint64(call->conferenceId)
+			<< qint32(call->duration) << qint32(call->state) << call->video
+			<< qint32(call->otherParticipants.size());
+		for (const auto peer : call->otherParticipants) {
+			WritePeer(stream, peer, full);
+		}
 	} else if (const auto poll = media->poll()) {
-		stream << qint32(MediaKind::Poll) << qint32(poll->flags().value())
-			<< qint32(poll->totalVoters);
+		const auto flags = full
+			? poll->flags()
+			: poll->flags() & ~(PollData::Flag::Creator | PollData::Flag::CanViewStats);
+		stream << qint32(MediaKind::Poll) << qint32(flags.value());
+		if (full) {
+			stream << qint32(poll->totalVoters);
+		}
 		WriteText(stream, poll->question);
-		WriteText(stream, poll->solution);
+		if (full) {
+			WriteText(stream, poll->solution);
+		}
 		stream << qint32(poll->answers.size());
 		for (const auto &answer : poll->answers) {
 			WriteText(stream, answer.text);
-			stream << answer.option << qint32(answer.votes)
-				<< answer.chosen << answer.correct;
+			stream << answer.option;
+			if (full) {
+				stream << qint32(answer.votes) << answer.chosen << answer.correct;
+			}
 		}
-		WritePollMedia(stream, poll->attachedMedia);
-		WritePollMedia(stream, poll->solutionMedia);
+		WritePollMedia(stream, poll->attachedMedia, purpose);
+		if (full) {
+			WritePollMedia(stream, poll->solutionMedia, purpose);
+		}
 		for (const auto &answer : poll->answers) {
-			WritePollMedia(stream, answer.media);
+			WritePollMedia(stream, answer.media, purpose);
+		}
+		stream << qint32(poll->closePeriod) << qint32(poll->closeDate)
+			<< qint32(poll->countries.size());
+		for (const auto &country : poll->countries) {
+			stream << country;
+		}
+		if (full) {
+			const auto voters = [&](const auto &list) {
+				stream << qint32(list.size());
+				for (const auto peer : list) {
+					WritePeer(stream, peer);
+				}
+			};
+			voters(poll->recentVoters);
+			for (const auto &answer : poll->answers) {
+				WritePeer(stream, answer.addedBy);
+				stream << qint32(answer.addedDate);
+				voters(answer.recentVoters);
+			}
 		}
 	} else if (const auto todo = media->todolist()) {
 		stream << qint32(MediaKind::Todo);
@@ -487,9 +592,10 @@ void MessageHistory::WriteMedia(QDataStream &stream, Data::Media *media) {
 		stream << qint32(todo->items.size());
 		for (const auto &task : todo->items) {
 			stream << qint32(task.id) << qint32(task.completionDate);
-			WritePeer(stream, task.completedBy);
+			WritePeer(stream, task.completedBy, full);
 			WriteText(stream, task.text);
 		}
+		stream << qint32(todo->flags().value());
 	} else if (media->location()) {
 		const auto location = static_cast<Data::MediaLocation*>(media);
 		stream << qint32(MediaKind::Location)
@@ -502,21 +608,21 @@ void MessageHistory::WriteMedia(QDataStream &stream, Data::Media *media) {
 	} else if (const auto game = media->game()) {
 		stream << qint32(MediaKind::Game) << quint64(game->accessHash)
 			<< game->shortName << game->title << game->description;
-		WritePhoto(stream, game->photo);
-		WriteDocument(stream, game->document);
+		WritePhoto(stream, game->photo, purpose);
+		WriteDocument(stream, game->document, purpose);
 	} else if (const auto invoice = media->invoice()) {
 		stream << qint32(MediaKind::Invoice) << qint64(invoice->receiptMsgId.bare)
 			<< quint64(invoice->amount) << invoice->currency << invoice->title
 			<< invoice->isPaidMedia << invoice->isTest;
 		WriteText(stream, invoice->description);
-		WritePhoto(stream, invoice->photo);
+		WritePhoto(stream, invoice->photo, purpose);
 		stream << qint32(invoice->extendedMedia.size());
 		for (const auto &part : invoice->extendedMedia) {
-			WriteMedia(stream, part.get());
+			WriteMedia(stream, part.get(), purpose);
 		}
 	} else if (const auto story = media->storyId(); story.story) {
 		stream << qint32(MediaKind::Story);
-		WritePeer(stream, media->parent()->history()->owner().peer(story.peer));
+		WritePeer(stream, media->parent()->history()->owner().peer(story.peer), full);
 		stream << qint32(story.story) << media->storyMention();
 	} else if (const auto giveaway = media->giveawayStart()) {
 		stream << qint32(MediaKind::GiveawayStart) << qint32(giveaway->untilDate)
@@ -528,18 +634,18 @@ void MessageHistory::WriteMedia(QDataStream &stream, Data::Media *media) {
 		}
 		stream << qint32(giveaway->channels.size());
 		for (const auto channel : giveaway->channels) {
-			WritePeer(stream, channel);
+			WritePeer(stream, channel, full);
 		}
 	} else if (const auto giveaway = media->giveawayResults()) {
 		stream << qint32(MediaKind::GiveawayResults);
-		WritePeer(stream, giveaway->channel);
+		WritePeer(stream, giveaway->channel, full);
 		stream << qint32(giveaway->untilDate) << qint64(giveaway->launchId.bare)
 			<< qint32(giveaway->additionalPeersCount) << qint32(giveaway->winnersCount)
 			<< qint32(giveaway->unclaimedCount) << qint32(giveaway->months)
 			<< quint64(giveaway->credits) << giveaway->refunded << giveaway->all
 			<< giveaway->additionalPrize << qint32(giveaway->winners.size());
 		for (const auto winner : giveaway->winners) {
-			WritePeer(stream, winner);
+			WritePeer(stream, winner, full);
 		}
 	} else {
 		stream << qint32(MediaKind::None);
@@ -561,10 +667,13 @@ std::unique_ptr<Data::Media> MessageHistory::ReadMedia(
 		auto spoiler = false;
 		stream >> spoiler;
 		const auto photo = ReadPhoto(stream, session, appVersion);
-		return photo ? std::make_unique<Data::MediaPhoto>(
-			item,
-			photo,
-			Data::MediaPhoto::Args{ .spoiler = spoiler }) : nullptr;
+		if (!photo) {
+			return nullptr;
+		}
+		return item->isService()
+			? std::make_unique<Data::MediaPhoto>(item, item->history()->peer, photo)
+			: std::make_unique<Data::MediaPhoto>(
+				item, photo, Data::MediaPhoto::Args{ .spoiler = spoiler });
 	} break;
 	case MediaKind::Document: {
 		auto spoiler = false;
@@ -606,6 +715,20 @@ std::unique_ptr<Data::Media> MessageHistory::ReadMedia(
 			page,
 			MediaWebPageFlags::from_raw(flags));
 	} break;
+	case MediaKind::Call: {
+		auto call = Data::Call();
+		auto conference = quint64(0);
+		auto state = qint32(0);
+		auto count = qint32(0);
+		stream >> conference >> call.duration >> state >> call.video >> count;
+		call.conferenceId = conference;
+		call.state = Data::CallState(state);
+		for (auto i = 0; i < count && stream.status() == QDataStream::Ok; ++i) {
+			call.otherParticipants.push_back(session->data().peer(
+				ReadPeer(stream, session, appVersion)));
+		}
+		return std::make_unique<Data::MediaCall>(item, call);
+	} break;
 	case MediaKind::Poll: {
 		auto flags = qint32(0);
 		auto votes = qint32(0);
@@ -632,6 +755,31 @@ std::unique_ptr<Data::Media> MessageHistory::ReadMedia(
 				answer.media = ReadPollMedia(stream, item, appVersion);
 			}
 		}
+		if (format >= 5) {
+			stream >> poll->closePeriod >> poll->closeDate >> count;
+			for (auto i = 0; i < count && stream.status() == QDataStream::Ok; ++i) {
+				auto country = QString();
+				stream >> country;
+				poll->countries.push_back(std::move(country));
+			}
+			const auto voters = [&](auto &list) {
+				auto size = qint32(0);
+				stream >> size;
+				for (auto i = 0; i < size && stream.status() == QDataStream::Ok; ++i) {
+					const auto peer = ReadPeer(stream, session, appVersion);
+					if (peer) {
+						list.push_back(session->data().peer(peer));
+					}
+				}
+			};
+			voters(poll->recentVoters);
+			for (auto &answer : poll->answers) {
+				const auto by = ReadPeer(stream, session, appVersion);
+				answer.addedBy = by ? session->data().peer(by).get() : nullptr;
+				stream >> answer.addedDate;
+				voters(answer.recentVoters);
+			}
+		}
 		++poll->version;
 		return std::make_unique<Data::MediaPoll>(item, poll);
 	} break;
@@ -650,6 +798,12 @@ std::unique_ptr<Data::Media> MessageHistory::ReadMedia(
 			task.text = ReadText(stream);
 			todo->items.push_back(std::move(task));
 		}
+		if (format >= 5) {
+			auto flags = qint32(0);
+			stream >> flags;
+			todo->setFlags(TodoListData::Flags::from_raw(flags));
+		}
+		++todo->version;
 		return std::make_unique<Data::MediaTodoList>(item, todo);
 	} break;
 	case MediaKind::Location: {
@@ -761,12 +915,56 @@ std::unique_ptr<Data::Media> MessageHistory::ReadMedia(
 	return nullptr;
 }
 
+TextWithEntities MessageHistory::Text(not_null<HistoryItem*> item) {
+	auto result = item->_text;
+	if (item->isService()) {
+		if (const auto done = item->Get<HistoryServiceTodoCompletions>()
+			; done && !done->completed.empty() && !done->incompleted.empty()) {
+			result = item->composeTodoIncompleted(done).text
+				.append(u"\n"_q).append(result);
+		}
+		result.entities.erase(ranges::remove_if(
+			result.entities,
+			[](const EntityInText &entity) {
+				return entity.type() == EntityType::CustomUrl
+					&& entity.data().startsWith(u"internal:"_q);
+			}), result.entities.end());
+	}
+	return result;
+}
+
+QString MessageHistory::SearchText(not_null<HistoryItem*> item) {
+	auto result = Text(item).text;
+	if (const auto media = item->media()) {
+		result += '\n' + media->clipboardText().rich.text;
+	}
+	if (const auto markup = item->inlineReplyMarkup()) {
+		for (const auto &row : markup->data.rows) {
+			for (const auto &button : row) {
+				result += '\n' + button.text;
+			}
+		}
+	}
+	return result;
+}
+
+QByteArray MessageHistory::Content(not_null<HistoryItem*> item) {
+	auto writer = ByteArrayWriter();
+	auto &stream = writer.underlying();
+	stream << item->isService() << item->invertMedia() << item->forbidsForward();
+	WriteText(stream, Text(item));
+	WriteMedia(stream, item->media(), Purpose::Content);
+	WriteRich(stream, item, Purpose::Content);
+	WriteMarkup(stream, item);
+	return std::move(writer).result();
+}
+
 QByteArray MessageHistory::Write(not_null<HistoryItem*> item) {
 	auto writer = ByteArrayWriter();
 	auto &stream = writer.underlying();
 	stream << kFormat << qint32(AppVersion) << qint64(item->id.bare)
 		<< qint32(item->date()) << item->out() << item->isPost()
-		<< item->invertMedia();
+		<< item->invertMedia() << item->isService();
 	WritePeer(stream, item->from());
 	WritePeer(stream, item->viaBot());
 	const auto signedMessage = item->Get<HistoryMessageSigned>();
@@ -799,10 +997,20 @@ QByteArray MessageHistory::Write(not_null<HistoryItem*> item) {
 			<< (forwarded->savedFromHiddenSenderInfo
 				? forwarded->savedFromHiddenSenderInfo->name : QString());
 	}
-	WriteText(stream, item->originalText());
+	WriteText(stream, Text(item));
 	WriteMedia(stream, item->media());
 	WriteRich(stream, item);
 	stream << item->forbidsForward();
+	WriteMarkup(stream, item);
+	const auto views = item->Get<HistoryMessageViews>();
+	stream << qint32(views ? views->views.count : -1)
+		<< qint32(views ? views->forwardsCount : 0)
+		<< qint32(views ? views->replies.count : -1)
+		<< item->reactionsAreTags() << qint32(item->reactions().size());
+	for (const auto &reaction : item->reactions()) {
+		WriteTL(stream, Data::ReactionToMTP(reaction.id));
+		stream << qint32(reaction.count) << reaction.my;
+	}
 	return std::move(writer).result();
 }
 
@@ -821,8 +1029,12 @@ MessageHistory::Item MessageHistory::Read(
 	auto invert = false;
 	stream >> format >> appVersion >> original >> date >> outgoing >> post
 		>> invert;
-	if (format != 3 && format != kFormat) {
+	if (format < 3 || format > kFormat) {
 		return nullptr;
+	}
+	auto service = false;
+	if (format >= 5) {
+		stream >> service;
 	}
 	const auto session = &history->session();
 	const auto from = ReadPeer(stream, session, appVersion);
@@ -853,7 +1065,7 @@ MessageHistory::Item MessageHistory::Read(
 		| (invert ? MessageFlag::InvertMedia : MessageFlag())
 		| (hasReply ? MessageFlag::HasReplyInfo : MessageFlag())
 		| (!author.isEmpty() ? MessageFlag::HasPostAuthor : MessageFlag());
-	auto owned = Item(history->makeMessage({
+	auto fields = HistoryItemCommonFields{
 		.id = history->nextNonHistoryEntryId(),
 		.flags = flags,
 		.from = from,
@@ -861,7 +1073,11 @@ MessageHistory::Item MessageHistory::Read(
 		.date = date,
 		.viaBotId = peerToUser(via),
 		.postAuthor = author,
-	}, TextWithEntities(), MTP_messageMediaEmpty()).get());
+	};
+	auto owned = Item(service
+		? history->makeMessage(std::move(fields), PreparedServiceText()).get()
+		: history->makeMessage(
+			std::move(fields), TextWithEntities(), MTP_messageMediaEmpty()).get());
 	const auto item = owned.get();
 	if (const auto reply = item->Get<HistoryMessageReply>()) {
 		reply->updateFields(item, MsgId(message), MsgId(top), topicPost);
@@ -910,18 +1126,66 @@ MessageHistory::Item MessageHistory::Read(
 	if (!stream.atEnd()) {
 		stream >> noForwards;
 	}
+	auto markup = HistoryMessageMarkupData();
+	if (format >= 5) {
+		markup = ReadMarkup(stream);
+		auto views = qint32(0);
+		auto forwards = qint32(0);
+		auto replies = qint32(0);
+		auto tags = false;
+		auto count = qint32(0);
+		stream >> views >> forwards >> replies >> tags >> count;
+		if (views >= 0 || replies >= 0 || forwards > 0) {
+			item->AddComponents(HistoryMessageViews::Bit());
+			const auto data = item->Get<HistoryMessageViews>();
+			data->views.count = views;
+			data->forwardsCount = forwards;
+			data->replies.count = replies;
+		}
+		auto reactions = QVector<MTPReactionCount>();
+		for (auto i = 0; i < count && stream.status() == QDataStream::Ok; ++i) {
+			const auto reaction = ReadTL<MTPReaction>(stream);
+			auto total = qint32(0);
+			auto mine = false;
+			stream >> total >> mine;
+			reactions.push_back(MTP_reactionCount(
+				MTP_flags(mine
+					? MTPDreactionCount::Flag::f_chosen_order
+					: MTPDreactionCount::Flag()),
+				MTP_int(0),
+				reaction,
+				MTP_int(total)));
+		}
+		if (stream.status() == QDataStream::Ok) {
+			const auto data = MTPMessageReactions(MTP_messageReactions(
+				MTP_flags(tags
+					? MTPDmessageReactions::Flag::f_reactions_as_tags
+					: MTPDmessageReactions::Flag()),
+				MTP_vector<MTPReactionCount>(std::move(reactions)),
+				MTP_vector<MTPMessagePeerReaction>(),
+				MTP_vector<MTPMessageReactor>()));
+			item->setReactions(&data);
+		}
+	}
 	if (stream.status() != QDataStream::Ok) {
 		return nullptr;
 	}
 	if (noForwards) {
 		item->_flags |= MessageFlag::NoForwards;
 	}
-	item->applyContent({
-		.text = std::move(text),
-		.media = std::move(media),
-		.richPage = std::move(rich),
-		.invertMedia = invert,
-	});
+	if (service) {
+		item->setServiceText({ .text = std::move(text) });
+		item->_media = std::move(media);
+		item->setReplyMarkup(std::move(markup));
+	} else {
+		item->applyContent({
+			.text = std::move(text),
+			.media = std::move(media),
+			.markup = std::move(markup),
+			.richPage = std::move(rich),
+			.invertMedia = invert,
+		});
+	}
 	return owned;
 }
 

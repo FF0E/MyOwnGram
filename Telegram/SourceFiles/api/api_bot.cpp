@@ -317,7 +317,7 @@ void ActivateBotButton(ClickHandlerContext context, BotButtonLookup lookup) {
 	}
 	const auto controller = not_null{ strong };
 	const auto item = controller->session().data().message(context.itemId);
-	if (!item) {
+	if (!item || item->Has<HistoryMessageArchived>()) {
 		return;
 	}
 	const auto button = lookup();

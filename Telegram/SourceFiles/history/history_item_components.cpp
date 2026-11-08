@@ -1155,6 +1155,9 @@ bool ReplyKeyboard::hasFastButtonMode() const {
 
 ClickHandlerPtr ReplyKeyboard::getLink(QPoint point) const {
 	Assert(_width > 0);
+	if (_item->Has<HistoryMessageArchived>()) {
+		return nullptr;
+	}
 
 	for (const auto &row : _rows) {
 		for (const auto &button : row) {
@@ -1180,6 +1183,9 @@ ClickHandlerPtr ReplyKeyboard::getLink(QPoint point) const {
 }
 
 ClickHandlerPtr ReplyKeyboard::getLinkByIndex(int index) const {
+	if (_item->Has<HistoryMessageArchived>()) {
+		return nullptr;
+	}
 	auto number = 1;
 	for (const auto &row : _rows) {
 		for (const auto &button : row) {

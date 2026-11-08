@@ -1536,17 +1536,21 @@ void History::applyServiceChanges(
 				: owner().message(peer, done->msgId);
 			if (const auto media = list ? list->media() : nullptr) {
 				if (const auto todolist = media->todolist()) {
+					const auto capture = gsl::finally(
+						session().messageHistory().changingItem(list->fullId()));
 					todolist->apply(item, data);
 				}
 			}
 		}
 	}, [&](const MTPDmessageActionTodoAppendTasks &data) {
-		if (const auto done = item->Get<HistoryServiceTodoCompletions>()) {
+		if (const auto done = item->Get<HistoryServiceTodoAppendTasks>()) {
 			const auto list = done->msg
 				? done->msg
 				: owner().message(peer, done->msgId);
 			if (const auto media = list ? list->media() : nullptr) {
 				if (const auto todolist = media->todolist()) {
+					const auto capture = gsl::finally(
+						session().messageHistory().changingItem(list->fullId()));
 					todolist->apply(data);
 				}
 			}
@@ -1558,6 +1562,7 @@ void History::applyServiceChanges(
 				: owner().message(peer, append->msgId);
 			if (const auto media = list ? list->media() : nullptr) {
 				if (const auto poll = media->poll()) {
+					const auto capture = gsl::finally(owner().changingPoll(poll));
 					data.vanswer().match([&](const MTPDpollAnswer &answer) {
 						auto parsed = PollAnswer();
 						parsed.option = answer.voption().v;
@@ -1580,6 +1585,7 @@ void History::applyServiceChanges(
 				: owner().message(peer, del->msgId);
 			if (const auto media = list ? list->media() : nullptr) {
 				if (const auto poll = media->poll()) {
+					const auto capture = gsl::finally(owner().changingPoll(poll));
 					const auto option = del->answer.option;
 					auto &answers = poll->answers;
 					const auto size = answers.size();

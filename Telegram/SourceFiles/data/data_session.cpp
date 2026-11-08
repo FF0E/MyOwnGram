@@ -3089,7 +3089,8 @@ void Session::updateEditedMessage(const MTPMessage &data) {
 		Reactions::CheckUnknownForUnread(this, data);
 		return;
 	}
-	auto previous = session().messageHistory().beforeEdit(existing);
+	const auto capture = gsl::finally(
+		session().messageHistory().changingItem(existing->fullId()));
 	if (existing->isLocalUpdateMedia() && data.type() == mtpc_message) {
 		updateExistingMessage(data.c_message());
 	}
@@ -3099,7 +3100,6 @@ void Session::updateEditedMessage(const MTPMessage &data) {
 	}, [&](const auto &data) {
 		existing->applyEdition(HistoryMessageEdition(_session, data));
 	});
-	session().messageHistory().afterEdit(std::move(previous), existing);
 }
 
 void Session::processMessages(
@@ -4924,6 +4924,7 @@ not_null<PollData*> Session::processPoll(const MTPPoll &data) {
 	return data.match([&](const MTPDpoll &data) {
 		const auto id = data.vid().v;
 		const auto result = poll(id);
+		const auto capture = gsl::finally(changingPoll(result));
 		const auto changed = result->applyChanges(data);
 		if (changed) {
 			notifyPollUpdateDelayed(result);
@@ -4937,6 +4938,7 @@ not_null<PollData*> Session::processPoll(const MTPPoll &data) {
 }
 
 not_null<PollData*> Session::processPoll(const MTPDmessageMediaPoll &data) {
+	const auto capture = gsl::finally(changingPoll(poll(data.vpoll().data().vid().v)));
 	const auto result = processPoll(data.vpoll());
 	auto media = PollMedia();
 	if (const auto attached = data.vattached_media()) {
@@ -4988,6 +4990,7 @@ not_null<TodoListData*> Session::todoList(TodoListId id) {
 not_null<TodoListData*> Session::processTodoList(
 		TodoListId id,
 		const MTPTodoList &todolist) {
+	const auto capture = gsl::finally(session().messageHistory().changingItem(id));
 	const auto &data = todolist.data();
 	const auto result = todoList(id);
 	const auto changed = result->applyChanges(data);
@@ -5000,6 +5003,7 @@ not_null<TodoListData*> Session::processTodoList(
 not_null<TodoListData*> Session::processTodoList(
 		TodoListId id,
 		const MTPDmessageMediaToDo &data) {
+	const auto capture = gsl::finally(session().messageHistory().changingItem(id));
 	const auto result = processTodoList(id, data.vtodo());
 	const auto changed = result->applyCompletions(data.vcompletions());
 	if (changed) {
@@ -5018,11 +5022,19 @@ not_null<TodoListData*> Session::duplicateTodoList(
 	return result;
 }
 
+Fn<void()> Session::changingPoll(not_null<const PollData*> poll) {
+	const auto i = _pollItems.find(poll);
+	return (i != _pollItems.end())
+		? session().messageHistory().changingItems(i->second)
+		: Fn<void()>([] {});
+}
+
 void Session::checkPollsClosings() {
 	const auto now = base::unixtime::now();
 	auto closest = 0;
 	for (auto i = _pollsClosings.begin(); i != _pollsClosings.end();) {
 		if (i->first <= now) {
+			const auto capture = gsl::finally(changingPoll(i->second));
 			if (i->second->closeByTimer()) {
 				notifyPollUpdateDelayed(i->second);
 			}
@@ -5044,9 +5056,12 @@ void Session::checkPollsClosings() {
 }
 
 void Session::applyUpdate(const MTPDupdateMessagePoll &update) {
+	const auto i = _polls.find(update.vpoll_id().v);
+	const auto capture = gsl::finally((update.vpoll() && i != end(_polls))
+		? changingPoll(i->second.get())
+		: Fn<void()>([] {}));
 	const auto updated = [&] {
 		const auto poll = update.vpoll();
-		const auto i = _polls.find(update.vpoll_id().v);
 		return (i == end(_polls))
 			? nullptr
 			: poll
@@ -5277,6 +5292,28 @@ void Session::unregisterGameView(
 		auto &items = i->second;
 		if (items.remove(view) && items.empty()) {
 			_gameViews.erase(i);
+		}
+	}
+}
+
+void Session::registerPollItem(
+		not_null<const PollData*> poll,
+		not_null<HistoryItem*> item) {
+	++_pollItems[poll][item];
+}
+
+void Session::unregisterPollItem(
+		not_null<const PollData*> poll,
+		not_null<HistoryItem*> item) {
+	const auto i = _pollItems.find(poll);
+	if (i != _pollItems.end()) {
+		auto &items = i->second;
+		const auto j = items.find(item);
+		if (j != items.end() && !--j->second) {
+			items.erase(j);
+			if (items.empty()) {
+				_pollItems.erase(i);
+			}
 		}
 	}
 }

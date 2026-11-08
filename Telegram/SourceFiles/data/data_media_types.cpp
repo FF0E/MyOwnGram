@@ -1817,6 +1817,9 @@ std::unique_ptr<HistoryView::Media> MediaLocation::createView(
 MediaCall::MediaCall(not_null<HistoryItem*> parent, const Call &call)
 : Media(parent)
 , _call(call) {
+	if (parent->Has<HistoryMessageArchived>()) {
+		return;
+	}
 	const auto peer = parent->history()->peer;
 	peer->owner().registerCallItem(parent);
 	if (const auto user = _call.conferenceId ? peer->asUser() : nullptr) {
@@ -1830,6 +1833,9 @@ MediaCall::MediaCall(not_null<HistoryItem*> parent, const Call &call)
 
 MediaCall::~MediaCall() {
 	const auto parent = this->parent();
+	if (parent->Has<HistoryMessageArchived>()) {
+		return;
+	}
 	const auto peer = parent->history()->peer;
 	peer->owner().unregisterCallItem(parent);
 	if (const auto user = _call.conferenceId ? peer->asUser() : nullptr) {
@@ -2405,9 +2411,11 @@ MediaPoll::MediaPoll(
 	not_null<PollData*> poll)
 : Media(parent)
 , _poll(poll) {
+	parent->history()->owner().registerPollItem(_poll, parent);
 }
 
 MediaPoll::~MediaPoll() {
+	parent()->history()->owner().unregisterPollItem(_poll, parent());
 }
 
 std::unique_ptr<Media> MediaPoll::clone(not_null<HistoryItem*> parent) {

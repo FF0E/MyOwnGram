@@ -39,6 +39,8 @@ constexpr auto kFlushDelay = crl::time(250);
 constexpr auto kRetryDelay = crl::time(30 * 1000);
 constexpr auto kExpireInterval = crl::time(60 * 60 * 1000);
 constexpr auto kEnabled = "myowngram-message-history-enabled";
+constexpr auto kSaveEdits = "myowngram-message-history-save-edits";
+constexpr auto kSaveDeleted = "myowngram-message-history-save-deleted";
 constexpr auto kAutoDelete = "myowngram-message-history-auto-delete";
 constexpr auto kRetention = "myowngram-message-history-retention";
 constexpr auto kDownload = "myowngram-message-history-download";
@@ -133,7 +135,10 @@ MessagesSlice MergeDeletedMessages(
 
 MessageHistory::MessageHistory(not_null<Main::Session*> session)
 : _session(session)
-, _enabled(session->local().readPref<bool>(kEnabled))
+, _saveEdits(session->local().readPref<bool>(
+	kSaveEdits, session->local().readPref<bool>(kEnabled)))
+, _saveDeleted(session->local().readPref<bool>(
+	kSaveDeleted, session->local().readPref<bool>(kEnabled)))
 , _includeAutoDelete(session->local().readPref<bool>(kAutoDelete))
 , _retention(session->local().readPref<QByteArray>(kRetention).toInt())
 , _download(Download(session->local().readPref<QByteArray>(
@@ -166,7 +171,15 @@ MessageHistory::~MessageHistory() {
 }
 
 bool MessageHistory::enabled() const {
-	return _enabled.current();
+	return saveEdits() || saveDeleted();
+}
+
+bool MessageHistory::saveEdits() const {
+	return _saveEdits.current();
+}
+
+bool MessageHistory::saveDeleted() const {
+	return _saveDeleted.current();
 }
 
 bool MessageHistory::available() const {
@@ -186,7 +199,18 @@ MessageHistory::Download MessageHistory::download() const {
 }
 
 rpl::producer<bool> MessageHistory::enabledValue() const {
-	return _enabled.value();
+	return rpl::combine(
+		saveEditsValue(),
+		saveDeletedValue(),
+		[](bool edits, bool deleted) { return edits || deleted; });
+}
+
+rpl::producer<bool> MessageHistory::saveEditsValue() const {
+	return _saveEdits.value();
+}
+
+rpl::producer<bool> MessageHistory::saveDeletedValue() const {
+	return _saveDeleted.value();
 }
 
 rpl::producer<bool> MessageHistory::includeAutoDeleteValue() const {
@@ -201,9 +225,14 @@ rpl::producer<MessageHistory::Download> MessageHistory::downloadValue() const {
 	return _download.value();
 }
 
-void MessageHistory::setEnabled(bool enabled) {
-	_session->local().writePref<bool>(kEnabled, enabled);
-	_enabled = enabled;
+void MessageHistory::setSaveEdits(bool enabled) {
+	_session->local().writePref<bool>(kSaveEdits, enabled);
+	_saveEdits = enabled;
+}
+
+void MessageHistory::setSaveDeleted(bool enabled) {
+	_session->local().writePref<bool>(kSaveDeleted, enabled);
+	_saveDeleted = enabled;
 }
 
 void MessageHistory::setIncludeAutoDelete(bool include) {
@@ -241,7 +270,6 @@ MessageHistory::Worker &MessageHistory::worker() {
 bool MessageHistory::captures(not_null<HistoryItem*> item) const {
 	return enabled()
 		&& item->isRegular()
-		&& !item->isService()
 		&& (includeAutoDelete() || !item->ttlDestroyAt());
 }
 
@@ -257,36 +285,76 @@ Storage::MessageHistoryEntry MessageHistory::snapshot(
 		.savedAt = QDateTime::currentSecsSinceEpoch(),
 		.kind = kind,
 		.previous = Serialize::MessageHistory::Write(item),
-		.text = item->clipboardText().expanded,
+		.text = Serialize::MessageHistory::SearchText(item),
 	};
 }
 
-auto MessageHistory::beforeEdit(not_null<HistoryItem*> item)
--> std::optional<Storage::MessageHistoryEntry> {
-	if (!captures(item)
+std::optional<MessageHistory::Edit> MessageHistory::beforeEdit(
+		not_null<HistoryItem*> item) {
+	if (!saveEdits()
+		|| !captures(item)
 		|| _localChanges.contains(item->fullId())
+		|| _editing.contains(item->fullId())
 		|| item->isLocalUpdateMedia()) {
 		return std::nullopt;
 	}
-	return snapshot(item, Storage::MessageHistoryKind::Edited);
+	_editing.emplace(item->fullId());
+	return Edit{
+		.entry = snapshot(item, Storage::MessageHistoryKind::Edited),
+		.content = Serialize::MessageHistory::Content(item),
+	};
 }
 
 void MessageHistory::afterEdit(
-		std::optional<Storage::MessageHistoryEntry> previous,
+		std::optional<Edit> previous,
 		not_null<HistoryItem*> item) {
 	if (!previous) {
 		return;
 	}
-	previous->updated = Serialize::MessageHistory::Write(item);
-	if (previous->previous == previous->updated) {
+	_editing.remove(item->fullId());
+	if (previous->content == Serialize::MessageHistory::Content(item)) {
 		return;
 	}
-	previous->text += '\n' + item->clipboardText().expanded;
-	add(std::move(*previous));
+	auto &entry = previous->entry;
+	entry.updated = Serialize::MessageHistory::Write(item);
+	entry.text += '\n' + Serialize::MessageHistory::SearchText(item);
+	add(std::move(entry));
+}
+
+Fn<void()> MessageHistory::changingItem(FullMsgId id) {
+	const auto item = _session->data().message(id);
+	if (!item) {
+		return [] {};
+	}
+	return [=, previous = beforeEdit(item)]() mutable {
+		afterEdit(std::move(previous), item);
+	};
+}
+
+Fn<void()> MessageHistory::changingItems(
+		const base::flat_map<not_null<HistoryItem*>, int> &items) {
+	if (ranges::any_of(items, [&](const auto &entry) {
+		return _localChanges.contains(entry.first->fullId());
+	})) {
+		return [] {};
+	}
+	auto edits = std::vector<std::pair<not_null<HistoryItem*>, Edit>>();
+	for (const auto &[item, count] : items) {
+		if (auto edit = beforeEdit(item)) {
+			edits.emplace_back(item, std::move(*edit));
+		}
+	}
+	return [=, edits = std::move(edits)]() mutable {
+		for (auto &[item, edit] : edits) {
+			afterEdit(std::move(edit), item);
+		}
+	};
 }
 
 void MessageHistory::deleted(not_null<HistoryItem*> item) {
-	if (!captures(item) || _localChanges.contains(item->fullId())) {
+	if (!saveDeleted()
+		|| !captures(item)
+		|| _localChanges.contains(item->fullId())) {
 		return;
 	}
 	auto entry = snapshot(item, Storage::MessageHistoryKind::Deleted);
@@ -537,7 +605,11 @@ void MessageHistory::range(
 	});
 }
 
-void MessageHistory::clear(PeerId peer, MsgId message) {
+void MessageHistory::clear(
+		PeerId peer,
+		MsgId message,
+		std::optional<Storage::MessageHistoryKind> kind,
+		qint64 recordId) {
 	if (!_available) {
 		return;
 	}
@@ -545,9 +617,12 @@ void MessageHistory::clear(PeerId peer, MsgId message) {
 	const auto migrated = !message ? history->migrateFrom() : nullptr;
 	const auto migratedPeer = migrated ? migrated->peer->id : PeerId();
 	for (auto i = _pending.begin(); i != _pending.end();) {
-		const auto id = i->second.entry.message;
+		const auto &entry = i->second.entry;
+		const auto id = entry.message;
 		if ((id.peer == peer || id.peer == migratedPeer)
-			&& (!message || id.msg == message)) {
+			&& (!message || id.msg == message)
+			&& (!kind || entry.kind == *kind)
+			&& (!recordId || entry.id == recordId)) {
 			i = _pending.erase(i);
 		} else {
 			++i;
@@ -558,9 +633,12 @@ void MessageHistory::clear(PeerId peer, MsgId message) {
 		weak = base::make_weak(this),
 		peer,
 		message,
-		migratedPeer
+		migratedPeer,
+		kind,
+		recordId
 	](Storage::MessageHistoryDatabase &database) {
-		const auto error = database.clear(peer, message, migratedPeer);
+		const auto error = database.clear(
+			peer, message, migratedPeer, kind, recordId);
 		crl::on_main(weak, [=] {
 			weak->report(error, peer);
 			if (error.isEmpty() && migratedPeer) {

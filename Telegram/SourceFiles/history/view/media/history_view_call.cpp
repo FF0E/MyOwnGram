@@ -67,7 +67,8 @@ QSize Call::countOptimalSize() {
 	const auto video = _video;
 	const auto contextId = _parent->data()->fullId();
 	const auto id = _parent->data()->id;
-	_link = std::make_shared<LambdaClickHandler>([=](ClickContext context) {
+	_link = _parent->data()->isRegular()
+		? std::make_shared<LambdaClickHandler>([=](ClickContext context) {
 		if (conference) {
 			const auto my = context.other.value<ClickHandlerContext>();
 			const auto weak = my.sessionWindow;
@@ -78,7 +79,7 @@ QSize Call::countOptimalSize() {
 		} else if (user) {
 			Core::App().calls().startOutgoingCall(user, { video });
 		}
-	});
+	}) : nullptr;
 	auto maxWidth = st::historyCallWidth;
 	auto minHeight = st::historyCallHeight;
 	if (!isBubbleTop()) {

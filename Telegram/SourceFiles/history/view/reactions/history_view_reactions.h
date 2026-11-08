@@ -43,6 +43,7 @@ struct InlineListData {
 		Flipped   = 0x04,
 		Tags      = 0x08,
 		Centered  = 0x10,
+		ReadOnly  = 0x20,
 	};
 	friend inline constexpr bool is_flag_type(Flag) { return true; };
 	using Flags = base::flags<Flag>;

@@ -853,7 +853,8 @@ private:
 };
 
 bool Poll::Footer::hasCloseDate() const {
-	return _owner->_poll->closeDate > 0
+	return _owner->_parent->data()->isRegular()
+		&& _owner->_poll->closeDate > 0
 		&& !(_owner->_flags & PollData::Flag::Closed);
 }
 
@@ -4547,8 +4548,7 @@ bool Poll::Header::inShowSolution(
 }
 
 QString Poll::Footer::closeTimerText() const {
-	if (_owner->_poll->closeDate <= 0
-		|| (_owner->_flags & PollData::Flag::Closed)) {
+	if (!hasCloseDate()) {
 		_closeTimer.cancel();
 		return {};
 	}

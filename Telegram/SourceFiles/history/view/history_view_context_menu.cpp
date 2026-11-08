@@ -1954,6 +1954,13 @@ void FillContextMenuItems(
 					tr::lng_myowngram_message_history_message_title(tr::now),
 					[=] { ShowMessageHistory(controller, original.peer, original.msg); },
 					&st::menuIconGroupLog).get();
+			if (saved && saved->recordId && !saved->inlineCopy) {
+				const auto recordId = saved->recordId;
+				result->addAction(
+					tr::lng_myowngram_message_history_remove_record(tr::now),
+					[=] { RemoveMessageHistory(controller, original, recordId); },
+					&st::menuIconDelete);
+			}
 			const auto removeAction = result->addAction(
 				tr::lng_myowngram_message_history_remove(tr::now),
 				[=] { RemoveMessageHistory(controller, original); },

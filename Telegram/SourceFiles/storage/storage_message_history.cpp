@@ -378,18 +378,22 @@ MessageHistoryPage MessageHistoryDatabase::range(
 QString MessageHistoryDatabase::clear(
 		PeerId peer,
 		MsgId message,
-		PeerId migratedPeer) {
+		PeerId migratedPeer,
+		std::optional<MessageHistoryKind> kind,
+		qint64 recordId) {
 	if (!_database) {
 		return _error;
 	}
 	_error.clear();
-	auto statement = Statement(_database, message
-		? "DELETE FROM events WHERE peer=?1 AND message=?2"
-		: "DELETE FROM events WHERE peer=?1 OR peer=?2", _error);
+	auto statement = Statement(_database,
+		"DELETE FROM events WHERE (peer=?1 OR peer=?2)"
+		" AND (?3=0 OR message=?3) AND (?4=-1 OR kind=?4)"
+		" AND (?5=0 OR id=?5)", _error);
 	statement.bind(1, qint64(SerializePeerId(peer)));
-	statement.bind(2, message
-		? message.bare
-		: qint64(SerializePeerId(migratedPeer ? migratedPeer : peer)));
+	statement.bind(2, qint64(SerializePeerId(migratedPeer ? migratedPeer : peer)));
+	statement.bind(3, message.bare);
+	statement.bind(4, kind ? qint64(*kind) : -1);
+	statement.bind(5, recordId);
 	if (!statement.run() || !execute("PRAGMA incremental_vacuum")) {
 		return _error;
 	}

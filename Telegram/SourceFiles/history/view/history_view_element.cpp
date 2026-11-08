@@ -61,6 +61,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/effects/path_shift_gradient.h"
 #include "ui/effects/reaction_fly_animation.h"
 #include "ui/toast/toast.h"
+#include "ui/text/text_custom_emoji.h"
 #include "ui/text/text_utilities.h"
 #include "ui/arc_angles.h"
 #include "ui/item_text_options.h"
@@ -2352,7 +2353,12 @@ void Element::setTextWithLinks(
 	});
 	if (_flags & Flag::ServiceMessage) {
 		const auto &options = Ui::ItemTextServiceOptions();
-		_text.setMarkedText(st::serviceTextStyle, text, options, context);
+		const auto saved = data()->Get<HistoryMessageArchived>();
+		const auto marked = (saved && saved->deleted)
+			? TextWithEntities(text).append(u" "_q).append(
+				Ui::Text::IconEmoji(&st::historyDeletedServiceIcon))
+			: text;
+		_text.setMarkedText(st::serviceTextStyle, marked, options, context);
 		auto linkIndex = 0;
 		for (const auto &link : links) {
 			// Link indices start with 1.

@@ -69,7 +69,12 @@ public:
 	[[nodiscard]] QString add(const std::vector<MessageHistoryEntry> &entries);
 	[[nodiscard]] MessageHistoryPage query(const MessageHistoryQuery &query);
 	[[nodiscard]] MessageHistoryPage range(const MessageHistoryRange &range);
-	[[nodiscard]] QString clear(PeerId peer, MsgId message, PeerId migratedPeer);
+	[[nodiscard]] QString clear(
+		PeerId peer,
+		MsgId message,
+		PeerId migratedPeer,
+		std::optional<MessageHistoryKind> kind,
+		qint64 recordId);
 	[[nodiscard]] std::pair<int, QString> expire(qint64 before);
 	void erase();
 

@@ -23,18 +23,29 @@ public:
 	using Item = std::unique_ptr<HistoryItem, HistoryItem::Destroyer>;
 
 	[[nodiscard]] static QByteArray Write(not_null<HistoryItem*> item);
+	[[nodiscard]] static QByteArray Content(not_null<HistoryItem*> item);
+	[[nodiscard]] static QString SearchText(not_null<HistoryItem*> item);
 	[[nodiscard]] static Item Read(
 		not_null<History*> history,
 		const QByteArray &bytes,
 		bool inlineCopy);
 
 private:
-	static void WritePhoto(QDataStream &stream, PhotoData *photo);
+	enum class Purpose { Snapshot, Content };
+
+	[[nodiscard]] static TextWithEntities Text(not_null<HistoryItem*> item);
+	static void WritePhoto(
+		QDataStream &stream,
+		PhotoData *photo,
+		Purpose purpose = Purpose::Snapshot);
 	static PhotoData *ReadPhoto(
 		QDataStream &stream,
 		not_null<Main::Session*> session,
 		int appVersion);
-	static void WriteDocument(QDataStream &stream, DocumentData *document);
+	static void WriteDocument(
+		QDataStream &stream,
+		DocumentData *document,
+		Purpose purpose = Purpose::Snapshot);
 	static DocumentData *ReadDocument(
 		QDataStream &stream,
 		not_null<Main::Session*> session,
@@ -42,23 +53,33 @@ private:
 	static void WriteWebPage(
 		QDataStream &stream,
 		not_null<WebPageData*> page,
-		qint32 flags);
+		qint32 flags,
+		Purpose purpose = Purpose::Snapshot);
 	static WebPageData *ReadWebPage(
 		QDataStream &stream,
 		not_null<HistoryItem*> item,
 		int appVersion,
 		qint32 &flags);
-	static void WritePollMedia(QDataStream &stream, const PollMedia &media);
+	static void WritePollMedia(
+		QDataStream &stream,
+		const PollMedia &media,
+		Purpose purpose = Purpose::Snapshot);
 	[[nodiscard]] static PollMedia ReadPollMedia(
 		QDataStream &stream,
 		not_null<HistoryItem*> item,
 		int appVersion);
-	static void WriteRich(QDataStream &stream, not_null<HistoryItem*> item);
+	static void WriteRich(
+		QDataStream &stream,
+		not_null<HistoryItem*> item,
+		Purpose purpose = Purpose::Snapshot);
 	[[nodiscard]] static std::shared_ptr<const Iv::RichPage> ReadRich(
 		QDataStream &stream,
 		not_null<Main::Session*> session,
 		int appVersion);
-	static void WriteMedia(QDataStream &stream, Data::Media *media);
+	static void WriteMedia(
+		QDataStream &stream,
+		Data::Media *media,
+		Purpose purpose = Purpose::Snapshot);
 	[[nodiscard]] static std::unique_ptr<Data::Media> ReadMedia(
 		QDataStream &stream,
 		not_null<HistoryItem*> item,

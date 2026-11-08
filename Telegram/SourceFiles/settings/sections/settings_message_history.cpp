@@ -80,17 +80,29 @@ const auto kMessageHistory = Builder::BuildHelper({
 	const auto archive = &builder.session()->messageHistory();
 	const auto controller = builder.controller();
 	builder.addSkip();
-	const auto enabled = builder.addButton({
-		.id = u"myowngram/message-history"_q,
-		.title = tr::lng_myowngram_message_history_save(),
+	const auto edits = builder.addButton({
+		.id = u"myowngram/message-history/edits"_q,
+		.title = tr::lng_myowngram_message_history_save_edits(),
 		.st = &st::settingsButtonNoIcon,
-		.toggled = archive->enabledValue(),
-		.keywords = { u"deleted"_q, u"edited"_q, u"history"_q },
+		.toggled = archive->saveEditsValue(),
+		.keywords = { u"edited"_q, u"history"_q },
 	});
-	if (enabled) {
-		enabled->toggledValue() | rpl::on_next([=](bool value) {
-			archive->setEnabled(value);
-		}, enabled->lifetime());
+	if (edits) {
+		edits->toggledValue() | rpl::on_next([=](bool value) {
+			archive->setSaveEdits(value);
+		}, edits->lifetime());
+	}
+	const auto deleted = builder.addButton({
+		.id = u"myowngram/message-history/deleted"_q,
+		.title = tr::lng_myowngram_message_history_save_deleted(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = archive->saveDeletedValue(),
+		.keywords = { u"deleted"_q, u"history"_q },
+	});
+	if (deleted) {
+		deleted->toggledValue() | rpl::on_next([=](bool value) {
+			archive->setSaveDeleted(value);
+		}, deleted->lifetime());
 	}
 	builder.addDividerText(tr::lng_myowngram_message_history_about());
 	builder.addSkip();
@@ -120,7 +132,7 @@ const auto kMessageHistory = Builder::BuildHelper({
 		.keywords = { u"attachments"_q, u"media"_q, u"history"_q },
 	});
 	if (download) {
-		archive->enabledValue() | rpl::on_next([=](bool value) {
+		archive->saveDeletedValue() | rpl::on_next([=](bool value) {
 			download->setDisabled(!value);
 		}, download->lifetime());
 	}
