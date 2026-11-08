@@ -77,9 +77,9 @@ namespace {
 		const QString &time) {
 	const auto today = QDateTime::currentDateTime().date();
 	if (sent.date() == today && edited.date() == today) {
-		return tr::lng_edited_at(tr::now, lt_time, time);
+		return time;
 	}
-	return tr::lng_edited_on(
+	return tr::lng_mediaview_date_time(
 		tr::now,
 		lt_date,
 		langDayOfMonthShort(edited.date()),
@@ -512,7 +512,6 @@ void BottomInfo::layoutDateText() {
 		&& (_data.flags & Data::Flag::EditedPrimary)
 		&& !(_data.flags & Data::Flag::ForwardedDate);
 	const auto editedIcon = !updated
-		&& !editedPrimary
 		&& (_data.flags & Data::Flag::Edited);
 	const auto edited = (editedPrimary || editedIcon)
 		? QString()
