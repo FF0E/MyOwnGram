@@ -210,6 +210,7 @@ private:
 	qint64 _around = 0;
 	int _limitBefore = 0;
 	int _limitAfter = 0;
+	uint64 _queryRevision = 0;
 	int _generation = 0;
 	bool _loading = false;
 	bool _moreBefore = true;
@@ -341,7 +342,12 @@ Widget::Widget(
 			|| peer == _history->peer->id
 			|| (!_message && _history->migrateFrom()
 				&& peer == _history->migrateFrom()->peer->id);
-	}) | rpl::on_next([=] { refresh(); }, lifetime());
+	}) | rpl::on_next([=] {
+		if (!_loading
+			|| _queryRevision != session().messageHistory().queuedRevision()) {
+			refresh();
+		}
+	}, lifetime());
 	_inner->restoreState(&memento->view.list);
 	toggleSearch(memento->searchShown || !_query.isEmpty(), anim::type::instant);
 }
@@ -692,6 +698,7 @@ void Widget::reload() {
 void Widget::refresh() {
 	_loading = true;
 	updateEmpty();
+	_inner->update();
 	const auto generation = ++_generation;
 	const auto migrated = !_message ? _history->migrateFrom() : nullptr;
 	session().messageHistory().query({
@@ -732,6 +739,7 @@ void Widget::refresh() {
 		updateEmpty();
 		_inner->update();
 	}));
+	_queryRevision = session().messageHistory().queuedRevision();
 }
 
 Item Widget::createItem(const Entry &entry) {
@@ -812,14 +820,12 @@ rpl::producer<Data::MessagesSlice> Widget::listSource(
 }
 
 void Widget::updateEmpty() {
-	if (!_rows.empty()) {
+	if (_loading || !_rows.empty()) {
 		_emptyAction->hide();
 		return;
 	}
 	const auto text = !_error.isEmpty()
 		? tr::lng_myowngram_message_history_error(tr::now)
-		: _loading
-		? tr::lng_contacts_loading(tr::now)
 		: !_query.isEmpty()
 		? tr::lng_myowngram_message_history_no_deleted_results(tr::now)
 		: _message
@@ -843,12 +849,15 @@ void Widget::updateEmpty() {
 	_emptyAction->moveToLeft(
 		(width() - _emptyAction->width()) / 2,
 		_emptyRect.y() + _emptyRect.height() + padding.bottom());
-	_emptyAction->setVisible(!_loading);
+	_emptyAction->show();
 	_emptyAction->raise();
 	_inner->update();
 }
 
 void Widget::listPaintEmpty(Painter &p, const Ui::ChatPaintContext &context) {
+	if (_loading || !_rows.empty()) {
+		return;
+	}
 	const auto rect = _emptyRect.translated(0, _scroll->scrollTop());
 	ServiceMessagePainter::PaintBubble(p, context.st, rect);
 	p.setPen(context.st->msgServiceFg());

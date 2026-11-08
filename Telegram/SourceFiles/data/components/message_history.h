@@ -55,6 +55,7 @@ public:
 	void deleted(not_null<HistoryItem*> item);
 	[[nodiscard]] std::shared_ptr<void> localChange(FullMsgId id);
 
+	[[nodiscard]] uint64 queuedRevision() const;
 	void query(
 		Storage::MessageHistoryQuery query,
 		Fn<void(Storage::MessageHistoryPage)> done);
@@ -128,6 +129,7 @@ private:
 	base::flat_map<FullMsgId, CachedItem> _inlineItems;
 	qint64 _nextPendingId = 0;
 	qint64 _savingTill = 0;
+	uint64 _queuedRevision = 0;
 	base::flat_map<FullMsgId, int> _localChanges;
 	base::flat_set<FullMsgId> _editing;
 	base::Timer _flushTimer;

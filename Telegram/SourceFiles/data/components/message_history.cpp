@@ -525,6 +525,7 @@ void MessageHistory::flush() {
 		peers.emplace(pending.entry.message.peer);
 		_savingTill = id;
 	}
+	++_queuedRevision;
 	worker().with([
 		weak = base::make_weak(this),
 		till = _savingTill,
@@ -553,6 +554,10 @@ void MessageHistory::flush() {
 			weak->flush();
 		});
 	});
+}
+
+uint64 MessageHistory::queuedRevision() const {
+	return _queuedRevision;
 }
 
 void MessageHistory::query(
@@ -635,6 +640,7 @@ void MessageHistory::clear(
 		}
 	}
 	flush();
+	++_queuedRevision;
 	worker().with([
 		weak = base::make_weak(this),
 		peer,
@@ -661,6 +667,7 @@ void MessageHistory::expire() {
 	const auto before = (period < 0)
 		? now.addDays(7 * period)
 		: now.addMonths(-period);
+	++_queuedRevision;
 	worker().with([
 		weak = base::make_weak(this),
 		before = before.toSecsSinceEpoch()
@@ -685,6 +692,7 @@ void MessageHistory::erase() {
 	_flushTimer.cancel();
 	_expireTimer.cancel();
 	if (_available || _worker) {
+		++_queuedRevision;
 		worker().with([](Storage::MessageHistoryDatabase &database) {
 			database.erase();
 		});
