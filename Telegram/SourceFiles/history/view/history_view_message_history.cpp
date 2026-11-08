@@ -10,7 +10,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/timer.h"
 #include "core/shortcuts.h"
 #include "data/components/message_history.h"
-#include "data/data_media_types.h"
 #include "data/data_messages.h"
 #include "data/data_session.h"
 #include "history/history.h"
@@ -22,7 +21,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "info/profile/info_profile_values.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
-#include "menu/menu_checked_action.h"
 #include "profile/profile_back_button.h"
 #include "settings/sections/settings_message_history.h"
 #include "storage/serialize_message_history.h"
@@ -36,7 +34,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/rect.h"
 #include "ui/ui_utility.h"
 #include "ui/widgets/buttons.h"
-#include "ui/widgets/checkbox.h"
 #include "ui/widgets/elastic_scroll.h"
 #include "ui/widgets/fields/input_field.h"
 #include "ui/widgets/popup_menu.h"
@@ -84,7 +81,6 @@ public:
 	PeerId peer;
 	MsgId message;
 	QString search;
-	std::optional<Kind> filter;
 	ViewState view;
 	std::optional<ViewState> browse;
 	bool searchShown = false;
@@ -170,20 +166,16 @@ private:
 	void showFinishedHook() override;
 	void updateVisible();
 	void updateHeader();
-	void updateFilterLabel();
-	void updateSubtitle();
 	void updateEmpty();
 	void showSearch();
 	void cancelSearch();
 	void toggleSearch(bool shown, anim::type animated = anim::type::normal);
 	void applySearch();
-	void setFilter(std::optional<Kind> filter);
-	void showFilter();
 	void jumpToLatest();
 	void reload();
 	void refresh();
 	void showMenu();
-	void addEntry(const Entry &entry, std::vector<Item> &rows);
+	[[nodiscard]] Item createItem(const Entry &entry);
 	[[nodiscard]] ViewState saveView();
 	void restoreView(ViewState state);
 	[[nodiscard]] Data::MessagesSlice slice(
@@ -204,7 +196,6 @@ private:
 	object_ptr<Ui::IconButton> _searchButton;
 	object_ptr<Ui::CrossButton> _cancelSearch;
 	object_ptr<Ui::InputField> _search;
-	object_ptr<Ui::RoundButton> _filterButton;
 	object_ptr<Ui::JumpDownButton> _scrollDown;
 	rpl::variable<QString> _emptyActionText;
 	object_ptr<Ui::RoundButton> _emptyAction;
@@ -213,12 +204,9 @@ private:
 	base::unique_qptr<Ui::PopupMenu> _menu;
 	base::Timer _searchTimer;
 	rpl::event_stream<> _changes;
-	std::array<QString, 3> _filterLabels;
 	std::optional<ViewState> _browse;
 	QString _query;
 	QString _error;
-	std::optional<Kind> _filter;
-	int _filterWidth = 0;
 	qint64 _around = 0;
 	int _limitBefore = 0;
 	int _limitAfter = 0;
@@ -252,13 +240,11 @@ Widget::Widget(
 , _searchButton(_topBar, st::topBarSearch)
 , _cancelSearch(_topBar, st::historyAdminLogCancelSearch)
 , _search(_topBar, st::defaultMultiSelectSearchField, tr::lng_dlg_filter())
-, _filterButton(_topBar, rpl::single(QString()), st::messageHistoryFilter)
 , _scrollDown(_scroll, st::historyToDown)
 , _emptyAction(_scroll, _emptyActionText.value(), st::defaultLightButton)
 , _searchTimer([=] { applySearch(); })
 , _browse(memento->browse)
 , _query(memento->search)
-, _filter(_message ? std::nullopt : memento->filter)
 , _moreBefore(memento->view.moreBefore)
 , _moreAfter(memento->view.moreAfter) {
 	_inner = _scroll->setOwnedWidget(object_ptr<ListWidget>(
@@ -278,8 +264,7 @@ Widget::Widget(
 	_menuButton->setClickedCallback([=] { showMenu(); });
 	_searchButton->setClickedCallback([=] { showSearch(); });
 	_cancelSearch->setClickedCallback([=] { cancelSearch(); });
-	_filterButton->setClickedCallback([=] { showFilter(); });
-	_filterButton->setVisible(!_message);
+	_searchButton->setVisible(!_message);
 	_scrollDown->setClickedCallback([=] { jumpToLatest(); });
 	_scrollDown->hide();
 	_search->setText(_query);
@@ -292,8 +277,6 @@ Widget::Widget(
 		} else if (!_query.isEmpty()) {
 			_search->clear();
 			applySearch();
-		} else if (_filter) {
-			setFilter(std::nullopt);
 		} else {
 			controller->showSettings(Settings::MessageHistoryId());
 		}
@@ -310,17 +293,11 @@ Widget::Widget(
 	}, lifetime());
 	_search->submits() | rpl::on_next([=] { applySearch(); }, lifetime());
 	_search->cancelled() | rpl::on_next([=] { cancelSearch(); }, lifetime());
-	rpl::combine(
-		tr::lng_myowngram_message_history_filter_all(),
-		tr::lng_myowngram_message_history_filter_deleted(),
-		tr::lng_myowngram_message_history_filter_edited()
-	) | rpl::on_next([=](QString all, QString deleted, QString edited) {
-		_filterLabels = { all, deleted, edited };
-		updateFilterLabel();
-	}, lifetime());
 	tr::lng_myowngram_message_history_title(
 	) | rpl::on_next([=] {
-		updateSubtitle();
+		_back->setSubtext(_message
+			? tr::lng_myowngram_message_history_message_title(tr::now)
+			: tr::lng_myowngram_message_history_chat_title(tr::now));
 		_back->setAccessibleName(tr::lng_terms_back(tr::now));
 		_searchButton->setAccessibleName(tr::lng_dlg_filter(tr::now));
 		_cancelSearch->setAccessibleName(_search->getLastText().isEmpty()
@@ -333,7 +310,8 @@ Widget::Widget(
 	}, lifetime());
 	Shortcuts::Requests(
 	) | rpl::filter([=] {
-		return Ui::AppInFocus()
+		return !_message
+			&& Ui::AppInFocus()
 			&& Ui::InFocusChain(this)
 			&& !controller->isLayerShown()
 			&& isActiveWindow();
@@ -357,8 +335,6 @@ Widget::Widget(
 		_inner->update();
 		update();
 	}, lifetime());
-	session().messageHistory().enabledValue(
-	) | rpl::on_next([=] { updateEmpty(); }, lifetime());
 	session().messageHistory().changes(
 	) | rpl::filter([=](PeerId peer) {
 		return !peer
@@ -462,6 +438,9 @@ void Widget::listSendBotCommand(
 }
 
 void Widget::listSearch(const QString &query, const FullMsgId &context) {
+	if (_message) {
+		return;
+	}
 	showSearch();
 	_search->setText(query);
 	applySearch();
@@ -558,12 +537,6 @@ void Widget::restoreView(ViewState state) {
 	++_generation;
 	_error.clear();
 	_rows = state.rows;
-	if (_filter) {
-		std::erase_if(_rows, [&](const Item &item) {
-			return item->Get<HistoryMessageArchived>()->deleted
-				!= (*_filter == Kind::Deleted);
-		});
-	}
 	for (const auto &item : _rows) {
 		item->Get<HistoryMessageArchived>()->searchQuery = _query;
 	}
@@ -577,7 +550,6 @@ std::shared_ptr<Window::SectionMemento> Widget::createMemento() {
 	applySearch();
 	auto result = std::make_shared<Memento>(_history->peer->id, _message);
 	result->search = _query;
-	result->filter = _filter;
 	result->view = saveView();
 	result->browse = _browse;
 	result->searchShown = _searchShown;
@@ -587,61 +559,26 @@ std::shared_ptr<Window::SectionMemento> Widget::createMemento() {
 void Widget::updateHeader() {
 	_topBar->setGeometry(0, 0, width(), st::topBarHeight);
 	_menuButton->moveToRight(0, 0);
-	if (!_message) {
-		_filterButton->setFullWidth(std::max(1, std::min(
-			_filterWidth,
-			width() / 3)));
-		_filterButton->moveToRight(
-			_menuButton->width() + _searchButton->width(),
-			(st::topBarHeight - _filterButton->height()) / 2);
-	}
-	const auto filterWidth = _message ? 0 : _filterButton->width();
 	const auto searchHiddenLeft = width()
 		- _menuButton->width()
-		- _searchButton->width();
+		- (_message ? 0 : _searchButton->width());
 	const auto searchShownLeft = st::topBarArrowPadding.left();
 	_searchButton->moveToLeft(
 		_searchShown ? searchShownLeft : searchHiddenLeft,
 		0);
 	_cancelSearch->moveToLeft(searchHiddenLeft, 0);
-	_back->resizeToWidth(std::max(0, searchHiddenLeft - filterWidth));
+	_back->resizeToWidth(std::max(0, searchHiddenLeft));
 	_back->moveToLeft(0, 0);
 	_back->setVisible(!_searchShown);
 	const auto fieldLeft = searchShownLeft + _searchButton->width();
 	_search->setGeometryToLeft(
 		fieldLeft,
 		st::historyAdminLogSearchTop,
-		std::max(0, searchHiddenLeft - filterWidth - fieldLeft),
+		std::max(0, searchHiddenLeft - fieldLeft),
 		_search->height());
 	_search->setVisible(_searchShown);
 	_shadow->setGeometry(0, _back->height(), width(), st::lineWidth);
 	_shadow->raise();
-}
-
-void Widget::updateFilterLabel() {
-	const auto text = _filterLabels[_filter ? int(*_filter) + 1 : 0];
-	_filterButton->setFullWidth(0);
-	_filterButton->setText(rpl::single(text));
-	_filterWidth = _filterButton->width();
-	_filterButton->setToolTip(text);
-	updateHeader();
-}
-
-void Widget::updateSubtitle() {
-	if (!_message) {
-		_back->setSubtext(tr::lng_myowngram_message_history_title(tr::now));
-		return;
-	}
-	const auto i = ranges::find_if(_rows, [](const Item &item) {
-		return item->Get<HistoryMessageArchived>()->part != 0;
-	});
-	_back->setSubtext(i == _rows.end()
-		? tr::lng_myowngram_message_history_message_title(tr::now)
-		: tr::lng_myowngram_message_history_message_subtitle(
-			tr::now,
-			lt_date,
-			QLocale().toString(QDateTime::fromSecsSinceEpoch(
-				(*i)->Get<HistoryMessageArchived>()->sentAt), QLocale::ShortFormat)));
 }
 
 void Widget::showSearch() {
@@ -689,36 +626,6 @@ void Widget::applySearch() {
 	} else {
 		reload();
 	}
-}
-
-void Widget::setFilter(std::optional<Kind> filter) {
-	if (_filter == filter) {
-		return;
-	}
-	applySearch();
-	_filter = filter;
-	updateFilterLabel();
-	reload();
-}
-
-void Widget::showFilter() {
-	_menu = base::make_unique_q<Ui::PopupMenu>(this, st::defaultPopupMenu);
-	for (auto index = 0; index != int(_filterLabels.size()); ++index) {
-		const auto filter = index
-			? std::make_optional(Kind(index - 1))
-			: std::nullopt;
-		Menu::AddCheckedAction(
-			_menu.get(),
-			_filterLabels[index],
-			[=] { setFilter(filter); },
-			nullptr,
-			_filter == filter);
-	}
-	_menu->setForcedOrigin(Ui::PanelAnimation::Origin::TopRight);
-	_menu->popup(_filterButton->mapToGlobal(QPoint(
-		_filterButton->width()
-			+ Ui::BoxShadow::ExtendFor(_menu->st().shadow).right(),
-		_filterButton->height())));
 }
 
 void Widget::jumpToLatest() {
@@ -774,7 +681,7 @@ bool Widget::listIsLessInOrder(
 		not_null<HistoryItem*> second) {
 	const auto a = first->Get<HistoryMessageArchived>();
 	const auto b = second->Get<HistoryMessageArchived>();
-	return std::tie(a->recordId, a->part) < std::tie(b->recordId, b->part);
+	return a->recordId < b->recordId;
 }
 
 void Widget::reload() {
@@ -792,7 +699,7 @@ void Widget::refresh() {
 		.migratedPeer = migrated ? migrated->peer->id : PeerId(),
 		.message = _message,
 		.around = _around,
-		.kind = _filter,
+		.kind = _message ? Kind::Edited : Kind::Deleted,
 		.search = _query,
 		.limit = _limitBefore,
 		.limitAfter = _limitAfter,
@@ -810,108 +717,44 @@ void Widget::refresh() {
 		}
 		_moreBefore = page.moreBefore;
 		_moreAfter = page.moreAfter;
-		auto existing = base::flat_map<qint64, std::vector<Item>>();
+		auto existing = base::flat_map<qint64, Item>();
 		for (const auto &row : _rows) {
-			existing[row->Get<HistoryMessageArchived>()->recordId].push_back(row);
+			existing.emplace(row->Get<HistoryMessageArchived>()->recordId, row);
 		}
 		auto rows = std::vector<Item>();
+		rows.reserve(page.entries.size());
 		for (const auto &entry : page.entries | ranges::views::reverse) {
 			const auto i = existing.find(entry.id);
-			if (i != existing.end()) {
-				rows.insert(rows.end(), i->second.begin(), i->second.end());
-			} else {
-				addEntry(entry, rows);
-			}
+			rows.push_back(i != existing.end() ? i->second : createItem(entry));
 		}
 		_rows = std::move(rows);
-		updateSubtitle();
 		_changes.fire({});
 		updateEmpty();
 		_inner->update();
 	}));
 }
 
-void Widget::addEntry(const Entry &entry, std::vector<Item> &rows) {
-	const auto prepare = [&](OwnedItem item, int part) {
-		item->markArchived();
-		const auto data = item->Get<HistoryMessageArchived>();
-		data->original = entry.message;
-		data->recordId = entry.id;
-		data->part = part;
-		data->sentAt = item->date();
-		data->searchQuery = _query;
-		data->deleted = (entry.kind == Kind::Deleted);
-		item->updateDate(TimeId(entry.savedAt));
-		rows.emplace_back(std::move(item));
-	};
-	const auto header = [&](QString text, int part) {
-		prepare(OwnedItem(_history->makeMessage({
-			.id = _history->nextNonHistoryEntryId(),
+Item Widget::createItem(const Entry &entry) {
+	const auto history = session().data().history(entry.message.peer);
+	auto item = Serialize::MessageHistory::Read(history, entry.previous, false);
+	if (!item) {
+		item = OwnedItem(history->makeMessage({
+			.id = history->nextNonHistoryEntryId(),
 			.flags = MessageFlag::AdminLogEntry,
 			.date = TimeId(entry.savedAt),
-		}, PreparedServiceText{ .text = { std::move(text) } }).get()), part);
-	};
-	const auto history = session().data().history(entry.message.peer);
-	const auto deleted = (entry.kind == Kind::Deleted);
-	if (!deleted) {
-		header(tr::lng_myowngram_message_history_edited_event(tr::now), 0);
+		}, PreparedServiceText{
+			.text = tr::lng_myowngram_message_history_unreadable(tr::now, tr::marked),
+		}).get());
 	}
-	auto previous = Serialize::MessageHistory::Read(history, entry.previous, false);
-	if (deleted) {
-		if (previous) {
-			prepare(std::move(previous), 1);
-		} else {
-			header(tr::lng_myowngram_message_history_unreadable(tr::now), 1);
-		}
-		return;
-	}
-	auto updated = Serialize::MessageHistory::Read(history, entry.updated, false);
-	const auto media = previous ? previous->media() : nullptr;
-	const auto compact = !previous
-		|| (!previous->isService()
-			&& !previous->inlineReplyMarkup()
-			&& !previous->richPage()
-			&& (!media
-				|| dynamic_cast<Data::MediaPhoto*>(media)
-				|| dynamic_cast<Data::MediaFile*>(media)));
-	if (updated && compact) {
-		const auto updatedMedia = updated->media();
-		const auto caption = media && media->allowsEditCaption()
-			&& updatedMedia
-			&& (media->photo() == updatedMedia->photo())
-			&& (media->document() == updatedMedia->document());
-		const auto label = caption
-			? tr::lng_admin_log_previous_caption(tr::now)
-			: tr::lng_admin_log_previous_message(tr::now);
-		const auto text = !previous
-			? tr::lng_myowngram_message_history_unreadable(tr::now, tr::italic)
-			: (previous->originalText().empty() && (!media || caption))
-			? tr::lng_admin_log_empty_text(tr::now, tr::italic)
-			: previous->originalText();
-		updated->addLogEntryOriginal(
-			WebPageId(updated->id.bare),
-			label,
-			text,
-			media && !caption ? media->photo() : nullptr,
-			media && !caption ? media->document() : nullptr);
-		const auto archive = updated->Get<HistoryMessageArchived>();
-		archive->mediaLifetime->make_state<OwnedItem>(std::move(previous));
-		prepare(std::move(updated), 1);
-		return;
-	}
-	if (updated) {
-		prepare(std::move(updated), 1);
-	} else {
-		header(tr::lng_myowngram_message_history_unreadable(tr::now), 1);
-	}
-	header(previous && previous->media() && previous->media()->allowsEditCaption()
-		? tr::lng_admin_log_previous_caption(tr::now)
-		: tr::lng_admin_log_previous_message(tr::now), 2);
-	if (previous) {
-		prepare(std::move(previous), 3);
-	} else {
-		header(tr::lng_myowngram_message_history_unreadable(tr::now), 3);
-	}
+	item->markArchived();
+	const auto data = item->Get<HistoryMessageArchived>();
+	data->original = entry.message;
+	data->recordId = entry.id;
+	data->sentAt = item->date();
+	data->searchQuery = _query;
+	data->deleted = (entry.kind == Kind::Deleted);
+	item->updateDate(TimeId(entry.savedAt));
+	return Item(std::move(item));
 }
 
 Data::MessagesSlice Widget::slice(
@@ -928,17 +771,8 @@ Data::MessagesSlice Widget::slice(
 		});
 	}
 	const auto center = (i == _rows.end()) ? count - 1 : int(i - _rows.begin());
-	auto from = std::max(0, center - before);
-	auto till = std::min(count, center + after + 1);
-	const auto recordAt = [&](int index) {
-		return _rows[index]->Get<HistoryMessageArchived>()->recordId;
-	};
-	while (from > 0 && recordAt(from - 1) == recordAt(from)) {
-		--from;
-	}
-	while (till > 0 && till < count && recordAt(till - 1) == recordAt(till)) {
-		++till;
-	}
+	const auto from = std::max(0, center - before);
+	const auto till = std::min(count, center + after + 1);
 	auto result = Data::MessagesSlice();
 	if (!_moreBefore && !_moreAfter) {
 		result.fullCount = count;
@@ -965,7 +799,7 @@ rpl::producer<Data::MessagesSlice> Widget::listSource(
 		int after) {
 	const auto record = (around == Data::MaxMessagePosition)
 		? 0
-		: around.fullId.msg.bare / HistoryMessageArchived::kPartsCount;
+		: around.fullId.msg.bare;
 	if (_around != record || _limitBefore != before + 1 || _limitAfter != after) {
 		_around = record;
 		_limitBefore = before + 1;
@@ -987,20 +821,10 @@ void Widget::updateEmpty() {
 		: _loading
 		? tr::lng_contacts_loading(tr::now)
 		: !_query.isEmpty()
-		? (_filter == Kind::Deleted
-			? tr::lng_myowngram_message_history_no_deleted_results(tr::now)
-			: _filter == Kind::Edited
-			? tr::lng_myowngram_message_history_no_edited_results(tr::now)
-			: tr::lng_myowngram_message_history_no_results(tr::now))
-		: _filter
-		? (*_filter == Kind::Deleted
-			? tr::lng_myowngram_message_history_no_deleted(tr::now)
-			: tr::lng_myowngram_message_history_no_edits(tr::now))
+		? tr::lng_myowngram_message_history_no_deleted_results(tr::now)
 		: _message
-		? tr::lng_myowngram_message_history_no_versions(tr::now)
-		: !session().messageHistory().enabled()
-		? tr::lng_myowngram_message_history_saving_off(tr::now)
-		: tr::lng_myowngram_message_history_empty(tr::now);
+		? tr::lng_myowngram_message_history_no_edits(tr::now)
+		: tr::lng_myowngram_message_history_no_deleted(tr::now);
 	_emptyText.setText(st::serviceTextStyle, text);
 	const auto padding = st::historyAdminLogEmptyPadding;
 	const auto outerWidth = std::min(width(), st::historyAdminLogEmptyWidth);
@@ -1015,8 +839,6 @@ void Widget::updateEmpty() {
 		? tr::lng_bot_download_retry(tr::now)
 		: !_query.isEmpty()
 		? tr::lng_sr_clear_search(tr::now)
-		: _filter
-		? tr::lng_myowngram_message_history_show_all(tr::now)
 		: tr::lng_menu_settings(tr::now);
 	_emptyAction->moveToLeft(
 		(width() - _emptyAction->width()) / 2,
@@ -1089,7 +911,6 @@ void RemoveMessageHistory(
 		FullMsgId message,
 		qint64 recordId) {
 	controller->show(Box([=](not_null<Ui::GenericBox*> box) {
-		const auto group = std::make_shared<Ui::RadiobuttonGroup>(0);
 		Ui::ConfirmBox(box, {
 			.text = recordId
 				? tr::lng_myowngram_message_history_remove_record_sure()
@@ -1099,9 +920,9 @@ void RemoveMessageHistory(
 					lt_chat,
 					rpl::single(controller->session().data().peer(message.peer)->name())),
 			.confirmed = [=](Fn<void()> close) {
-				const auto kind = group->current()
-					? std::make_optional(Kind(group->current() - 1))
-					: std::nullopt;
+				const auto kind = recordId
+					? std::nullopt
+					: std::make_optional(message.msg ? Kind::Edited : Kind::Deleted);
 				controller->session().messageHistory().clear(
 					message.peer, message.msg, kind, recordId);
 				close();
@@ -1109,18 +930,6 @@ void RemoveMessageHistory(
 			.confirmText = tr::lng_box_delete(),
 			.confirmStyle = &st::attentionBoxButton,
 		});
-		if (!recordId) {
-			const auto labels = std::array{
-				tr::lng_myowngram_message_history_filter_all(tr::now),
-				tr::lng_myowngram_message_history_filter_deleted(tr::now),
-				tr::lng_myowngram_message_history_filter_edited(tr::now),
-			};
-			for (auto i = 0; i != labels.size(); ++i) {
-				box->addRow(object_ptr<Ui::Radiobutton>(
-					box, group, i, labels[i], st::defaultBoxCheckbox),
-					st::boxRowPadding);
-			}
-		}
 	}));
 }
 

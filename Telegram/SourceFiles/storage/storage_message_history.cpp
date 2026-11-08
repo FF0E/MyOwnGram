@@ -15,7 +15,7 @@ namespace Storage {
 namespace {
 
 constexpr auto kColumns = "id,peer,message,topic,sublist,saved,"
-	"kind,previous,updated";
+	"kind,previous";
 
 class Statement final {
 public:
@@ -137,7 +137,6 @@ MessageHistoryEntry Statement::entry() const {
 		.savedAt = number(5),
 		.kind = MessageHistoryKind(number(6)),
 		.previous = blob(7),
-		.updated = blob(8),
 	};
 }
 
@@ -184,7 +183,9 @@ MessageHistoryDatabase::MessageHistoryDatabase(
 			updated BLOB NOT NULL,
 			text TEXT NOT NULL
 		);
-		CREATE INDEX IF NOT EXISTS events_chat ON events(peer,id);
+		CREATE INDEX IF NOT EXISTS events_deleted_history
+			ON events(peer,id) WHERE kind=0;
+		DROP INDEX IF EXISTS events_chat;
 		CREATE INDEX IF NOT EXISTS events_message ON events(peer,message,id);
 		CREATE INDEX IF NOT EXISTS events_age ON events(saved);
 		CREATE UNIQUE INDEX IF NOT EXISTS events_deleted
@@ -241,7 +242,7 @@ QString MessageHistoryDatabase::add(
 	auto statement = Statement(_database, R"SQL(
 		INSERT INTO events(
 			peer,message,topic,sublist,saved,kind,previous,updated,text)
-		VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)
+		VALUES(?1,?2,?3,?4,?5,?6,?7,X'',?8)
 		ON CONFLICT(peer,message) WHERE kind=0 DO NOTHING
 	)SQL", _error);
 	for (const auto &entry : entries) {
@@ -252,8 +253,7 @@ QString MessageHistoryDatabase::add(
 		statement.bind(5, entry.savedAt);
 		statement.bind(6, qint32(entry.kind));
 		statement.bind(7, entry.previous);
-		statement.bind(8, entry.updated);
-		statement.bindText(9, entry.text);
+		statement.bindText(8, entry.text);
 		if (!statement.run()) {
 			return _error;
 		}
@@ -270,17 +270,16 @@ MessageHistoryPage MessageHistoryDatabase::query(
 	}
 	_error.clear();
 	const auto searching = !query.search.isEmpty();
+	const auto migrated = query.migratedPeer && query.migratedPeer != query.peer;
 	auto prefix = QByteArray("SELECT ") + kColumns + " FROM events";
 	if (searching) {
 		prefix += " JOIN events_text ON events_text.rowid=events.id";
 	}
-	prefix += " WHERE (peer=?1 OR peer=?7)";
+	prefix += migrated ? " WHERE (peer=?1 OR peer=?7)" : " WHERE peer=?1";
 	if (query.message) {
 		prefix += " AND message=?2";
 	}
-	if (query.kind) {
-		prefix += " AND kind=?4";
-	}
+	prefix += " AND kind=?4";
 	if (searching) {
 		prefix += " AND events_text MATCH ?5";
 	}
@@ -294,18 +293,16 @@ MessageHistoryPage MessageHistoryDatabase::query(
 			: " AND id>?3 ORDER BY id LIMIT ?6");
 		auto statement = Statement(_database, sql.constData(), _error);
 		statement.bind(1, qint64(SerializePeerId(query.peer)));
-		statement.bind(7, query.migratedPeer
-			? qint64(SerializePeerId(query.migratedPeer))
-			: qint64(SerializePeerId(query.peer)));
+		if (migrated) {
+			statement.bind(7, qint64(SerializePeerId(query.migratedPeer)));
+		}
 		if (query.message) {
 			statement.bind(2, query.message.bare);
 		}
 		statement.bind(3, query.around
 			? query.around
 			: std::numeric_limits<qint64>::max());
-		if (query.kind) {
-			statement.bind(4, qint32(*query.kind));
-		}
+		statement.bind(4, qint32(query.kind));
 		if (searching) {
 			auto text = query.search;
 			statement.bindText(5, '"' + text.replace('"', u"\"\""_q) + u"\"*"_q);
@@ -332,6 +329,19 @@ MessageHistoryPage MessageHistoryDatabase::query(
 	}
 	result.error = _error;
 	return result;
+}
+
+bool MessageHistoryDatabase::hasEdits(FullMsgId message) {
+	if (!_database) {
+		return false;
+	}
+	_error.clear();
+	auto statement = Statement(_database,
+		"SELECT 1 FROM events WHERE peer=?1 AND message=?2 AND kind=1 LIMIT 1",
+		_error);
+	statement.bind(1, qint64(SerializePeerId(message.peer)));
+	statement.bind(2, message.msg.bare);
+	return statement.next();
 }
 
 MessageHistoryPage MessageHistoryDatabase::range(

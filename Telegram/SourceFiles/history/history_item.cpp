@@ -4044,10 +4044,7 @@ Data::MessagePosition HistoryItem::position() const {
 		return {
 			.fullId = saved->inlineCopy
 				? saved->original
-				: FullMsgId(
-					PeerId(),
-					MsgId(saved->recordId * HistoryMessageArchived::kPartsCount
-						+ saved->part)),
+				: FullMsgId(PeerId(), MsgId(saved->recordId)),
 			.date = date(),
 		};
 	}

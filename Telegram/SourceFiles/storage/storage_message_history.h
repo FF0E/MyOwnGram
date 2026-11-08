@@ -29,7 +29,6 @@ struct MessageHistoryEntry {
 	qint64 savedAt = 0;
 	MessageHistoryKind kind = MessageHistoryKind::Deleted;
 	QByteArray previous;
-	QByteArray updated;
 	QString text;
 };
 
@@ -38,7 +37,7 @@ struct MessageHistoryQuery {
 	PeerId migratedPeer;
 	MsgId message;
 	qint64 around = 0;
-	std::optional<MessageHistoryKind> kind;
+	MessageHistoryKind kind = MessageHistoryKind::Deleted;
 	QString search;
 	int limit = 50;
 	int limitAfter = 0;
@@ -68,6 +67,7 @@ public:
 
 	[[nodiscard]] QString add(const std::vector<MessageHistoryEntry> &entries);
 	[[nodiscard]] MessageHistoryPage query(const MessageHistoryQuery &query);
+	[[nodiscard]] bool hasEdits(FullMsgId message);
 	[[nodiscard]] MessageHistoryPage range(const MessageHistoryRange &range);
 	[[nodiscard]] QString clear(
 		PeerId peer,

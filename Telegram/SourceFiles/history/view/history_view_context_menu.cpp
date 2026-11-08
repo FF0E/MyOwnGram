@@ -1965,17 +1965,13 @@ void FillContextMenuItems(
 				tr::lng_myowngram_message_history_remove(tr::now),
 				[=] { RemoveMessageHistory(controller, original); },
 				&st::menuIconDelete);
+			const auto hasEdits = saved && !saved->deleted;
 			if (historyAction) {
-				historyAction->setEnabled(saved != nullptr);
+				historyAction->setEnabled(hasEdits);
 			}
-			removeAction->setEnabled(saved != nullptr);
-			if (!saved) {
-				archive->query({
-					.peer = original.peer,
-					.message = original.msg,
-					.limit = 1,
-				}, crl::guard(result, [=](Storage::MessageHistoryPage page) {
-					const auto available = !page.entries.empty();
+			removeAction->setEnabled(hasEdits);
+			if (!hasEdits) {
+				archive->hasEdits(original, crl::guard(result, [=](bool available) {
 					if (historyAction) {
 						historyAction->setEnabled(available);
 					}

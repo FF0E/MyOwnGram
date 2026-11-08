@@ -58,6 +58,7 @@ public:
 	void query(
 		Storage::MessageHistoryQuery query,
 		Fn<void(Storage::MessageHistoryPage)> done);
+	void hasEdits(FullMsgId message, Fn<void(bool)> done);
 	void range(
 		Storage::MessageHistoryRange range,
 		Fn<void(Storage::MessageHistoryPage)> done);

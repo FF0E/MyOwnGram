@@ -308,10 +308,7 @@ void MessageHistory::afterEdit(
 	if (previous->content == Serialize::MessageHistory::Content(item)) {
 		return;
 	}
-	auto &entry = previous->entry;
-	entry.updated = Serialize::MessageHistory::Write(item);
-	entry.text += '\n' + Serialize::MessageHistory::SearchText(item);
-	add(std::move(entry));
+	add(std::move(previous->entry));
 }
 
 Fn<void()> MessageHistory::changingItem(FullMsgId id) {
@@ -575,6 +572,22 @@ void MessageHistory::query(
 		crl::on_main(weak, [done, result = std::move(result)]() mutable {
 			done(std::move(result));
 		});
+	});
+}
+
+void MessageHistory::hasEdits(FullMsgId message, Fn<void(bool)> done) {
+	if (!_available) {
+		done(false);
+		return;
+	}
+	flush();
+	worker().with([
+		weak = base::make_weak(this),
+		message,
+		done = std::move(done)
+	](Storage::MessageHistoryDatabase &database) {
+		const auto result = database.hasEdits(message);
+		crl::on_main(weak, [=] { done(result); });
 	});
 }
 

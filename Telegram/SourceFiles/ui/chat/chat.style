@@ -500,18 +500,6 @@ historyAdminLogSearchTop: 11px;
 historyAdminLogSearchSlideDuration: 150;
 historyAdminLogTopBarLeft: 17px;
 historyAdminLogTopBarUserpicSkip: 35px;
-messageHistoryFilter: RoundButton(defaultLightButton) {
-	width: -16px;
-	height: 32px;
-	textTop: 8px;
-	textBg: topBarBg;
-	textBgOver: lightButtonBgOver;
-	textFg: windowSubTextFg;
-	textFgOver: windowFg;
-	icon: icon{{ "intro_country_dropdown", windowSubTextFg }};
-	iconOver: icon{{ "intro_country_dropdown", windowFg }};
-	iconPosition: point(-6px, 12px);
-}
 historyAdminLogWhatIsThis: IconButton(historyAttach) {
 	icon: icon {{ "menu/faq", windowActiveTextFg }};
 	iconOver: icon {{ "menu/faq", windowActiveTextFg }};
