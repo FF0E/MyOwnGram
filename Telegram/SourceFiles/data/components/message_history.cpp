@@ -68,7 +68,6 @@ MessagesSlice MergeDeletedMessages(
 	result.ids.erase(ranges::remove_if(result.ids, [&](FullMsgId id) {
 		return state.items.contains(id);
 	}), result.ids.end());
-	const auto liveCount = result.ids.size();
 	for (const auto &[id, item] : state.items) {
 		result.ids.push_back(item->fullId());
 		result.ownedItems.push_back(item);
@@ -81,13 +80,7 @@ MessagesSlice MergeDeletedMessages(
 		const auto p = position(id);
 		return std::tuple(p.date, !IsServerMsgId(p.fullId.msg), p.fullId);
 	};
-	const auto middle = result.ids.begin() + liveCount;
-	ranges::sort(middle, result.ids.end(), std::less<>(), key);
-	std::inplace_merge(
-		result.ids.begin(),
-		middle,
-		result.ids.end(),
-		[&](FullMsgId a, FullMsgId b) { return key(a) < key(b); });
+	ranges::sort(result.ids, std::less<>(), key);
 	const auto find = [&](FullMsgId id) {
 		return ranges::find(
 			result.ids,
