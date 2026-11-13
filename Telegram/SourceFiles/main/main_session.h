@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include <crl/crl_object_on_queue.h>
 #include <rpl/filter.h>
 #include <rpl/variable.h>
 #include "base/timer.h"
@@ -67,6 +68,10 @@ class Account;
 class Domain;
 } // namespace Storage
 
+namespace Storage::Sqlite {
+class Database;
+} // namespace Storage::Sqlite
+
 namespace Window {
 class SessionController;
 struct TermsLock;
@@ -124,6 +129,8 @@ public:
 
 	[[nodiscard]] Account &account() const;
 	[[nodiscard]] Storage::Account &local() const;
+	[[nodiscard]] auto localDatabase()
+		-> crl::object_on_queue<Storage::Sqlite::Database> &;
 	[[nodiscard]] Domain &domain() const;
 	[[nodiscard]] Storage::Domain &domainLocal() const;
 
@@ -323,6 +330,7 @@ private:
 
 	const UserId _userId;
 	const not_null<Account*> _account;
+	std::unique_ptr<crl::object_on_queue<Storage::Sqlite::Database>> _localDatabase;
 
 	const std::unique_ptr<SessionSettings> _settings;
 	const std::unique_ptr<Data::Changes> _changes;

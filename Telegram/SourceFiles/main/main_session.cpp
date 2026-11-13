@@ -29,6 +29,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "storage/file_upload.h"
 #include "storage/storage_account.h"
 #include "storage/storage_facade.h"
+#include "storage/storage_message_history.h"
+#include "storage/storage_sqlite.h"
 #include "data/components/credits.h"
 #include "data/components/ephemeral_messages.h"
 #include "data/components/factchecks.h"
@@ -64,6 +66,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/application.h"
 #include "ui/text/text_utilities.h"
 #include "ui/layers/generic_box.h"
+
+#include <QtCore/QFileInfo>
+
 #include "styles/style_layers.h"
 
 #ifndef TDESKTOP_DISABLE_SPELLCHECK
@@ -330,7 +335,12 @@ QByteArray Session::validTmpPassword() const {
 
 // Can be called only right before ~Session.
 void Session::finishLogout() {
-	_messageHistory->erase();
+	_messageHistory->finishLogout();
+	if (_localDatabase || QFileInfo::exists(local().localDatabasePath())) {
+		localDatabase().with([](Storage::Sqlite::Database &database) {
+			database.erase();
+		});
+	}
 	Wallet::CloseWallet(this);
 	unlockTerms();
 	data().clear();
@@ -351,6 +361,21 @@ Account &Session::account() const {
 
 Storage::Account &Session::local() const {
 	return _account->local();
+}
+
+crl::object_on_queue<Storage::Sqlite::Database> &Session::localDatabase() {
+	if (!_localDatabase) {
+		_localDatabase = std::make_unique<
+			crl::object_on_queue<Storage::Sqlite::Database>>(
+				local().localDatabasePath(),
+				local().localDatabaseKey());
+		_localDatabase->with([](Storage::Sqlite::Database &database) {
+			if (!Storage::MessageHistory::Initialize(database)) {
+				database.close();
+			}
+		});
+	}
+	return *_localDatabase;
 }
 
 Domain &Session::domain() const {

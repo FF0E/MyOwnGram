@@ -95,8 +95,8 @@ This atlas divides Telegram Desktop's sources into named areas, ordered from fou
 - DC options and config, auth keys, sessions and resending, TCP, HTTP and TLS connections, proxies and checks, special-config fallback, dedicated loaders, the TL schemes and the tde2e end-to-end binding. It knows nothing about messages, peers or UI.
 
 ### storage/local — encrypted local persistence
-- Paths: `SourceFiles/storage/storage_account*`, `SourceFiles/storage/storage_domain*`, `SourceFiles/storage/localstorage*`, `SourceFiles/storage/details/`, `SourceFiles/storage/serialize_*`, `SourceFiles/storage/storage_file_lock*`
-- The tdata of accounts and the domain, the settings scheme, serializers and file locks. It must not own file transfer.
+- Paths: `SourceFiles/storage/storage_account*`, `SourceFiles/storage/storage_domain*`, `SourceFiles/storage/localstorage*`, `SourceFiles/storage/details/`, `SourceFiles/storage/serialize_*`, `SourceFiles/storage/storage_file_lock*`, `SourceFiles/storage/storage_sqlite*`, `SourceFiles/storage/storage_message_history*`
+- The tdata of accounts and the domain, the settings scheme, serializers, file locks and encrypted local SQL storage. `storage_sqlite` owns database mechanics; feature storage modules own their tables and queries and use the per-account queue exposed by `Main::Session::localDatabase()`. It must not own file transfer.
 
 ### storage/transfer — downloads and uploads
 - Paths: `SourceFiles/storage/`, `SourceFiles/ui/image/image_location*`

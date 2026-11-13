@@ -283,9 +283,9 @@ base::flat_set<QString> Account::collectGoodNames() const {
 		"map1",
 		"maps",
 		"configs",
-		"message-history.sqlite",
-		"message-history.sqlite-wal",
-		"message-history.sqlite-shm",
+		"myowngram.sqlite",
+		"myowngram.sqlite-wal",
+		"myowngram.sqlite-shm",
 	};
 	const auto push = [&](FileKey key) {
 		if (!key) {
@@ -1892,14 +1892,14 @@ Core::FileLocation Account::readFileLocation(MediaKey location) {
 	return Core::FileLocation();
 }
 
-QString Account::messageHistoryPath() const {
-	return _basePath + u"message-history.sqlite"_q;
+QString Account::localDatabasePath() const {
+	return _basePath + u"myowngram.sqlite"_q;
 }
 
-QByteArray Account::messageHistoryKey() const {
+QByteArray Account::localDatabaseKey() const {
 	Expects(_localKey != nullptr);
 
-	const auto context = "myowngram-message-history:"
+	const auto context = "myowngram-database:"
 		+ QByteArray::number(_dataNameKey, 16);
 	const auto key = openssl::HmacSha256(
 		bytes::make_span(_localKey->data()),

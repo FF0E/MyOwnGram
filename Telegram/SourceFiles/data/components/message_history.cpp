@@ -25,6 +25,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session_settings.h"
 #include "storage/serialize_message_history.h"
 #include "storage/storage_account.h"
+#include "storage/storage_sqlite.h"
 
 #include <QtCore/QDateTime>
 #include <QtCore/QFileInfo>
@@ -137,7 +138,7 @@ MessageHistory::MessageHistory(not_null<Main::Session*> session)
 , _download(Download(session->local().readPref<QByteArray>(
 	kDownload,
 	QByteArray::number(int(Download::Automatic))).toInt()))
-, _available(QFileInfo::exists(session->local().messageHistoryPath()))
+, _available(QFileInfo::exists(session->local().localDatabasePath()))
 , _flushTimer([=] { flush(); })
 , _expireTimer([=] { expire(); }) {
 	if (_available && retention()) {
@@ -153,9 +154,9 @@ MessageHistory::~MessageHistory() {
 		}
 	}
 	if (!entries.empty()) {
-		worker().with([entries = std::move(entries)](
-				Storage::MessageHistoryDatabase &database) {
-			const auto error = database.add(entries);
+		_session->localDatabase().with([entries = std::move(entries)](
+				Storage::Sqlite::Database &database) {
+			const auto error = Storage::MessageHistory::Add(database, entries);
 			if (!error.isEmpty()) {
 				LOG(("Message history: %1").arg(error));
 			}
@@ -249,15 +250,6 @@ void MessageHistory::setDownload(Download value) {
 		kDownload,
 		QByteArray::number(int(value)));
 	_download = value;
-}
-
-MessageHistory::Worker &MessageHistory::worker() {
-	if (!_worker) {
-		_worker = std::make_unique<Worker>(
-			_session->local().messageHistoryPath(),
-			_session->local().messageHistoryKey());
-	}
-	return *_worker;
 }
 
 bool MessageHistory::captures(not_null<HistoryItem*> item) const {
@@ -526,13 +518,13 @@ void MessageHistory::flush() {
 		_savingTill = id;
 	}
 	++_queuedRevision;
-	worker().with([
+	_session->localDatabase().with([
 		weak = base::make_weak(this),
 		till = _savingTill,
 		peers = std::move(peers),
 		entries = std::move(entries)
-	](Storage::MessageHistoryDatabase &database) {
-		const auto error = database.add(entries);
+	](Storage::Sqlite::Database &database) {
+		const auto error = Storage::MessageHistory::Add(database, entries);
 		crl::on_main(weak, [=] {
 			weak->_savingTill = 0;
 			if (!error.isEmpty()) {
@@ -568,12 +560,12 @@ void MessageHistory::query(
 		return;
 	}
 	flush();
-	worker().with([
+	_session->localDatabase().with([
 		weak = base::make_weak(this),
 		query = std::move(query),
 		done = std::move(done)
-	](Storage::MessageHistoryDatabase &database) {
-		auto result = database.query(query);
+	](Storage::Sqlite::Database &database) {
+		auto result = Storage::MessageHistory::Query(database, query);
 		crl::on_main(weak, [done, result = std::move(result)]() mutable {
 			done(std::move(result));
 		});
@@ -586,12 +578,12 @@ void MessageHistory::hasEdits(FullMsgId message, Fn<void(bool)> done) {
 		return;
 	}
 	flush();
-	worker().with([
+	_session->localDatabase().with([
 		weak = base::make_weak(this),
 		message,
 		done = std::move(done)
-	](Storage::MessageHistoryDatabase &database) {
-		const auto result = database.hasEdits(message);
+	](Storage::Sqlite::Database &database) {
+		const auto result = Storage::MessageHistory::HasEdits(database, message);
 		crl::on_main(weak, [=] { done(result); });
 	});
 }
@@ -604,12 +596,12 @@ void MessageHistory::range(
 		return;
 	}
 	flush();
-	worker().with([
+	_session->localDatabase().with([
 		weak = base::make_weak(this),
 		range,
 		done = std::move(done)
-	](Storage::MessageHistoryDatabase &database) {
-		auto result = database.range(range);
+	](Storage::Sqlite::Database &database) {
+		auto result = Storage::MessageHistory::Range(database, range);
 		crl::on_main(weak, [done, result = std::move(result)]() mutable {
 			done(std::move(result));
 		});
@@ -641,16 +633,21 @@ void MessageHistory::clear(
 	}
 	flush();
 	++_queuedRevision;
-	worker().with([
+	_session->localDatabase().with([
 		weak = base::make_weak(this),
 		peer,
 		message,
 		migratedPeer,
 		kind,
 		recordId
-	](Storage::MessageHistoryDatabase &database) {
-		const auto error = database.clear(
-			peer, message, migratedPeer, kind, recordId);
+	](Storage::Sqlite::Database &database) {
+		const auto error = Storage::MessageHistory::Clear(
+			database,
+			peer,
+			message,
+			migratedPeer,
+			kind,
+			recordId);
 		crl::on_main(weak, [=] {
 			weak->report(error, peer);
 			if (error.isEmpty() && migratedPeer) {
@@ -668,11 +665,13 @@ void MessageHistory::expire() {
 		? now.addDays(7 * period)
 		: now.addMonths(-period);
 	++_queuedRevision;
-	worker().with([
+	_session->localDatabase().with([
 		weak = base::make_weak(this),
 		before = before.toSecsSinceEpoch()
-	](Storage::MessageHistoryDatabase &database) {
-		const auto [removed, error] = database.expire(before);
+	](Storage::Sqlite::Database &database) {
+		const auto [removed, error] = Storage::MessageHistory::Expire(
+			database,
+			before);
 		if (removed || !error.isEmpty()) {
 			crl::on_main(weak, [=] {
 				if (!error.isEmpty()) {
@@ -687,16 +686,11 @@ void MessageHistory::expire() {
 	_expireTimer.callOnce(kExpireInterval);
 }
 
-void MessageHistory::erase() {
+void MessageHistory::finishLogout() {
 	_pending.clear();
 	_flushTimer.cancel();
 	_expireTimer.cancel();
-	if (_available || _worker) {
-		++_queuedRevision;
-		worker().with([](Storage::MessageHistoryDatabase &database) {
-			database.erase();
-		});
-	}
+	++_queuedRevision;
 	_available = false;
 }
 

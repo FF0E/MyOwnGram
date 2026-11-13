@@ -7,171 +7,35 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "storage/storage_message_history.h"
 
-#include <QtCore/QFile>
-#include <limits>
-#include <sqlite3.h>
+#include "storage/storage_sqlite.h"
 
-namespace Storage {
+#include <limits>
+
+namespace Storage::MessageHistory {
 namespace {
 
 constexpr auto kColumns = "id,peer,message,topic,sublist,saved,"
 	"kind,previous";
 
-class Statement final {
-public:
-	Statement(sqlite3 *database, const char *sql, QString &error);
-	Statement(const Statement&) = delete;
-	~Statement();
-
-	void bind(int index, qint64 value);
-	void bind(int index, const QByteArray &value);
-	void bindText(int index, const QString &value);
-	void reset();
-	[[nodiscard]] bool next();
-	[[nodiscard]] bool run();
-	[[nodiscard]] MessageHistoryEntry entry() const;
-
-private:
-	void check(int result);
-
-	sqlite3 *const _database;
-	QString &_error;
-	sqlite3_stmt *_statement = nullptr;
-
-};
-
-Statement::Statement(sqlite3 *database, const char *sql, QString &error)
-: _database(database)
-, _error(error) {
-	check(sqlite3_prepare_v2(database, sql, -1, &_statement, nullptr));
-}
-
-Statement::~Statement() {
-	sqlite3_finalize(_statement);
-}
-
-void Statement::check(int result) {
-	if (result != SQLITE_OK && _error.isEmpty()) {
-		_error = QString::fromUtf8(sqlite3_errmsg(_database));
-	}
-}
-
-void Statement::bind(int index, qint64 value) {
-	if (_statement) {
-		check(sqlite3_bind_int64(_statement, index, value));
-	}
-}
-
-void Statement::bind(int index, const QByteArray &value) {
-	if (_statement) {
-		check(sqlite3_bind_blob64(
-			_statement,
-			index,
-			value.constData(),
-			quint64(value.size()),
-			SQLITE_STATIC));
-	}
-}
-
-void Statement::bindText(int index, const QString &value) {
-	if (_statement) {
-		const auto utf8 = value.toUtf8();
-		check(sqlite3_bind_text64(
-			_statement,
-			index,
-			utf8.constData(),
-			quint64(utf8.size()),
-			SQLITE_TRANSIENT,
-			SQLITE_UTF8));
-	}
-}
-
-void Statement::reset() {
-	if (_statement) {
-		check(sqlite3_reset(_statement));
-		check(sqlite3_clear_bindings(_statement));
-	}
-}
-
-bool Statement::next() {
-	if (!_error.isEmpty()) {
-		return false;
-	}
-	const auto result = sqlite3_step(_statement);
-	if (result == SQLITE_ROW) {
-		return true;
-	} else if (result != SQLITE_DONE) {
-		check(result);
-	}
-	return false;
-}
-
-bool Statement::run() {
-	if (!_error.isEmpty()) {
-		return false;
-	}
-	const auto result = sqlite3_step(_statement);
-	if (result == SQLITE_DONE) {
-		return true;
-	}
-	check(result);
-	return false;
-}
-
-MessageHistoryEntry Statement::entry() const {
-	const auto number = [&](int column) {
-		return sqlite3_column_int64(_statement, column);
-	};
-	const auto blob = [&](int column) {
-		return QByteArray(
-			static_cast<const char*>(sqlite3_column_blob(_statement, column)),
-			sqlite3_column_bytes(_statement, column));
-	};
+MessageHistoryEntry ReadEntry(const Sqlite::Statement &statement) {
 	return {
-		.id = number(0),
+		.id = statement.number(0),
 		.message = FullMsgId(
-			DeserializePeerId(quint64(number(1))),
-			MsgId(number(2))),
-		.topic = MsgId(number(3)),
-		.sublist = DeserializePeerId(quint64(number(4))),
-		.savedAt = number(5),
-		.kind = MessageHistoryKind(number(6)),
-		.previous = blob(7),
+			DeserializePeerId(quint64(statement.number(1))),
+			MsgId(statement.number(2))),
+		.topic = MsgId(statement.number(3)),
+		.sublist = DeserializePeerId(quint64(statement.number(4))),
+		.savedAt = statement.number(5),
+		.kind = MessageHistoryKind(statement.number(6)),
+		.previous = statement.blob(7),
 	};
 }
 
 } // namespace
 
-MessageHistoryDatabase::MessageHistoryDatabase(
-		QString path,
-		const QByteArray &key)
-: _path(std::move(path)) {
-	const auto name = _path.toUtf8();
-	const auto opened = sqlite3_open_v2(
-		name.constData(),
-		&_database,
-		SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOMUTEX,
-		nullptr);
-	if (opened != SQLITE_OK) {
-		_error = QString::fromUtf8(sqlite3_errmsg(_database));
-		close();
-		return;
-	}
-	const auto rawKey = "x'" + key.toHex() + '\'';
-	if (sqlite3_key(
-			_database,
-			rawKey.constData(),
-			int(rawKey.size())) != SQLITE_OK) {
-		_error = QString::fromUtf8(sqlite3_errmsg(_database));
-		close();
-		return;
-	}
-	if (!execute(R"SQL(
-		PRAGMA auto_vacuum=INCREMENTAL;
-		PRAGMA journal_mode=WAL;
-		PRAGMA synchronous=FULL;
-		PRAGMA temp_store=MEMORY;
-		CREATE TABLE IF NOT EXISTS events (
+bool Initialize(Sqlite::Database &database) {
+	return database.execute(R"SQL(
+		CREATE TABLE IF NOT EXISTS message_history (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			peer INTEGER NOT NULL,
 			message INTEGER NOT NULL,
@@ -180,71 +44,42 @@ MessageHistoryDatabase::MessageHistoryDatabase(
 			saved INTEGER NOT NULL,
 			kind INTEGER NOT NULL,
 			previous BLOB NOT NULL,
-			updated BLOB NOT NULL,
 			text TEXT NOT NULL
 		);
-		CREATE INDEX IF NOT EXISTS events_deleted_history
-			ON events(peer,id) WHERE kind=0;
-		DROP INDEX IF EXISTS events_chat;
-		CREATE INDEX IF NOT EXISTS events_message ON events(peer,message,id);
-		CREATE INDEX IF NOT EXISTS events_age ON events(saved);
-		CREATE UNIQUE INDEX IF NOT EXISTS events_deleted
-			ON events(peer,message) WHERE kind=0;
-		CREATE VIRTUAL TABLE IF NOT EXISTS events_text USING fts5(
-			text,content='events',content_rowid='id',
+		CREATE INDEX IF NOT EXISTS message_history_deleted_history
+			ON message_history(peer,id) WHERE kind=0;
+		CREATE INDEX IF NOT EXISTS message_history_message
+			ON message_history(peer,message,id);
+		CREATE INDEX IF NOT EXISTS message_history_age ON message_history(saved);
+		CREATE UNIQUE INDEX IF NOT EXISTS message_history_deleted
+			ON message_history(peer,message) WHERE kind=0;
+		CREATE VIRTUAL TABLE IF NOT EXISTS message_history_text USING fts5(
+			text,content='message_history',content_rowid='id',
 			tokenize='unicode61 remove_diacritics 2'
 		);
-		CREATE TRIGGER IF NOT EXISTS events_insert AFTER INSERT ON events BEGIN
-			INSERT INTO events_text(rowid,text) VALUES(new.id,new.text);
+		CREATE TRIGGER IF NOT EXISTS message_history_insert
+		AFTER INSERT ON message_history BEGIN
+			INSERT INTO message_history_text(rowid,text) VALUES(new.id,new.text);
 		END;
-		CREATE TRIGGER IF NOT EXISTS events_delete AFTER DELETE ON events BEGIN
-			INSERT INTO events_text(events_text,rowid,text)
+		CREATE TRIGGER IF NOT EXISTS message_history_delete
+		AFTER DELETE ON message_history BEGIN
+			INSERT INTO message_history_text(message_history_text,rowid,text)
 				VALUES('delete',old.id,old.text);
 		END;
-	)SQL")) {
-		close();
-	}
+	)SQL");
 }
 
-MessageHistoryDatabase::~MessageHistoryDatabase() {
-	close();
-}
-
-void MessageHistoryDatabase::close() {
-	if (_database) {
-		sqlite3_close_v2(base::take(_database));
-	}
-}
-
-bool MessageHistoryDatabase::execute(const char *sql) {
-	if (sqlite3_exec(_database, sql, nullptr, nullptr, nullptr) == SQLITE_OK) {
-		return true;
-	}
-	_error = QString::fromUtf8(sqlite3_errmsg(_database));
-	return false;
-}
-
-QString MessageHistoryDatabase::add(
+QString Add(
+		Sqlite::Database &database,
 		const std::vector<MessageHistoryEntry> &entries) {
-	if (!_database) {
-		return _error;
-	}
-	_error.clear();
-	if (!execute("BEGIN IMMEDIATE")) {
-		return _error;
-	}
-	auto committed = false;
-	const auto rollback = gsl::finally([&] {
-		if (!committed) {
-			sqlite3_exec(_database, "ROLLBACK", nullptr, nullptr, nullptr);
-		}
-	});
-	auto statement = Statement(_database, R"SQL(
-		INSERT INTO events(
-			peer,message,topic,sublist,saved,kind,previous,updated,text)
-		VALUES(?1,?2,?3,?4,?5,?6,?7,X'',?8)
+	database.clearError();
+	auto transaction = Sqlite::Transaction(database);
+	auto statement = Sqlite::Statement(database, R"SQL(
+		INSERT INTO message_history(
+			peer,message,topic,sublist,saved,kind,previous,text)
+		VALUES(?1,?2,?3,?4,?5,?6,?7,?8)
 		ON CONFLICT(peer,message) WHERE kind=0 DO NOTHING
-	)SQL", _error);
+	)SQL");
 	for (const auto &entry : entries) {
 		statement.bind(1, qint64(SerializePeerId(entry.message.peer)));
 		statement.bind(2, entry.message.msg.bare);
@@ -255,25 +90,24 @@ QString MessageHistoryDatabase::add(
 		statement.bind(7, entry.previous);
 		statement.bindText(8, entry.text);
 		if (!statement.run()) {
-			return _error;
+			return database.error();
 		}
 		statement.reset();
 	}
-	committed = execute("COMMIT");
-	return _error;
+	transaction.commit();
+	return database.error();
 }
 
-MessageHistoryPage MessageHistoryDatabase::query(
+MessageHistoryPage Query(
+		Sqlite::Database &database,
 		const MessageHistoryQuery &query) {
-	if (!_database) {
-		return { .error = _error };
-	}
-	_error.clear();
+	database.clearError();
 	const auto searching = !query.search.isEmpty();
 	const auto migrated = query.migratedPeer && query.migratedPeer != query.peer;
-	auto prefix = QByteArray("SELECT ") + kColumns + " FROM events";
+	auto prefix = QByteArray("SELECT ") + kColumns + " FROM message_history";
 	if (searching) {
-		prefix += " JOIN events_text ON events_text.rowid=events.id";
+		prefix += " JOIN message_history_text"
+			" ON message_history_text.rowid=message_history.id";
 	}
 	prefix += migrated ? " WHERE (peer=?1 OR peer=?7)" : " WHERE peer=?1";
 	if (query.message) {
@@ -281,7 +115,7 @@ MessageHistoryPage MessageHistoryDatabase::query(
 	}
 	prefix += " AND kind=?4";
 	if (searching) {
-		prefix += " AND events_text MATCH ?5";
+		prefix += " AND message_history_text MATCH ?5";
 	}
 	auto result = MessageHistoryPage();
 	for (const auto before : { true, false }) {
@@ -291,7 +125,7 @@ MessageHistoryPage MessageHistoryDatabase::query(
 		const auto sql = prefix + (before
 			? " AND id<=?3 ORDER BY id DESC LIMIT ?6"
 			: " AND id>?3 ORDER BY id LIMIT ?6");
-		auto statement = Statement(_database, sql.constData(), _error);
+		auto statement = Sqlite::Statement(database, sql.constData());
 		statement.bind(1, qint64(SerializePeerId(query.peer)));
 		if (migrated) {
 			statement.bind(7, qint64(SerializePeerId(query.migratedPeer)));
@@ -315,7 +149,7 @@ MessageHistoryPage MessageHistoryDatabase::query(
 				(before ? result.moreBefore : result.moreAfter) = true;
 				break;
 			}
-			entries.push_back(statement.entry());
+			entries.push_back(ReadEntry(statement));
 		}
 		if (before) {
 			result.entries = std::move(entries);
@@ -327,31 +161,27 @@ MessageHistoryPage MessageHistoryDatabase::query(
 				std::make_move_iterator(entries.end()));
 		}
 	}
-	result.error = _error;
+	result.error = database.error();
 	return result;
 }
 
-bool MessageHistoryDatabase::hasEdits(FullMsgId message) {
-	if (!_database) {
-		return false;
-	}
-	_error.clear();
-	auto statement = Statement(_database,
-		"SELECT 1 FROM events WHERE peer=?1 AND message=?2 AND kind=1 LIMIT 1",
-		_error);
+bool HasEdits(Sqlite::Database &database, FullMsgId message) {
+	database.clearError();
+	auto statement = Sqlite::Statement(
+		database,
+		"SELECT 1 FROM message_history"
+		" WHERE peer=?1 AND message=?2 AND kind=1 LIMIT 1");
 	statement.bind(1, qint64(SerializePeerId(message.peer)));
 	statement.bind(2, message.msg.bare);
 	return statement.next();
 }
 
-MessageHistoryPage MessageHistoryDatabase::range(
+MessageHistoryPage Range(
+		Sqlite::Database &database,
 		const MessageHistoryRange &range) {
-	if (!_database) {
-		return { .error = _error };
-	}
-	_error.clear();
+	database.clearError();
 	const auto prefix = QByteArray("SELECT ") + kColumns + R"SQL(
-		FROM events WHERE peer=?1 AND kind=0
+		FROM message_history WHERE peer=?1 AND kind=0
 		AND (?2=0 OR topic=?2 OR message=?2)
 		AND (?3=0 OR sublist=?3)
 	)SQL";
@@ -361,7 +191,7 @@ MessageHistoryPage MessageHistoryDatabase::range(
 			? " AND message<=?4 ORDER BY message DESC LIMIT ?5"
 			: " AND message>?4 ORDER BY message LIMIT ?5");
 		const auto limit = before ? range.limitBefore + 1 : range.limitAfter;
-		auto statement = Statement(_database, sql.constData(), _error);
+		auto statement = Sqlite::Statement(database, sql.constData());
 		statement.bind(1, qint64(SerializePeerId(range.peer)));
 		statement.bind(2, range.topic.bare);
 		statement.bind(3, range.sublist
@@ -375,66 +205,54 @@ MessageHistoryPage MessageHistoryDatabase::range(
 				(before ? result.moreBefore : result.moreAfter) = true;
 				break;
 			}
-			result.entries.push_back(statement.entry());
+			result.entries.push_back(ReadEntry(statement));
 		}
 		if (before) {
 			ranges::reverse(result.entries);
 		}
 	}
-	result.error = _error;
+	result.error = database.error();
 	return result;
 }
 
-QString MessageHistoryDatabase::clear(
+QString Clear(
+		Sqlite::Database &database,
 		PeerId peer,
 		MsgId message,
 		PeerId migratedPeer,
 		std::optional<MessageHistoryKind> kind,
 		qint64 recordId) {
-	if (!_database) {
-		return _error;
-	}
-	_error.clear();
-	auto statement = Statement(_database,
-		"DELETE FROM events WHERE (peer=?1 OR peer=?2)"
+	database.clearError();
+	auto statement = Sqlite::Statement(
+		database,
+		"DELETE FROM message_history WHERE (peer=?1 OR peer=?2)"
 		" AND (?3=0 OR message=?3) AND (?4=-1 OR kind=?4)"
-		" AND (?5=0 OR id=?5)", _error);
+		" AND (?5=0 OR id=?5)");
 	statement.bind(1, qint64(SerializePeerId(peer)));
 	statement.bind(2, qint64(SerializePeerId(migratedPeer ? migratedPeer : peer)));
 	statement.bind(3, message.bare);
 	statement.bind(4, kind ? qint64(*kind) : -1);
 	statement.bind(5, recordId);
-	if (!statement.run() || !execute("PRAGMA incremental_vacuum")) {
-		return _error;
+	if (!statement.run() || !database.execute("PRAGMA incremental_vacuum")) {
+		return database.error();
 	}
 	return QString();
 }
 
-std::pair<int, QString> MessageHistoryDatabase::expire(qint64 before) {
-	if (!_database) {
-		return { 0, _error };
-	}
-	_error.clear();
-	auto statement = Statement(
-		_database,
-		"DELETE FROM events WHERE saved<?1",
-		_error);
+std::pair<int, QString> Expire(Sqlite::Database &database, qint64 before) {
+	database.clearError();
+	auto statement = Sqlite::Statement(
+		database,
+		"DELETE FROM message_history WHERE saved<?1");
 	statement.bind(1, before);
 	if (!statement.run()) {
-		return { 0, _error };
+		return { 0, database.error() };
 	}
-	const auto removed = sqlite3_changes(_database);
-	if (removed && !execute("PRAGMA incremental_vacuum")) {
-		return { removed, _error };
+	const auto removed = database.changes();
+	if (removed && !database.execute("PRAGMA incremental_vacuum")) {
+		return { removed, database.error() };
 	}
 	return { removed, QString() };
 }
 
-void MessageHistoryDatabase::erase() {
-	close();
-	QFile::remove(_path);
-	QFile::remove(_path + u"-wal"_q);
-	QFile::remove(_path + u"-shm"_q);
-}
-
-} // namespace Storage
+} // namespace Storage::MessageHistory

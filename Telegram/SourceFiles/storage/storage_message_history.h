@@ -12,7 +12,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtCore/QByteArray>
 #include <QtCore/QString>
 
-struct sqlite3;
+namespace Storage::Sqlite {
+class Database;
+} // namespace Storage::Sqlite
 
 namespace Storage {
 
@@ -59,33 +61,30 @@ struct MessageHistoryPage {
 	bool moreAfter = false;
 };
 
-class MessageHistoryDatabase final {
-public:
-	MessageHistoryDatabase(QString path, const QByteArray &key);
-	MessageHistoryDatabase(const MessageHistoryDatabase&) = delete;
-	~MessageHistoryDatabase();
+namespace MessageHistory {
 
-	[[nodiscard]] QString add(const std::vector<MessageHistoryEntry> &entries);
-	[[nodiscard]] MessageHistoryPage query(const MessageHistoryQuery &query);
-	[[nodiscard]] bool hasEdits(FullMsgId message);
-	[[nodiscard]] MessageHistoryPage range(const MessageHistoryRange &range);
-	[[nodiscard]] QString clear(
-		PeerId peer,
-		MsgId message,
-		PeerId migratedPeer,
-		std::optional<MessageHistoryKind> kind,
-		qint64 recordId);
-	[[nodiscard]] std::pair<int, QString> expire(qint64 before);
-	void erase();
+[[nodiscard]] bool Initialize(Sqlite::Database &database);
+[[nodiscard]] QString Add(
+	Sqlite::Database &database,
+	const std::vector<MessageHistoryEntry> &entries);
+[[nodiscard]] MessageHistoryPage Query(
+	Sqlite::Database &database,
+	const MessageHistoryQuery &query);
+[[nodiscard]] bool HasEdits(Sqlite::Database &database, FullMsgId message);
+[[nodiscard]] MessageHistoryPage Range(
+	Sqlite::Database &database,
+	const MessageHistoryRange &range);
+[[nodiscard]] QString Clear(
+	Sqlite::Database &database,
+	PeerId peer,
+	MsgId message,
+	PeerId migratedPeer,
+	std::optional<MessageHistoryKind> kind,
+	qint64 recordId);
+[[nodiscard]] std::pair<int, QString> Expire(
+	Sqlite::Database &database,
+	qint64 before);
 
-private:
-	[[nodiscard]] bool execute(const char *sql);
-	void close();
-
-	const QString _path;
-	sqlite3 *_database = nullptr;
-	QString _error;
-
-};
+} // namespace MessageHistory
 
 } // namespace Storage

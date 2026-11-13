@@ -10,7 +10,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/flat_set.h"
 #include "base/timer.h"
 #include "base/weak_ptr.h"
-#include <crl/crl_object_on_queue.h>
 #include "data/data_messages.h"
 #include <rpl/variable.h>
 #include "storage/storage_message_history.h"
@@ -68,7 +67,7 @@ public:
 		MsgId message = {},
 		std::optional<Storage::MessageHistoryKind> kind = {},
 		qint64 recordId = 0);
-	void erase();
+	void finishLogout();
 	[[nodiscard]] rpl::producer<PeerId> changes() const;
 	[[nodiscard]] rpl::producer<> errors() const;
 
@@ -99,9 +98,6 @@ private:
 		std::weak_ptr<HistoryItem> item;
 	};
 
-	using Worker = crl::object_on_queue<Storage::MessageHistoryDatabase>;
-
-	[[nodiscard]] Worker &worker();
 	[[nodiscard]] bool captures(not_null<HistoryItem*> item) const;
 	[[nodiscard]] Storage::MessageHistoryEntry snapshot(
 		not_null<HistoryItem*> item,
@@ -124,7 +120,6 @@ private:
 	rpl::variable<Download> _download = Download::Automatic;
 	bool _available = false;
 	bool _saveFailed = false;
-	std::unique_ptr<Worker> _worker;
 	base::flat_map<qint64, PendingEntry> _pending;
 	base::flat_map<FullMsgId, CachedItem> _inlineItems;
 	qint64 _nextPendingId = 0;

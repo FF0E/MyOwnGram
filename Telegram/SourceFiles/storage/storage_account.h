@@ -89,8 +89,8 @@ public:
 
 	[[nodiscard]] QString tempDirectory() const;
 	[[nodiscard]] QString supportModePath() const;
-	[[nodiscard]] QString messageHistoryPath() const;
-	[[nodiscard]] QByteArray messageHistoryKey() const;
+	[[nodiscard]] QString localDatabasePath() const;
+	[[nodiscard]] QByteArray localDatabaseKey() const;
 
 	[[nodiscard]] MTP::AuthKeyPtr peekLegacyLocalKey() const {
 		return _localKey;
