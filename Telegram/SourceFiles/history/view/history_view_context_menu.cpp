@@ -109,6 +109,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "info/statistics/info_statistics_widget.h"
 #include "lang/lang_keys.h"
 #include "core/application.h"
+#include "core/core_settings.h"
 #include "main/main_app_config.h"
 #include "main/main_session.h"
 #include "main/main_session_settings.h"
@@ -2508,8 +2509,9 @@ void AddWhenEditedForwardedAuthorActionHelper(
 		not_null<HistoryItem*> item,
 		not_null<Window::SessionController*> controller,
 		bool insertSeparator) {
+	const auto hideTime = Core::App().settings().hideMessageMenuTime();
 	if (const auto forwarded = item->Get<HistoryMessageForwarded>()) {
-		if (!forwarded->story && forwarded->psaType.isEmpty()) {
+		if (!hideTime && !forwarded->story && forwarded->psaType.isEmpty()) {
 			if (insertSeparator && !menu->empty()) {
 				menu->addSeparator(&st::expandedMenuSeparator);
 			}
@@ -2518,7 +2520,7 @@ void AddWhenEditedForwardedAuthorActionHelper(
 				Api::WhenOriginal(item->from(), forwarded->originalDate)));
 		}
 	} else if (const auto edited = item->Get<HistoryMessageEdited>()) {
-		if (!item->hideEditedBadge()) {
+		if (!hideTime && !item->hideEditedBadge()) {
 			if (insertSeparator && !menu->empty()) {
 				menu->addSeparator(&st::expandedMenuSeparator);
 			}

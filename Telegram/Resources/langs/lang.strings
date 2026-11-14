@@ -9414,6 +9414,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_message_id" = "Message ID: {id}";
 "lng_myowngram_show_message_id_in_tooltip" = "Show message IDs in timestamp tooltips";
 "lng_myowngram_show_message_seconds" = "Show seconds";
+"lng_myowngram_hide_message_menu_time" = "Hide timestamps in message menus";
 "lng_myowngram_emoji_panel_in_sidebar" = "Keep emoji panel in a popup";
 "lng_myowngram_click_twice_stickers" = "Click twice to send stickers";
 "lng_myowngram_click_twice_gifs" = "Click twice to send GIFs";

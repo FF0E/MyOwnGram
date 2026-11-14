@@ -43,6 +43,8 @@ constexpr auto kShowMessageIdInTooltipKey
 	= std::string_view("myowngram-show-message-id-in-tooltip");
 constexpr auto kShowMessageSecondsKey
 	= std::string_view("myowngram-show-message-seconds");
+constexpr auto kHideMessageMenuTimeKey
+	= std::string_view("myowngram-hide-message-menu-time");
 constexpr auto kClickTwiceToSendStickersKey
 	= std::string_view("myowngram-click-twice-to-send-stickers");
 constexpr auto kClickTwiceToSendGifsKey
@@ -1512,6 +1514,7 @@ void Settings::addFromSerialized(const QByteArray &serialized) {
 	_storySettings = stories;
 	_showMessageIdInTooltip = readPref<bool>(kShowMessageIdInTooltipKey, false);
 	_showMessageSeconds = readPref<bool>(kShowMessageSecondsKey, false);
+	_hideMessageMenuTime = readPref<bool>(kHideMessageMenuTimeKey, false);
 	_clickTwiceToSendStickers = readPref<bool>(
 		kClickTwiceToSendStickersKey,
 		false);
@@ -1579,6 +1582,14 @@ void Settings::setShowMessageSeconds(bool enabled) {
 	}
 	writePref<bool>(kShowMessageSecondsKey, enabled);
 	_showMessageSeconds = enabled;
+}
+
+void Settings::setHideMessageMenuTime(bool enabled) {
+	if (_hideMessageMenuTime.current() == enabled) {
+		return;
+	}
+	writePref<bool>(kHideMessageMenuTimeKey, enabled);
+	_hideMessageMenuTime = enabled;
 }
 
 void Settings::setClickTwiceToSendStickers(bool enabled) {
@@ -2185,6 +2196,7 @@ void Settings::resetOnLastLogout() {
 	writePrefGeneric(kPeerIdDisplayKey, QByteArray::number(int(peerIdDisplay())));
 	writePref<bool>(kShowMessageIdInTooltipKey, showMessageIdInTooltip());
 	writePref<bool>(kShowMessageSecondsKey, showMessageSeconds());
+	writePref<bool>(kHideMessageMenuTimeKey, hideMessageMenuTime());
 	writePref<bool>(kClickTwiceToSendStickersKey, clickTwiceToSendStickers());
 	writePref<bool>(kClickTwiceToSendGifsKey, clickTwiceToSendGifs());
 	writePref<bool>(kPreviewVoiceMessagesKey, previewVoiceMessages());

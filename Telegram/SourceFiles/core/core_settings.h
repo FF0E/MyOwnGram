@@ -1232,6 +1232,14 @@ public:
 	}
 	void setShowMessageSeconds(bool enabled);
 
+	[[nodiscard]] bool hideMessageMenuTime() const {
+		return _hideMessageMenuTime.current();
+	}
+	[[nodiscard]] rpl::producer<bool> hideMessageMenuTimeValue() const {
+		return _hideMessageMenuTime.value();
+	}
+	void setHideMessageMenuTime(bool enabled);
+
 	[[nodiscard]] bool clickTwiceToSendStickers() const {
 		return _clickTwiceToSendStickers.current();
 	}
@@ -1450,6 +1458,7 @@ private:
 	rpl::variable<PeerIdDisplay> _peerIdDisplay = PeerIdDisplay::Hidden;
 	rpl::variable<bool> _showMessageIdInTooltip = false;
 	rpl::variable<bool> _showMessageSeconds = false;
+	rpl::variable<bool> _hideMessageMenuTime = false;
 	rpl::variable<bool> _clickTwiceToSendStickers = false;
 	rpl::variable<bool> _clickTwiceToSendGifs = false;
 	rpl::variable<bool> _previewVoiceMessages = false;

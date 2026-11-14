@@ -652,6 +652,18 @@ const auto kChatsAndProfiles = BuildHelper({
 			settings->setShowMessageSeconds(enabled);
 		}, seconds->lifetime());
 	}
+	const auto menuTime = builder.addButton({
+		.id = u"myowngram/hide-message-menu-time"_q,
+		.title = tr::lng_myowngram_hide_message_menu_time(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = settings->hideMessageMenuTimeValue(),
+		.keywords = { u"time"_q, u"timestamp"_q, u"right click"_q, u"menu"_q },
+	});
+	if (menuTime) {
+		menuTime->toggledValue() | rpl::on_next([=](bool enabled) {
+			settings->setHideMessageMenuTime(enabled);
+		}, menuTime->lifetime());
+	}
 	const auto messageId = builder.addButton({
 		.id = u"myowngram/message-id-tooltip"_q,
 		.title = tr::lng_myowngram_show_message_id_in_tooltip(),
