@@ -4041,6 +4041,9 @@ GlobalMsgId HistoryItem::globalId() const {
 Data::MessagePosition HistoryItem::position() const {
 	// Slice reloads create new local IDs, but scrolling needs a stable position.
 	if (const auto saved = Get<HistoryMessageArchived>()) {
+		if (!saved->inlineCopy && !saved->recordId) {
+			return Data::MaxMessagePosition;
+		}
 		return {
 			.fullId = saved->inlineCopy
 				? saved->original

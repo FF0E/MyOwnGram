@@ -174,6 +174,7 @@ private:
 	void jumpToLatest();
 	void reload();
 	void refresh();
+	void applyPage(Storage::MessageHistoryPage page);
 	void showMenu();
 	[[nodiscard]] Item createItem(const Entry &entry);
 	[[nodiscard]] ViewState saveView();
@@ -186,6 +187,7 @@ private:
 	const not_null<History*> _history;
 	const MsgId _message;
 	std::vector<Item> _rows;
+	QByteArray _latestSnapshot;
 	std::shared_ptr<Ui::ChatTheme> _theme;
 	object_ptr<Ui::ElasticScroll> _scroll;
 	QPointer<ListWidget> _inner;
@@ -685,7 +687,7 @@ bool Widget::listIsLessInOrder(
 		not_null<HistoryItem*> second) {
 	const auto a = first->Get<HistoryMessageArchived>();
 	const auto b = second->Get<HistoryMessageArchived>();
-	return a->recordId < b->recordId;
+	return a->recordId && (!b->recordId || a->recordId < b->recordId);
 }
 
 void Widget::reload() {
@@ -712,32 +714,80 @@ void Widget::refresh() {
 		if (_generation != generation) {
 			return;
 		}
-		_loading = false;
-		_error = page.error;
-		if (!_error.isEmpty()) {
-			controller()->showToast(tr::lng_myowngram_message_history_error(tr::now));
-			updateEmpty();
-			_inner->update();
+		if (!_message || page.moreAfter || !page.error.isEmpty()) {
+			applyPage(std::move(page));
 			return;
 		}
-		_moreBefore = page.moreBefore;
-		_moreAfter = page.moreAfter;
-		auto existing = base::flat_map<qint64, Item>();
-		for (const auto &row : _rows) {
-			existing.emplace(row->Get<HistoryMessageArchived>()->recordId, row);
+		const auto id = FullMsgId(_history->peer->id, _message);
+		if (const auto item = session().data().message(id)) {
+			const auto edited = item->Get<HistoryMessageEdited>();
+			page.entries.insert(page.entries.begin(), Entry{
+				.message = id,
+				.savedAt = std::max<qint64>(
+					edited ? edited->date : item->date(),
+					page.entries.empty() ? 0 : page.entries.front().savedAt),
+				.kind = Kind::Edited,
+				.previous = Serialize::MessageHistory::Write(item),
+			});
+			applyPage(std::move(page));
+			return;
 		}
-		auto rows = std::vector<Item>();
-		rows.reserve(page.entries.size());
-		for (const auto &entry : page.entries | ranges::views::reverse) {
-			const auto i = existing.find(entry.id);
-			rows.push_back(i != existing.end() ? i->second : createItem(entry));
-		}
-		_rows = std::move(rows);
-		_changes.fire({});
-		updateEmpty();
-		_inner->update();
+		session().messageHistory().query({
+			.peer = id.peer,
+			.message = id.msg,
+			.kind = Kind::Deleted,
+			.limit = 1,
+		}, crl::guard(this, [=, page = std::move(page)](
+				Storage::MessageHistoryPage latest) mutable {
+			if (_generation != generation) {
+				return;
+			}
+			page.error = std::move(latest.error);
+			if (!latest.entries.empty()) {
+				auto entry = std::move(latest.entries.front());
+				entry.id = 0;
+				page.entries.insert(page.entries.begin(), std::move(entry));
+			}
+			applyPage(std::move(page));
+		}));
 	}));
 	_queryRevision = session().messageHistory().queuedRevision();
+}
+
+void Widget::applyPage(Storage::MessageHistoryPage page) {
+	_loading = false;
+	_error = page.error;
+	if (!_error.isEmpty()) {
+		controller()->showToast(tr::lng_myowngram_message_history_error(tr::now));
+		updateEmpty();
+		_inner->update();
+		return;
+	}
+	_moreBefore = page.moreBefore;
+	_moreAfter = page.moreAfter;
+	auto existing = base::flat_map<qint64, Item>();
+	for (const auto &row : _rows) {
+		existing.emplace(row->Get<HistoryMessageArchived>()->recordId, row);
+	}
+	auto rows = std::vector<Item>();
+	rows.reserve(page.entries.size());
+	for (const auto &entry : page.entries | ranges::views::reverse) {
+		const auto i = existing.find(entry.id);
+		auto reuse = (i != existing.end());
+		if (!entry.id) {
+			reuse = reuse
+				&& _latestSnapshot == entry.previous
+				&& i->second->date() == entry.savedAt
+				&& i->second->Get<HistoryMessageArchived>()->deleted
+					== (entry.kind == Kind::Deleted);
+			_latestSnapshot = entry.previous;
+		}
+		rows.push_back(reuse ? i->second : createItem(entry));
+	}
+	_rows = std::move(rows);
+	_changes.fire({});
+	updateEmpty();
+	_inner->update();
 }
 
 Item Widget::createItem(const Entry &entry) {
@@ -772,8 +822,9 @@ Data::MessagesSlice Widget::slice(
 		return item->position();
 	});
 	if (i == _rows.end() && _around) {
-		i = ranges::lower_bound(_rows, _around, std::less<>(), [](const Item &item) {
-			return item->Get<HistoryMessageArchived>()->recordId;
+		i = ranges::find_if(_rows, [&](const Item &item) {
+			const auto record = item->Get<HistoryMessageArchived>()->recordId;
+			return !record || record >= _around;
 		});
 	}
 	const auto center = (i == _rows.end()) ? count - 1 : int(i - _rows.begin());
@@ -890,7 +941,9 @@ void Widget::showMenu() {
 			menu->refreshAnimationCache();
 		}
 	};
-	if (!_rows.empty()) {
+	if (ranges::any_of(_rows, [](const Item &item) {
+		return item->Get<HistoryMessageArchived>()->recordId != 0;
+	})) {
 		addClear();
 	} else if (!_query.isEmpty()) {
 		const auto migrated = _history->migrateFrom();
