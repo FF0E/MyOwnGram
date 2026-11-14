@@ -51,6 +51,7 @@ struct ContextMenuRequest {
 	SelectedItems selectedItems;
 	TextForMimeData selectedText;
 	SelectedQuote quote;
+	QPoint globalPosition;
 	bool overSelection = false;
 	PointState pointState = PointState();
 };

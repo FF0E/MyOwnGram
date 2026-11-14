@@ -1931,6 +1931,7 @@ void Filler::fillChatsListActions() {
 	if (all.size() > kTopicsSearchMinCount) {
 		addSearchTopics();
 	}
+	addMessageHistory();
 	addManageChat();
 	addNewMembers();
 	addBoostChat();
@@ -2004,6 +2005,7 @@ void Filler::fillHistoryActions() {
 	addCreateTopic();
 	addInfo();
 	addJumpToBeginning();
+	addMessageHistory();
 	addViewAsTopics();
 	addManageChat();
 	addStoryArchive();
@@ -2016,7 +2018,6 @@ void Filler::fillHistoryActions() {
 	addViewDiscussion();
 	addDirectMessages();
 	addExportChat();
-	addMessageHistory();
 	addTranslate();
 	addReport();
 	addDeleteOwnMessages();
@@ -2059,9 +2060,9 @@ void Filler::fillRepliesActions() {
 	if (_topic) {
 		addInfo();
 		addJumpToBeginning();
-		addManageTopic();
 	}
 	addMessageHistory();
+	addManageTopic();
 	addBoostChat();
 	addCreatePoll();
 	addCreateTodoList();

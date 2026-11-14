@@ -1326,6 +1326,8 @@ bool AddSelectMessageAction(
 		|| (item->isLocal() && !item->isEphemeral())
 		|| item->isService()
 		|| IsAnchoredEphemeral(item)
+		|| !list->delegate()->listAllowsMultiSelect()
+		|| !list->delegate()->listIsItemGoodForSelection(item)
 		|| list->hasSelectRestriction()) {
 		return false;
 	}
@@ -1388,6 +1390,52 @@ bool AddViewStatisticsAction(
 	return true;
 }
 
+void AddEditHistoryAction(
+		not_null<Ui::PopupMenu*> menu,
+		const ContextMenuRequest &request,
+		not_null<ListWidget*> list) {
+	const auto item = request.item;
+	if (!item
+		|| !request.selectedItems.empty()
+		|| !request.selectedText.empty()
+		|| (!item->isRegular() && !item->Has<HistoryMessageArchived>())) {
+		return;
+	}
+	const auto archive = &item->history()->session().messageHistory();
+	const auto original = Data::MessageHistory::OriginalId(item);
+	if (!archive->available()
+		|| list->delegate()->listMessageHistoryId() == original) {
+		return;
+	}
+	const auto controller = list->controller();
+	const auto desiredPosition = request.globalPosition;
+	const auto parent = menu->menu();
+	const auto previous = parent->actions().empty()
+		? QPointer<QAction>()
+		: QPointer<QAction>(parent->actions().back().get());
+	archive->hasEdits(original, crl::guard(parent, [=](bool available) {
+		if (!available) {
+			return;
+		}
+		const auto &actions = parent->actions();
+		const auto i = ranges::find(actions, previous.data());
+		const auto position = (i != end(actions)) ? int(i - begin(actions)) + 1 : 0;
+		parent->insertAction(position, base::make_unique_q<Ui::Menu::Action>(
+			parent,
+			parent->st(),
+			Ui::Menu::CreateAction(
+				parent,
+				tr::lng_myowngram_message_history_message_title(tr::now),
+				[=] { ShowMessageHistory(controller, original.peer, original.msg); }),
+			&st::menuIconGroupLog,
+			&st::menuIconGroupLog));
+		if (!menu->isHidden() && menu->menu() == parent) {
+			menu->prepareGeometryFor(desiredPosition);
+			menu->refreshAnimationCache();
+		}
+	}));
+}
+
 void AddTopMessageActions(
 		not_null<Ui::PopupMenu*> menu,
 		const ContextMenuRequest &request,
@@ -1398,6 +1446,7 @@ void AddTopMessageActions(
 	AddGoToMessageAction(menu, request, list);
 	AddViewRepliesAction(menu, request, list);
 	AddEditMessageAction(menu, request, list);
+	AddEditHistoryAction(menu, request, list);
 	AddFactcheckAction(menu, request, list);
 	AddPinMessageAction(menu, request, list);
 	AddViewStatisticsAction(menu, request, list);
@@ -1945,40 +1994,17 @@ void FillContextMenuItems(
 	if (item && !hasSelection) {
 		AddMessageDetailsAction(result, item, list->controller()->uiShow());
 		const auto saved = item->Get<HistoryMessageArchived>();
-		const auto archive = &item->history()->session().messageHistory();
-		if ((saved || item->isRegular()) && archive->available()) {
-			const auto original = Data::MessageHistory::OriginalId(item);
+		if (saved && saved->recordId && !saved->inlineCopy) {
+			const auto original = saved->original;
+			const auto recordId = saved->recordId;
 			const auto controller = list->controller();
-			const auto historyAction = (list->delegate()->listMessageHistoryId() == original)
-				? nullptr
-				: result->addAction(
-					tr::lng_myowngram_message_history_message_title(tr::now),
-					[=] { ShowMessageHistory(controller, original.peer, original.msg); },
-					&st::menuIconGroupLog).get();
-			if (saved && saved->recordId && !saved->inlineCopy) {
-				const auto recordId = saved->recordId;
-				result->addAction(
-					tr::lng_myowngram_message_history_remove_record(tr::now),
-					[=] { RemoveMessageHistory(controller, original, recordId); },
-					&st::menuIconDelete);
+			if (!result->empty()) {
+				result->addSeparator();
 			}
-			const auto removeAction = result->addAction(
-				tr::lng_myowngram_message_history_remove(tr::now),
-				[=] { RemoveMessageHistory(controller, original); },
+			result->addAction(
+				tr::lng_myowngram_message_history_remove_record(tr::now),
+				[=] { RemoveMessageHistory(controller, original, recordId); },
 				&st::menuIconDelete);
-			const auto hasEdits = saved && !saved->deleted;
-			if (historyAction) {
-				historyAction->setEnabled(hasEdits);
-			}
-			removeAction->setEnabled(hasEdits);
-			if (!hasEdits) {
-				archive->hasEdits(original, crl::guard(result, [=](bool available) {
-					if (historyAction) {
-						historyAction->setEnabled(available);
-					}
-					removeAction->setEnabled(available);
-				}));
-			}
 		}
 	}
 	if (!skipWhoReacted) {

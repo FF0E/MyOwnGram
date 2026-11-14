@@ -4230,8 +4230,10 @@ void ListWidget::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 		}
 	}
 
+	const auto desiredPosition = e->globalPos();
 	auto request = ContextMenuRequest(controller());
 
+	request.globalPosition = desiredPosition;
 	request.link = link;
 	request.view = _overElement;
 	request.item = overItem;
@@ -4258,7 +4260,6 @@ void ListWidget::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 	}
 
 	using namespace HistoryView::Reactions;
-	const auto desiredPosition = e->globalPos();
 	const auto reactItem = (_overElement
 		&& _overState.pointState != PointState::Outside)
 		? _overElement->data().get()

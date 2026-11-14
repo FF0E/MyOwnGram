@@ -278,8 +278,6 @@ Widget::Widget(
 		} else if (!_query.isEmpty()) {
 			_search->clear();
 			applySearch();
-		} else {
-			controller->showSettings(Settings::MessageHistoryId());
 		}
 	});
 	_search->changes() | rpl::on_next([=] {
@@ -843,13 +841,11 @@ void Widget::updateEmpty() {
 		height);
 	_emptyActionText = !_error.isEmpty()
 		? tr::lng_bot_download_retry(tr::now)
-		: !_query.isEmpty()
-		? tr::lng_sr_clear_search(tr::now)
-		: tr::lng_menu_settings(tr::now);
+		: tr::lng_sr_clear_search(tr::now);
 	_emptyAction->moveToLeft(
 		(width() - _emptyAction->width()) / 2,
 		_emptyRect.y() + _emptyRect.height() + padding.bottom());
-	_emptyAction->show();
+	_emptyAction->setVisible(!_error.isEmpty() || !_query.isEmpty());
 	_emptyAction->raise();
 	_inner->update();
 }
@@ -874,20 +870,43 @@ void Widget::showMenu() {
 	_menu->addAction(tr::lng_myowngram_message_history_settings(tr::now), [=] {
 		controller()->showSettings(Settings::MessageHistoryId());
 	}, &st::menuIconSettings);
-	_menu->addSeparator();
-	_menu->addAction(_message
-		? tr::lng_myowngram_message_history_remove(tr::now)
-		: tr::lng_myowngram_message_history_clear(tr::now), [=] {
-		RemoveMessageHistory(controller(), { _history->peer->id, _message });
-	}, &st::menuIconDelete);
-	_menu->setForcedOrigin(Ui::PanelAnimation::Origin::TopRight);
-	_menu->popup(Ui::PopupMenu::ConstrainToParentScreen(
-		_menu,
+	const auto menu = _menu.get();
+	const auto position = Ui::PopupMenu::ConstrainToParentScreen(
+		menu,
 		_topBar->mapToGlobal(QPoint(
 			_topBar->width()
 				+ st::topBarMenuPosition.x()
-				+ Ui::BoxShadow::ExtendFor(_menu->st().shadow).right(),
-			st::topBarMenuPosition.y()))));
+				+ Ui::BoxShadow::ExtendFor(menu->st().shadow).right(),
+			st::topBarMenuPosition.y())));
+	const auto addClear = [=] {
+		menu->addSeparator();
+		menu->addAction(_message
+			? tr::lng_myowngram_message_history_remove(tr::now)
+			: tr::lng_myowngram_message_history_clear(tr::now), [=] {
+			RemoveMessageHistory(controller(), { _history->peer->id, _message });
+		}, &st::menuIconDelete);
+		if (!menu->isHidden()) {
+			menu->prepareGeometryFor(position);
+			menu->refreshAnimationCache();
+		}
+	};
+	if (!_rows.empty()) {
+		addClear();
+	} else if (!_query.isEmpty()) {
+		const auto migrated = _history->migrateFrom();
+		session().messageHistory().query({
+			.peer = _history->peer->id,
+			.migratedPeer = migrated ? migrated->peer->id : PeerId(),
+			.kind = Kind::Deleted,
+			.limit = 1,
+		}, crl::guard(menu, [=](Storage::MessageHistoryPage page) {
+			if (!page.entries.empty()) {
+				addClear();
+			}
+		}));
+	}
+	_menu->setForcedOrigin(Ui::PanelAnimation::Origin::TopRight);
+	_menu->popup(position);
 }
 
 object_ptr<Window::SectionWidget> Memento::createWidget(
