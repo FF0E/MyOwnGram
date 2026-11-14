@@ -717,6 +717,8 @@ BottomInfo::Data BottomInfoDataFromMessage(not_null<Message*> message) {
 		}
 		if (saved->deleted) {
 			result.flags |= Flag::Deleted;
+		} else if (historyEntry && saved->recordId) {
+			result.flags |= Flag::Edited;
 		}
 	}
 	result.effectId = item->effectId();

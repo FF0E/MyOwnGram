@@ -1119,7 +1119,7 @@ void Filler::addMessageHistory() {
 	}
 	const auto controller = _controller;
 	const auto peer = _peer->id;
-	_addAction(tr::lng_myowngram_message_history_chat_title(tr::now), [=] {
+	_addAction(tr::lng_myowngram_message_history_title(tr::now), [=] {
 		HistoryView::ShowMessageHistory(controller, peer);
 	}, &st::menuIconGroupLog);
 }

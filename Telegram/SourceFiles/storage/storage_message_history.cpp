@@ -46,6 +46,8 @@ bool Initialize(Sqlite::Database &database) {
 			previous BLOB NOT NULL,
 			text TEXT NOT NULL
 		);
+		CREATE INDEX IF NOT EXISTS message_history_overview
+			ON message_history(peer,id);
 		CREATE INDEX IF NOT EXISTS message_history_deleted_history
 			ON message_history(peer,id) WHERE kind=0;
 		CREATE INDEX IF NOT EXISTS message_history_message
@@ -104,27 +106,42 @@ MessageHistoryPage Query(
 	database.clearError();
 	const auto searching = !query.search.isEmpty();
 	const auto migrated = query.migratedPeer && query.migratedPeer != query.peer;
-	auto prefix = QByteArray("SELECT ") + kColumns + " FROM message_history";
-	if (searching) {
-		prefix += " JOIN message_history_text"
-			" ON message_history_text.rowid=message_history.id";
-	}
+	auto prefix = QByteArray("SELECT ") + kColumns;
+	prefix += searching
+		? " FROM message_history_text CROSS JOIN message_history"
+			" ON message_history.id=message_history_text.rowid"
+		: " FROM message_history";
 	prefix += migrated ? " WHERE (peer=?1 OR peer=?7)" : " WHERE peer=?1";
 	if (query.message) {
 		prefix += " AND message=?2";
 	}
-	prefix += " AND kind=?4";
+	if (query.kind) {
+		prefix += " AND kind=?4";
+	}
 	if (searching) {
 		prefix += " AND message_history_text MATCH ?5";
+	} else if (!query.message && !query.kind) {
+		prefix += R"SQL(
+			AND (kind=0 OR (
+				NOT EXISTS(SELECT 1 FROM message_history AS newer
+					WHERE newer.peer=message_history.peer
+					AND newer.message=message_history.message
+					AND newer.id>message_history.id)
+				AND NOT EXISTS(SELECT 1 FROM message_history AS deleted
+					WHERE deleted.peer=message_history.peer
+					AND deleted.message=message_history.message AND deleted.kind=0)
+			))
+		)SQL";
 	}
+	const auto order = searching ? "message_history_text.rowid" : "id";
 	auto result = MessageHistoryPage();
 	for (const auto before : { true, false }) {
 		if (!before && (!query.around || !query.limitAfter)) {
 			continue;
 		}
-		const auto sql = prefix + (before
-			? " AND id<=?3 ORDER BY id DESC LIMIT ?6"
-			: " AND id>?3 ORDER BY id LIMIT ?6");
+		const auto sql = prefix + " AND " + order
+			+ (before ? "<=?3 ORDER BY " : ">?3 ORDER BY ") + order
+			+ (before ? " DESC LIMIT ?6" : " LIMIT ?6");
 		auto statement = Sqlite::Statement(database, sql.constData());
 		statement.bind(1, qint64(SerializePeerId(query.peer)));
 		if (migrated) {
@@ -136,7 +153,9 @@ MessageHistoryPage Query(
 		statement.bind(3, query.around
 			? query.around
 			: std::numeric_limits<qint64>::max());
-		statement.bind(4, qint32(query.kind));
+		if (query.kind) {
+			statement.bind(4, qint32(*query.kind));
+		}
 		if (searching) {
 			auto text = query.search;
 			statement.bindText(5, '"' + text.replace('"', u"\"\""_q) + u"\"*"_q);
@@ -223,16 +242,32 @@ QString Clear(
 		std::optional<MessageHistoryKind> kind,
 		qint64 recordId) {
 	database.clearError();
-	auto statement = Sqlite::Statement(
-		database,
-		"DELETE FROM message_history WHERE (peer=?1 OR peer=?2)"
-		" AND (?3=0 OR message=?3) AND (?4=-1 OR kind=?4)"
-		" AND (?5=0 OR id=?5)");
+	const auto migrated = migratedPeer && migratedPeer != peer;
+	auto sql = QByteArray("DELETE FROM message_history");
+	sql += migrated ? " WHERE (peer=?1 OR peer=?2)" : " WHERE peer=?1";
+	if (message) {
+		sql += " AND message=?3";
+	}
+	if (kind) {
+		sql += " AND kind=?4";
+	}
+	if (recordId) {
+		sql += " AND id=?5";
+	}
+	auto statement = Sqlite::Statement(database, sql.constData());
 	statement.bind(1, qint64(SerializePeerId(peer)));
-	statement.bind(2, qint64(SerializePeerId(migratedPeer ? migratedPeer : peer)));
-	statement.bind(3, message.bare);
-	statement.bind(4, kind ? qint64(*kind) : -1);
-	statement.bind(5, recordId);
+	if (migrated) {
+		statement.bind(2, qint64(SerializePeerId(migratedPeer)));
+	}
+	if (message) {
+		statement.bind(3, message.bare);
+	}
+	if (kind) {
+		statement.bind(4, qint32(*kind));
+	}
+	if (recordId) {
+		statement.bind(5, recordId);
+	}
 	if (!statement.run() || !database.execute("PRAGMA incremental_vacuum")) {
 		return database.error();
 	}

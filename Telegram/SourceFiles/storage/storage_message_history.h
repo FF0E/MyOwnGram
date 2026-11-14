@@ -39,7 +39,7 @@ struct MessageHistoryQuery {
 	PeerId migratedPeer;
 	MsgId message;
 	qint64 around = 0;
-	MessageHistoryKind kind = MessageHistoryKind::Deleted;
+	std::optional<MessageHistoryKind> kind;
 	QString search;
 	int limit = 50;
 	int limitAfter = 0;

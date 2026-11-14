@@ -738,6 +738,10 @@ QString DateTooltipText(not_null<Element*> view) {
 			tr::now,
 			lt_date,
 			locale.toString(base::unixtime::parse(saved->sentAt), format));
+		if (saved->recordId && !saved->deleted) {
+			dateText = tr::lng_myowngram_message_history_before_edit(tr::now)
+				+ '\n' + dateText;
+		}
 	}
 	if (item->awaitingVideoProcessing()) {
 		dateText += '\n' + tr::lng_approximate_about(tr::now);
@@ -2354,9 +2358,12 @@ void Element::setTextWithLinks(
 	if (_flags & Flag::ServiceMessage) {
 		const auto &options = Ui::ItemTextServiceOptions();
 		const auto saved = data()->Get<HistoryMessageArchived>();
-		const auto marked = (saved && saved->deleted)
+		const auto marked = (saved
+			&& (saved->deleted || (!saved->inlineCopy && saved->recordId)))
 			? TextWithEntities(text).append(u" "_q).append(
-				Ui::Text::IconEmoji(&st::historyDeletedServiceIcon))
+				Ui::Text::IconEmoji(saved->deleted
+					? &st::historyDeletedServiceIcon
+					: &st::historyEditedIcon))
 			: text;
 		_text.setMarkedText(st::serviceTextStyle, marked, options, context);
 		auto linkIndex = 0;

@@ -9327,10 +9327,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_title" = "MyOwnGram";
 
 "lng_myowngram_message_history_title" = "Message history";
-"lng_myowngram_message_history_chat_title" = "Deleted history";
 "lng_myowngram_message_history_message_title" = "Edit history";
 "lng_myowngram_message_history_menu" = "Message history menu";
 "lng_myowngram_message_history_settings" = "Message history settings";
+"lng_myowngram_message_history_before_edit" = "Saved before edit";
 "lng_myowngram_message_history_saved_at" = "Saved: {date}";
 "lng_myowngram_message_history_sent_at" = "Originally sent: {date}";
 "lng_myowngram_message_history_save_edits" = "Save message edits";
@@ -9346,14 +9346,14 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_myowngram_message_history_cleanup_title" = "Automatic cleanup for this account";
 "lng_myowngram_message_history_cleanup_about" = "Remove saved changes after this period, counted from when they were saved. This applies to all chats in this account and does not delete messages from Telegram.";
 "lng_myowngram_message_history_deleted" = "Deleted";
-"lng_myowngram_message_history_no_deleted" = "No saved deletions";
+"lng_myowngram_message_history_empty" = "No saved message history";
 "lng_myowngram_message_history_no_edits" = "No saved edits";
-"lng_myowngram_message_history_no_deleted_results" = "No deleted messages match this search";
+"lng_myowngram_message_history_no_results" = "No saved messages match this search";
 "lng_myowngram_message_history_unreadable" = "This saved version could not be read.";
 "lng_myowngram_message_history_error" = "Could not read message history.";
 "lng_myowngram_message_history_save_error" = "Could not update message history.";
-"lng_myowngram_message_history_clear" = "Clear deleted history";
-"lng_myowngram_message_history_clear_sure" = "Remove all saved deleted messages for {chat}? This includes every conversation in this chat, regardless of the current search. Edit history is kept. Messages on Telegram are not deleted.";
+"lng_myowngram_message_history_clear" = "Clear message history";
+"lng_myowngram_message_history_clear_sure" = "Remove all saved edits and deleted messages for {chat}? This includes every conversation in this chat, regardless of the current search. Messages on Telegram are not deleted.";
 "lng_myowngram_message_history_remove" = "Clear edit history";
 "lng_myowngram_message_history_remove_sure" = "Remove all saved edits of this message? The message itself is kept, including any saved deleted copy.";
 "lng_myowngram_message_history_remove_record" = "Remove from history";

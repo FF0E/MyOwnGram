@@ -870,11 +870,14 @@ TextState Service::textState(QPoint point, StateRequest request) const {
 			point - trect.topLeft(),
 			trect.width(),
 			textRequest));
-		if (const auto saved = item->Get<HistoryMessageArchived>()
-			; saved && saved->deleted && !result.link) {
+		const auto saved = item->Get<HistoryMessageArchived>();
+		if (saved
+			&& (saved->deleted || (!saved->inlineCopy && saved->recordId))
+			&& !result.link) {
 			result.customTooltip = true;
-			result.customTooltipText
-				= tr::lng_myowngram_message_history_deleted(tr::now);
+			result.customTooltipText = saved->deleted
+				? tr::lng_myowngram_message_history_deleted(tr::now)
+				: tr::lng_myowngram_message_history_before_edit(tr::now);
 		}
 		if (!result.link
 			&& result.cursor == CursorState::Text

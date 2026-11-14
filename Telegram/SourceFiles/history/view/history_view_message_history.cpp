@@ -298,7 +298,7 @@ Widget::Widget(
 	) | rpl::on_next([=] {
 		_back->setSubtext(_message
 			? tr::lng_myowngram_message_history_message_title(tr::now)
-			: tr::lng_myowngram_message_history_chat_title(tr::now));
+			: tr::lng_myowngram_message_history_title(tr::now));
 		_back->setAccessibleName(tr::lng_terms_back(tr::now));
 		_searchButton->setAccessibleName(tr::lng_dlg_filter(tr::now));
 		_cancelSearch->setAccessibleName(_search->getLastText().isEmpty()
@@ -706,7 +706,7 @@ void Widget::refresh() {
 		.migratedPeer = migrated ? migrated->peer->id : PeerId(),
 		.message = _message,
 		.around = _around,
-		.kind = _message ? Kind::Edited : Kind::Deleted,
+		.kind = _message ? std::make_optional(Kind::Edited) : std::nullopt,
 		.search = _query,
 		.limit = _limitBefore,
 		.limitAfter = _limitAfter,
@@ -876,10 +876,10 @@ void Widget::updateEmpty() {
 	const auto text = !_error.isEmpty()
 		? tr::lng_myowngram_message_history_error(tr::now)
 		: !_query.isEmpty()
-		? tr::lng_myowngram_message_history_no_deleted_results(tr::now)
+		? tr::lng_myowngram_message_history_no_results(tr::now)
 		: _message
 		? tr::lng_myowngram_message_history_no_edits(tr::now)
-		: tr::lng_myowngram_message_history_no_deleted(tr::now);
+		: tr::lng_myowngram_message_history_empty(tr::now);
 	_emptyText.setText(st::serviceTextStyle, text);
 	const auto padding = st::historyAdminLogEmptyPadding;
 	const auto outerWidth = std::min(width(), st::historyAdminLogEmptyWidth);
@@ -950,7 +950,6 @@ void Widget::showMenu() {
 		session().messageHistory().query({
 			.peer = _history->peer->id,
 			.migratedPeer = migrated ? migrated->peer->id : PeerId(),
-			.kind = Kind::Deleted,
 			.limit = 1,
 		}, crl::guard(menu, [=](Storage::MessageHistoryPage page) {
 			if (!page.entries.empty()) {
@@ -1001,9 +1000,9 @@ void RemoveMessageHistory(
 					lt_chat,
 					rpl::single(controller->session().data().peer(message.peer)->name())),
 			.confirmed = [=](Fn<void()> close) {
-				const auto kind = recordId
-					? std::nullopt
-					: std::make_optional(message.msg ? Kind::Edited : Kind::Deleted);
+				const auto kind = (!recordId && message.msg)
+					? std::make_optional(Kind::Edited)
+					: std::nullopt;
 				controller->session().messageHistory().clear(
 					message.peer, message.msg, kind, recordId);
 				close();
