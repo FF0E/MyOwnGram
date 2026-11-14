@@ -1418,7 +1418,10 @@ void AddEditHistoryAction(
 			return;
 		}
 		const auto &actions = parent->actions();
-		const auto i = ranges::find(actions, previous.data());
+		const auto i = ranges::find(
+			actions,
+			previous.data(),
+			[](not_null<QAction*> action) { return action.get(); });
 		const auto position = (i != end(actions)) ? int(i - begin(actions)) + 1 : 0;
 		parent->insertAction(position, base::make_unique_q<Ui::Menu::Action>(
 			parent,
